@@ -1,0 +1,49 @@
+<?php
+
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\ListingController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\WhitelistController;
+use Illuminate\Support\Facades\Route;
+
+// First page → Login
+Route::get('/', function () {
+    return redirect()->route('login');
+});
+
+// Admin pages → Login required
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
+
+    Route::get('/analytics', [AnalyticsController::class, 'index'])
+        ->name('analytics');
+
+    Route::get('/listings', [ListingController::class, 'index'])
+        ->name('listings');
+
+    Route::get('/reports', [ReportController::class, 'index'])
+        ->name('reports');
+
+    Route::get('/users/{id}', [UserController::class, 'show'])
+        ->name('users.show');
+
+    Route::get('/whitelist', [WhitelistController::class, 'index'])
+        ->name('whitelist');
+
+    // Breeze profile routes
+    Route::get('/profile', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::patch('/profile', [ProfileController::class, 'update'])
+        ->name('profile.update');
+
+    Route::delete('/profile', [ProfileController::class, 'destroy'])
+        ->name('profile.destroy');
+});
+
+require __DIR__.'/auth.php';
