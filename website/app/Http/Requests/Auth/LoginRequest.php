@@ -55,6 +55,33 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Logged in successfully — now check if this account is actually an admin.
+        if (Auth::user()->USR_ROLE !== 'ADMIN') {
+            Auth::logout();
+
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'email' => 'This portal is restricted to administrators only.',
+            ]);
+        }
+
+        // Check the account is active.
+        if (Auth::user()->USR_STATUS !== 'ACTIVE') {
+            $status = Auth::user()->USR_STATUS;
+            Auth::logout();
+
+            RateLimiter::hit($this->throttleKey());
+
+            $message = $status === 'DEACTIVATED'
+                ? 'This account has been deactivated. Contact your system administrator.'
+                : 'This account is pending verification and cannot log in yet.';
+
+            throw ValidationException::withMessages([
+                'email' => $message,
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
