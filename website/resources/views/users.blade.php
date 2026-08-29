@@ -13,14 +13,25 @@
         </small>
     </div>
 
+    <a href="{{ route('users.create') }}" class="btn btn-success">
+        <i class="bi bi-person-plus-fill"></i> Add User
+    </a>
+
 </div>
+
+@if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
 
 <div class="card shadow-sm border-0 rounded-4">
 
     <div class="card-body">
 
-        <!-- Search -->
-        <div class="row mb-3">
+        <!-- Search & Filters -->
+        <form method="GET" action="{{ route('users') }}" class="row mb-3">
 
             <div class="col-md-4">
 
@@ -32,19 +43,24 @@
 
     <input
         type="text"
+        name="search"
+        value="{{ request('search') }}"
         class="form-control"
         placeholder="Search by name, email or ID">
+
+    <button class="btn btn-success" type="submit">
+        Search
+    </button>
 
 </div>
             </div>
 <div class="col-md-3">
 
-    <select class="form-select">
+    <select name="role" class="form-select" onchange="this.form.submit()">
 
-        <option>All Roles</option>
-        <option>Admin</option>
-        <option>Buyer</option>
-        <option>Farmer</option>
+        <option value="">All Roles</option>
+        <option value="ADMIN" {{ request('role') == 'ADMIN' ? 'selected' : '' }}>Admin</option>
+        <option value="GENERAL_USER" {{ request('role') == 'GENERAL_USER' ? 'selected' : '' }}>General User</option>
 
     </select>
 
@@ -52,17 +68,17 @@
 
 <div class="col-md-3">
 
-    <select class="form-select">
+    <select name="status" class="form-select" onchange="this.form.submit()">
 
-        <option>All Status</option>
-        <option>Active</option>
-        <option>Pending</option>
-        <option>Deactivated</option>
+        <option value="">All Status</option>
+        <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
+        <option value="PENDING_VERIFICATION" {{ request('status') == 'PENDING_VERIFICATION' ? 'selected' : '' }}>Pending Verification</option>
+        <option value="DEACTIVATED" {{ request('status') == 'DEACTIVATED' ? 'selected' : '' }}>Deactivated</option>
 
     </select>
 
 </div>
-        </div>
+        </form>
 
         <div class="row mb-4">
 
@@ -181,13 +197,20 @@
         <i class="bi bi-eye-fill"></i>
     </a>
 
-    <button class="btn btn-sm btn-warning">
+    <a href="{{ route('users.edit', $user->USR_ID) }}"
+       class="btn btn-sm btn-warning">
         <i class="bi bi-pencil-fill"></i>
-    </button>
+    </a>
 
-    <button class="btn btn-sm btn-danger">
-        <i class="bi bi-trash-fill"></i>
-    </button>
+    <form method="POST" action="{{ route('users.destroy', $user->USR_ID) }}"
+          class="d-inline"
+          onsubmit="return confirm('Are you sure you want to deactivate this user?');">
+        @csrf
+        @method('DELETE')
+        <button type="submit" class="btn btn-sm btn-danger" title="Deactivate">
+            <i class="bi bi-trash-fill"></i>
+        </button>
+    </form>
 
 </td>
                 </tr>
@@ -196,7 +219,7 @@
 
                 <tr>
 
-                    <td colspan="5" class="text-center text-muted">
+                    <td colspan="6" class="text-center text-muted">
 
                         No users found.
 
