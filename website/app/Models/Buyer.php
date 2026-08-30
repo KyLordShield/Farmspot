@@ -17,4 +17,9 @@ class Buyer extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'USR_ID', 'USR_ID');
+    }
 }

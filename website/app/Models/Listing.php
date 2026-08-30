@@ -17,4 +17,19 @@ class Listing extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function farmer()
+    {
+        return $this->belongsTo(Farmer::class, 'FMR_ID', 'FMR_ID');
+    }
+
+    public function farm()
+    {
+        return $this->belongsTo(Farm::class, 'FRM_ID', 'FRM_ID');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(CropCategory::class, 'CAT_ID', 'CAT_ID');
+    }
 }

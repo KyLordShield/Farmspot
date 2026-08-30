@@ -15,13 +15,20 @@
 
 </div>
 
+@if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
 <div class="card shadow-sm border-0 rounded-4">
 
     <div class="card-body">
 
         <!-- Filters -->
 
-        <div class="row mb-3">
+        <form method="GET" action="{{ route('listings') }}" class="row mb-3">
 
             <div class="col-md-4">
 
@@ -33,8 +40,14 @@
 
                     <input
                         type="text"
+                        name="search"
+                        value="{{ request('search') }}"
                         class="form-control"
                         placeholder="Search listing">
+
+                    <button class="btn btn-success" type="submit">
+                        Search
+                    </button>
 
                 </div>
 
@@ -42,9 +55,16 @@
 
             <div class="col-md-4">
 
-                <select class="form-select">
+                <select name="category" class="form-select" onchange="this.form.submit()">
 
-                    <option>All Categories</option>
+                    <option value="">All Categories</option>
+
+                    @foreach($categories as $category)
+                        <option value="{{ $category->CAT_ID }}"
+                            {{ request('category') == $category->CAT_ID ? 'selected' : '' }}>
+                            {{ $category->CAT_NAME }}
+                        </option>
+                    @endforeach
 
                 </select>
 
@@ -52,17 +72,27 @@
 
             <div class="col-md-4">
 
-                <select class="form-select">
+                <select name="status" class="form-select" onchange="this.form.submit()">
 
-                    <option>All Status</option>
-                    <option>Available</option>
-                    <option>Sold</option>
+                    <option value="">All Status</option>
+
+                    <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>
+                        Active
+                    </option>
+
+                    <option value="NOT_AVAILABLE" {{ request('status') == 'NOT_AVAILABLE' ? 'selected' : '' }}>
+                        Not Available
+                    </option>
+
+                    <option value="REMOVED" {{ request('status') == 'REMOVED' ? 'selected' : '' }}>
+                        Removed
+                    </option>
 
                 </select>
 
             </div>
 
-        </div>
+        </form>
 
         <!-- Summary Cards -->
 
@@ -92,9 +122,9 @@
                         <i class="bi bi-check-circle-fill"></i>
                     </div>
 
-                    <h2>0</h2>
+                    <h2>{{ $listings->where('LST_AVAILABILITY','ACTIVE')->count() }}</h2>
 
-                    <p>Available</p>
+                    <p>Active</p>
 
                 </div>
 
@@ -108,9 +138,9 @@
                         <i class="bi bi-x-circle-fill"></i>
                     </div>
 
-                    <h2>0</h2>
+                    <h2>{{ $listings->where('LST_AVAILABILITY','NOT_AVAILABLE')->count() }}</h2>
 
-                    <p>Sold</p>
+                    <p>Not Available</p>
 
                 </div>
 
@@ -129,8 +159,6 @@
                     <th>ID</th>
                     <th>Crop</th>
                     <th>Farmer</th>
-                    <th>Price</th>
-                    <th>Quantity</th>
                     <th>Status</th>
                     <th width="170">Actions</th>
 
@@ -146,35 +174,55 @@
 
                     <td>{{ $listing->LST_ID }}</td>
 
-                    <td>-</td>
+                    <td>{{ $listing->category?->CAT_NAME ?? '-' }}</td>
 
-                    <td>-</td>
-
-                    <td>-</td>
-
-                    <td>-</td>
+                    <td>{{ $listing->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
 
                     <td>
 
-                        <span class="badge bg-success">
-                            Available
-                        </span>
+                        @if($listing->LST_STATUS == 'AVAILABLE_NOW')
+
+                            <span class="badge bg-success">
+                                Available Now
+                            </span>
+
+                        @elseif($listing->LST_STATUS == 'SOON_TO_HARVEST')
+
+                            <span class="badge bg-warning text-dark">
+                                Soon to Harvest
+                            </span>
+
+                        @else
+
+                            <span class="badge bg-secondary">
+                                Not Available
+                            </span>
+
+                        @endif
 
                     </td>
 
                     <td>
 
-                        <button class="btn btn-sm btn-primary">
+                        <a href="{{ route('listings.show', $listing->LST_ID) }}"
+                           class="btn btn-sm btn-primary">
                             <i class="bi bi-eye-fill"></i>
-                        </button>
+                        </a>
 
-                        <button class="btn btn-sm btn-warning">
+                        <a href="{{ route('listings.edit', $listing->LST_ID) }}"
+                           class="btn btn-sm btn-warning">
                             <i class="bi bi-pencil-fill"></i>
-                        </button>
+                        </a>
 
-                        <button class="btn btn-sm btn-danger">
-                            <i class="bi bi-trash-fill"></i>
-                        </button>
+                        <form method="POST" action="{{ route('listings.destroy', $listing->LST_ID) }}"
+                              class="d-inline"
+                              onsubmit="return confirm('Are you sure you want to remove this listing?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-sm btn-danger" title="Remove">
+                                <i class="bi bi-trash-fill"></i>
+                            </button>
+                        </form>
 
                     </td>
 
@@ -184,7 +232,7 @@
 
                 <tr>
 
-                    <td colspan="7" class="text-center text-muted">
+                    <td colspan="5" class="text-center text-muted">
                         No listings found.
                     </td>
 

@@ -17,6 +17,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
     Route::get('/listings', [ListingController::class, 'index'])->name('listings');
+    Route::get('/listings/{id}/edit', [ListingController::class, 'edit'])->name('listings.edit');
+    Route::get('/listings/{id}', [ListingController::class, 'show'])->name('listings.show');
+    Route::put('/listings/{id}', [ListingController::class, 'update'])->name('listings.update');
+    Route::delete('/listings/{id}', [ListingController::class, 'destroy'])->name('listings.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

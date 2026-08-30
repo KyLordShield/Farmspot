@@ -17,4 +17,9 @@ class Farm extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function farmer()
+    {
+        return $this->belongsTo(Farmer::class, 'FMR_ID', 'FMR_ID');
+    }
 }
