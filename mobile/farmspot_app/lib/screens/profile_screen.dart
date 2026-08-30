@@ -6,6 +6,8 @@ import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'edit_profile_screen.dart';
 import 'seller/farm_setup_details_screen.dart';
+import '../services/auth_service.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -76,7 +78,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () async {
+              Navigator.of(ctx).pop(); // close the dialog first
+              await AuthService.logout();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false, // clears the whole nav stack
+              );
+            },
             child: const Text('Log out', style: TextStyle(color: Colors.red)),
           ),
         ],

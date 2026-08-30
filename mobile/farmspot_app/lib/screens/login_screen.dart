@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
 
@@ -11,22 +12,43 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() {
-  // TODO: replace with real auth check once backend is available.
-  Navigator.of(context).pushReplacement(
-    MaterialPageRoute(builder: (_) => const HomeScreen()),
-  );
-}
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final error = await AuthService.login(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+      _errorMessage = error;
+    });
+
+    if (error == null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+  }
 
   void _goToSignUp() {
     Navigator.of(context).pushReplacement(
@@ -49,8 +71,8 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 children: [
                   FarmSpotTextField(
-                    hint: 'user name',
-                    controller: _usernameController,
+                    hint: 'email',
+                    controller: _emailController,
                   ),
                   const SizedBox(height: 14),
                   FarmSpotTextField(
@@ -58,10 +80,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: true,
                   ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 26),
                   FarmSpotButton(
-                    label: 'Log In',
-                    onPressed: _handleLogin,
+                    label: _isLoading ? 'Logging in...' : 'Log In',
+                    onPressed: _isLoading ? () {} : () => _handleLogin(),
                   ),
                   const SizedBox(height: 20),
                   FarmSpotSwitchLink(
