@@ -22,6 +22,8 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/listings/{id}', [ListingController::class, 'update'])->name('listings.update');
     Route::delete('/listings/{id}', [ListingController::class, 'destroy'])->name('listings.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
+    Route::patch('/reports/{id}/status', [ReportController::class, 'updateStatus'])->name('reports.updateStatus');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
@@ -30,6 +32,10 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::get('/users/{id}', [UserController::class, 'show'])->name('users.show');
     Route::get('/whitelist', [WhitelistController::class, 'index'])->name('whitelist');
+    Route::get('/whitelist/create', [WhitelistController::class, 'create'])->name('whitelist.create');
+    Route::post('/whitelist', [WhitelistController::class, 'store'])->name('whitelist.store');
+    Route::get('/whitelist/{id}', [WhitelistController::class, 'show'])->name('whitelist.show');
+    Route::patch('/whitelist/{id}/toggle', [WhitelistController::class, 'toggleStatus'])->name('whitelist.toggle');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

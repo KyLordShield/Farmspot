@@ -9,19 +9,26 @@
     <div>
         <h2 class="fw-bold mb-0">Reports</h2>
         <small class="text-muted">
-            Manage user reports
+            Moderator queue — reports submitted by users
         </small>
     </div>
 
 </div>
 
+@if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
 <div class="card shadow-sm border-0 rounded-4">
 
     <div class="card-body">
 
-        <!-- Search -->
+        <!-- Filters -->
 
-        <div class="row mb-3">
+        <form method="GET" action="{{ route('reports') }}" class="row mb-3">
 
             <div class="col-md-4">
 
@@ -33,8 +40,14 @@
 
                     <input
                         type="text"
+                        name="search"
+                        value="{{ request('search') }}"
                         class="form-control"
-                        placeholder="Search reports">
+                        placeholder="Search by reason, reporter or listing">
+
+                    <button class="btn btn-success" type="submit">
+                        Search
+                    </button>
 
                 </div>
 
@@ -42,25 +55,26 @@
 
             <div class="col-md-4">
 
-                <select class="form-select">
+                <select name="status" class="form-select" onchange="this.form.submit()">
 
-                    <option>All Status</option>
-                    <option>New</option>
-                    <option>Reviewing</option>
-                    <option>Resolved</option>
-                    <option>Dismissed</option>
+                    <option value="">All Status</option>
+
+                    <option value="New" {{ request('status') == 'New' ? 'selected' : '' }}>New</option>
+                    <option value="Reviewing" {{ request('status') == 'Reviewing' ? 'selected' : '' }}>Reviewing</option>
+                    <option value="Resolved" {{ request('status') == 'Resolved' ? 'selected' : '' }}>Resolved</option>
+                    <option value="Dismissed" {{ request('status') == 'Dismissed' ? 'selected' : '' }}>Dismissed</option>
 
                 </select>
 
             </div>
 
-        </div>
+        </form>
 
-        <!-- Summary Card -->
+        <!-- Summary Cards -->
 
         <div class="row mb-4">
 
-            <div class="col-md-4">
+            <div class="col-md-3">
 
                 <div class="dashboard-card">
 
@@ -71,6 +85,54 @@
                     <h2>{{ $reports->total() }}</h2>
 
                     <p>Total Reports</p>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <div class="dashboard-card">
+
+                    <div class="icon users">
+                        <i class="bi bi-bell-fill"></i>
+                    </div>
+
+                    <h2>{{ $counts['New'] ?? 0 }}</h2>
+
+                    <p class="text-danger">New</p>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <div class="dashboard-card">
+
+                    <div class="icon farmers">
+                        <i class="bi bi-search"></i>
+                    </div>
+
+                    <h2>{{ $counts['Reviewing'] ?? 0 }}</h2>
+
+                    <p class="text-warning">Reviewing</p>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <div class="dashboard-card">
+
+                    <div class="icon listings">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+
+                    <h2>{{ $counts['Resolved'] ?? 0 }}</h2>
+
+                    <p class="text-success">Resolved</p>
 
                 </div>
 
@@ -89,12 +151,12 @@
                     <tr>
 
                         <th>Report ID</th>
-                        <th>Listing ID</th>
-                        <th>User ID</th>
+                        <th>Reporter</th>
+                        <th>Reported Listing</th>
                         <th>Reason</th>
                         <th>Status</th>
                         <th>Date</th>
-                        <th width="170">Actions</th>
+                        <th width="180">Actions</th>
 
                     </tr>
 
@@ -108,11 +170,11 @@
 
                         <td>{{ $report->RPT_ID }}</td>
 
-                        <td>{{ $report->LST_ID }}</td>
+                        <td>{{ $report->user?->USR_NAME ?? '-' }}</td>
 
-                        <td>{{ $report->USR_ID }}</td>
+                        <td>{{ $report->listing?->LST_ID ?? '-' }}</td>
 
-                        <td>{{ $report->RPT_REASON }}</td>
+                        <td>{{ \Illuminate\Support\Str::limit($report->RPT_REASON, 60) }}</td>
 
                         <td>
 
@@ -128,17 +190,27 @@
 
                         </td>
 
-                        <td>{{ $report->RPT_CREATED_AT }}</td>
+                        <td>{{ \Carbon\Carbon::parse($report->RPT_CREATED_AT)->format('M d, Y h:i A') }}</td>
 
                         <td>
 
-                            <button class="btn btn-sm btn-primary">
+                            <a href="{{ route('reports.show', $report->RPT_ID) }}"
+                               class="btn btn-sm btn-primary">
                                 <i class="bi bi-eye-fill"></i>
-                            </button>
+                            </a>
 
-                            <button class="btn btn-sm btn-warning">
-                                <i class="bi bi-pencil-fill"></i>
-                            </button>
+                            <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}"
+                                  class="d-inline">
+                                @csrf
+                                @method('PATCH')
+                                <select name="status" class="form-select form-select-sm d-inline-block w-auto"
+                                        onchange="this.form.submit()">
+                                    <option value="New" {{ $report->RPT_STATUS == 'New' ? 'selected' : '' }}>New</option>
+                                    <option value="Reviewing" {{ $report->RPT_STATUS == 'Reviewing' ? 'selected' : '' }}>Reviewing</option>
+                                    <option value="Resolved" {{ $report->RPT_STATUS == 'Resolved' ? 'selected' : '' }}>Resolved</option>
+                                    <option value="Dismissed" {{ $report->RPT_STATUS == 'Dismissed' ? 'selected' : '' }}>Dismissed</option>
+                                </select>
+                            </form>
 
                         </td>
 

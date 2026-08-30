@@ -17,4 +17,14 @@ class Whitelist extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+
+    public function addedBy()
+    {
+        return $this->belongsTo(User::class, 'USR_ADDED_ID', 'USR_ID');
+    }
+
+    public function deactivatedBy()
+    {
+        return $this->belongsTo(User::class, 'USR_DEACTIVATED_ID', 'USR_ID');
+    }
 }

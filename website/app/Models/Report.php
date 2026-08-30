@@ -12,13 +12,13 @@ class Report extends Model
 
     public $timestamps = false;
 
-    // Report belongs to User
+    protected $fillable = ['RPT_STATUS'];
+
     public function user()
     {
         return $this->belongsTo(User::class, 'USR_ID', 'USR_ID');
     }
 
-    // Report belongs to Listing
     public function listing()
     {
         return $this->belongsTo(Listing::class, 'LST_ID', 'LST_ID');
