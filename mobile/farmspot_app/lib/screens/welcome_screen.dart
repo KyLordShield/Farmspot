@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
-import 'signup_screen.dart';
+import 'login_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -30,7 +30,7 @@ class WelcomeScreen extends StatelessWidget {
                 label: 'Get connected',
                 onPressed: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );
                 },
               ),
