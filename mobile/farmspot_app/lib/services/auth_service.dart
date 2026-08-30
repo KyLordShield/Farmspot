@@ -25,6 +25,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
+        await prefs.setString('user_data', jsonEncode(data['user']));
         return null; // null = success
       }
 
@@ -63,6 +64,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
+        await prefs.setString('user_data', jsonEncode(data['user']));
         return null; // null = success
       }
 
@@ -88,6 +90,13 @@ class AuthService {
     return prefs.getString('auth_token');
   }
 
+  static Future<Map<String, dynamic>?> getUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userJson = prefs.getString('user_data');
+    if (userJson == null) return null;
+    return jsonDecode(userJson) as Map<String, dynamic>;
+  }
+
   static Future<void> logout() async {
     final token = await getToken();
 
@@ -108,5 +117,6 @@ class AuthService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+    await prefs.remove('user_data');
   }
 }

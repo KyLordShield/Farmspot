@@ -17,12 +17,33 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Placeholder profile data — wire up to real user/account data later.
-  String _firstName = 'Belle';
-  String _lastName = 'Mariano';
+  String _firstName = '';
+  String _lastName = '';
   String _address = 'Address';
-  String _phone = '0900-000-000';
+  String _phone = '';
   bool _isSeller = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService.getUser();
+    if (user == null || !mounted) return;
+
+    final fullName = (user['USR_NAME'] as String? ?? '').trim();
+    final parts = fullName.split(' ');
+    final firstName = parts.isNotEmpty ? parts.first : '';
+    final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+    setState(() {
+      _firstName = firstName;
+      _lastName = lastName;
+      _phone = user['USR_MOBILE_NUMBER'] as String? ?? '';
+    });
+  }
 
   void _handleNavTap(int i) {
     if (i == 3) return; // already on Profile
