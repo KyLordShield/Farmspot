@@ -13,8 +13,19 @@ class ListingController extends Controller
      */
     public function index(Request $request)
     {
+        $search = $request->query('search');
+
         $listings = Listing::with(['farm', 'category', 'farmer.buyer.user'])
             ->where('LST_AVAILABILITY', 'ACTIVE')
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->whereHas('farm', function ($fq) use ($search) {
+                        $fq->where('FRM_NAME', 'LIKE', "%{$search}%");
+                    })->orWhereHas('category', function ($cq) use ($search) {
+                        $cq->where('CAT_NAME', 'LIKE', "%{$search}%");
+                    });
+                });
+            })
             ->orderByDesc('LST_CREATED_AT')
             ->get()
             ->map(fn ($listing) => $this->formatListing($listing));

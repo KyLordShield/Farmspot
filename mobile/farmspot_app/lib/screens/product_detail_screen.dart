@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 
 class ProductDetailScreen extends StatelessWidget {
   final CropListing listing;
   const ProductDetailScreen({super.key, required this.listing});
+
+  Future<void> _callSeller() async {
+    final uri = Uri(scheme: 'tel', path: listing.contactNumber);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _smsSeller() async {
+    final uri = Uri(scheme: 'sms', path: listing.contactNumber);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,9 +123,7 @@ class ProductDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          debugPrint('Call seller tapped — no backend wired yet.');
-                        },
+                        onPressed: _callSeller,
                         icon: const Icon(Icons.call, size: 18),
                         label: Text('Call Seller  ${listing.contactNumber}'),
                         style: ElevatedButton.styleFrom(
@@ -127,9 +140,7 @@ class ProductDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 50,
                       child: OutlinedButton.icon(
-                        onPressed: () {
-                          debugPrint('SMS seller tapped — no backend wired yet.');
-                        },
+                        onPressed: _smsSeller,
                         icon: const Icon(Icons.sms_outlined, size: 18),
                         label: const Text('Send SMS to Seller'),
                         style: OutlinedButton.styleFrom(

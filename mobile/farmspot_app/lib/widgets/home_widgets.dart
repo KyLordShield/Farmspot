@@ -63,7 +63,17 @@ class CropImagePlaceholder extends StatelessWidget {
 /// Search bar + camera icon shown inside the green home header.
 class HomeSearchField extends StatelessWidget {
   final VoidCallback? onCameraTap;
-  const HomeSearchField({super.key, this.onCameraTap});
+  final TextEditingController? controller;
+  final ValueChanged<String>? onSubmitted;
+  final VoidCallback? onSearchTap;
+
+  const HomeSearchField({
+    super.key,
+    this.onCameraTap,
+    this.controller,
+    this.onSubmitted,
+    this.onSearchTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -76,11 +86,17 @@ class HomeSearchField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, color: Colors.black45),
+          GestureDetector(
+            onTap: onSearchTap,
+            child: const Icon(Icons.search, color: Colors.black45),
+          ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: TextField(
-              decoration: InputDecoration(
+              controller: controller,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
                 hintText: 'Search Crops or farms',
                 hintStyle: TextStyle(color: Colors.black45, fontSize: 14),
                 border: InputBorder.none,

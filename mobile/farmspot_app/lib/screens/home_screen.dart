@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../services/listing_service.dart';
 import 'product_detail_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
@@ -18,34 +19,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final _categories = const ['All', 'Leafy Vegetables', 'Fruit Vegetables'];
 
-  // Placeholder data — replace with real API results later.
-  final _listings = const [
-    CropListing(
-      cropName: 'Carrot',
-      farmName: 'Farm Name',
-      placeholderIcon: Icons.grass,
-    ),
-    CropListing(
-      cropName: 'Cabbage',
-      farmName: 'Farm Name',
-      placeholderIcon: Icons.eco,
-    ),
-    CropListing(
-      cropName: 'Kangkong',
-      farmName: 'Farm Name',
-      placeholderIcon: Icons.eco,
-    ),
-    CropListing(
-      cropName: 'Chili',
-      farmName: 'Farm Name',
-      placeholderIcon: Icons.local_fire_department,
-    ),
-    CropListing(
-      cropName: 'Carrot',
-      farmName: 'Farm Name',
-      placeholderIcon: Icons.grass,
-    ),
-  ];
+  List<CropListing> _listings = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadListings();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<CropListing> get _filteredListings {
+    if (_selectedCategory == 0) return _listings;
+    final categoryLabel = _categories[_selectedCategory].toLowerCase();
+    return _listings
+        .where(
+          (l) =>
+              categoryLabel.contains(l.cropType.toLowerCase()) ||
+              l.cropType.toLowerCase().contains(categoryLabel),
+        )
+        .toList();
+  }
+
+  Future<void> _loadListings({String? search}) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final listings = await ListingService.fetchListings(search: search);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _listings = listings.map((l) => l.toCropListing()).toList();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
 
   void _handleNavTap(int i) {
     if (i == 0) return; // already on Home
@@ -88,19 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 20),
                         _buildSectionTitle(),
                         const SizedBox(height: 12),
-                        ..._listings.map(
-                          (listing) => CropCard(
-                            listing: listing,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ProductDetailScreen(listing: listing),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                        _buildListingsSection(),
                       ],
                     ),
                   ),
@@ -134,7 +145,11 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       color: AppColors.primaryGreen,
-      child: const HomeSearchField(),
+      child: HomeSearchField(
+        controller: _searchController,
+        onSubmitted: (value) => _loadListings(search: value),
+        onSearchTap: () => _loadListings(search: _searchController.text),
+      ),
     );
   }
 
@@ -182,6 +197,52 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildListingsSection() {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 120),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 120),
+        child: Center(
+          child: Column(
+            children: [
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.black54),
+              ),
+              TextButton(
+                onPressed: _loadListings,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _filteredListings.map(
+        (listing) => CropCard(
+          listing: listing,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ProductDetailScreen(listing: listing),
+              ),
+            );
+          },
+        ),
+      ).toList(),
     );
   }
 }
