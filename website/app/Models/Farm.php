@@ -22,4 +22,9 @@ class Farm extends Model
     {
         return $this->belongsTo(Farmer::class, 'FMR_ID', 'FMR_ID');
     }
+
+    public function photos()
+    {
+        return $this->hasMany(FarmPhoto::class, 'FRM_ID', 'FRM_ID');
+    }
 }

@@ -64,6 +64,11 @@ class User extends Authenticatable
         return $this->USR_PASSWORD;
     }
 
+    public function buyer()
+    {
+        return $this->hasOne(Buyer::class, 'USR_ID', 'USR_ID');
+    }
+
     /**
      * Laravel normally expects created_at/updated_at columns.
      * You only have USR_CREATED_AT and no "updated at" column,

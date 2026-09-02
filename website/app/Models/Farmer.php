@@ -22,4 +22,9 @@ class Farmer extends Model
     {
         return $this->belongsTo(Buyer::class, 'BUY_ID', 'BUY_ID');
     }
+
+    public function farms()
+    {
+        return $this->hasMany(Farm::class, 'FMR_ID', 'FMR_ID');
+    }
 }

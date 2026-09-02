@@ -22,4 +22,9 @@ class Buyer extends Model
     {
         return $this->belongsTo(User::class, 'USR_ID', 'USR_ID');
     }
+
+    public function farmer()
+    {
+        return $this->hasOne(Farmer::class, 'BUY_ID', 'BUY_ID');
+    }
 }
