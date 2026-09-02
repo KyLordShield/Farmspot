@@ -6,7 +6,10 @@ import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'edit_profile_screen.dart';
 import 'seller/farm_setup_details_screen.dart';
+import 'seller/seller_home_screen.dart';
 import '../services/auth_service.dart';
+import '../services/farm_service.dart';
+import '../models/farm_setup_data.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -22,6 +25,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _address = 'Address';
   String _phone = '';
   bool _isSeller = false;
+  bool _hasFarm = false;
+  bool _sellerBusy = false;
+  String? _sellerError;
 
   @override
   void initState() {
@@ -29,20 +35,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUser();
   }
 
-  Future<void> _loadUser() async {
-    final user = await AuthService.getUser();
+  Future<void> _loadUser() async => _syncStateFromServer();
+
+  static bool _parseSellerFlag(Map<String, dynamic> user) {
+    final v = user['USR_IS_SELLER'];
+    if (v is int) return v == 1;
+    return int.tryParse(v?.toString() ?? '') == 1;
+  }
+
+  /// Fetches latest user + farm count from the server and updates local state.
+  Future<void> _syncStateFromServer() async {
+    var user = await AuthService.fetchUser();
+    user ??= await AuthService.getUser();
     if (user == null || !mounted) return;
 
     final fullName = (user['USR_NAME'] as String? ?? '').trim();
     final parts = fullName.split(' ');
     final firstName = parts.isNotEmpty ? parts.first : '';
     final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+    final phone = user['USR_MOBILE_NUMBER'] as String? ?? '';
+    final isSeller = _parseSellerFlag(user);
+
+    final farms = await FarmService.getFarms();
+    if (!mounted) return;
 
     setState(() {
       _firstName = firstName;
       _lastName = lastName;
-      _phone = user['USR_MOBILE_NUMBER'] as String? ?? '';
+      _phone = phone;
+      _isSeller = isSeller;
+      _hasFarm = farms.isNotEmpty;
     });
+  }
+
+  /// Calls the real activate/deactivate endpoint, re-fetches fresh state,
+  /// then either navigates to the seller shell (activation) or stays on
+  /// profile (deactivation). On failure, reverts the switch and shows an
+  /// inline error.
+  Future<void> _toggleSeller(bool enable) async {
+    if (_sellerBusy) return;
+
+    setState(() {
+      _sellerBusy = true;
+      _sellerError = null;
+    });
+
+    final error = enable
+        ? await AuthService.activateSeller()
+        : await AuthService.deactivateSeller();
+
+    if (error != null) {
+      if (!mounted) return;
+      setState(() {
+        _sellerBusy = false;
+        _sellerError = error;
+      });
+      return;
+    }
+
+    await _syncStateFromServer();
+    if (!mounted) return;
+    setState(() => _sellerBusy = false);
+
+    if (enable && _isSeller) {
+      if (_hasFarm) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SellerHomeScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => FarmSetupDetailsScreen(
+              farmSetupData: FarmSetupData(),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   void _handleNavTap(int i) {
@@ -279,40 +349,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBecomeSellerCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF6EC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primaryGreen.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.storefront, color: AppColors.primaryGreen, size: 30),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Become a Seller\nList your crops and appear on the farm map',
-              style: TextStyle(fontSize: 12, height: 1.3),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEAF6EC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.primaryGreen.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.storefront, color: AppColors.primaryGreen, size: 30),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Become a Seller\nList your crops and appear on the farm map',
+                  style: TextStyle(fontSize: 12, height: 1.3),
+                ),
+              ),
+              Switch(
+                value: _isSeller,
+                activeColor: AppColors.primaryGreen,
+                onChanged: _sellerBusy ? null : _toggleSeller,
+              ),
+            ],
+          ),
+        ),
+        if (_sellerError != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _sellerError!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ),
-          Switch(
-            value: _isSeller,
-            activeColor: AppColors.primaryGreen,
-            onChanged: (v) {
-              if (v) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const FarmSetupDetailsScreen(),
-                  ),
-                );
-              } else {
-                setState(() => _isSeller = false);
-              }
-            },
-          ),
         ],
-      ),
+      ],
     );
   }
 

@@ -17,7 +17,9 @@ Route::get('/listings/{id}', [ListingController::class, 'show']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/seller/activate', [SellerController::class, 'activate']);
+    Route::post('/seller/deactivate', [SellerController::class, 'deactivate']);
     Route::post('/farms', [FarmController::class, 'store']);
+    Route::get('/farms', [FarmController::class, 'index']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
 
     Route::get('/user', function (Request $request) {

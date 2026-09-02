@@ -97,6 +97,79 @@ class AuthService {
     return jsonDecode(userJson) as Map<String, dynamic>;
   }
 
+  /// Fetches the latest user record (GET /api/user) and refreshes the cached
+  /// copy so seller status reflects current server state, not just login-time.
+  /// Returns null (leaving the cache untouched) if not logged in or the
+  /// request fails.
+  static Future<Map<String, dynamic>?> fetchUser() async {
+    final token = await getToken();
+    if (token == null) return null;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode != 200) return null;
+
+      final data = jsonDecode(response.body);
+      if (data is! Map<String, dynamic>) return null;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(data));
+      return data;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Activates seller mode for the authenticated user (POST /seller/activate).
+  /// Returns null on success, or an error message on failure.
+  static Future<String?> activateSeller() async {
+    final token = await getToken();
+    if (token == null) return 'Not logged in.';
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/seller/activate'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return null;
+      return data['message'] ?? 'Could not activate seller mode.';
+    } catch (_) {
+      return 'Could not reach the server. Check your connection.';
+    }
+  }
+
+  /// Deactivates seller mode for the authenticated user (POST /seller/deactivate).
+  /// Returns null on success, or an error message on failure.
+  static Future<String?> deactivateSeller() async {
+    final token = await getToken();
+    if (token == null) return 'Not logged in.';
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/seller/deactivate'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return null;
+      return data['message'] ?? 'Could not deactivate seller mode.';
+    } catch (_) {
+      return 'Could not reach the server. Check your connection.';
+    }
+  }
+
   static Future<void> logout() async {
     final token = await getToken();
 

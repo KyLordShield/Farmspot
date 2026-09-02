@@ -109,6 +109,22 @@ class FarmController extends Controller
         ], 201);
     }
 
+    /**
+     * List the authenticated seller's own farms.
+     * Returns an empty list for users who have no farm yet
+     * (e.g. seller mode active but wizard never completed).
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        $farms = $user->buyer?->farmer?->farms ?? collect();
+
+        return response()->json([
+            'farms' => $farms,
+        ]);
+    }
+
     private function uniqueId($table, $column): string
     {
         do {

@@ -70,4 +70,40 @@ class SellerController extends Controller
             'farmer_id' => $farmer->FMR_ID,
         ]);
     }
+
+    /**
+     * Deactivates seller mode for the authenticated user.
+     * Only flips the flags — does NOT delete the Farmer, Farm, or Listing
+     * rows, so reactivation preserves all existing data.
+     */
+    public function deactivate(Request $request)
+    {
+        $user = $request->user();
+
+        $buyer = Buyer::where('USR_ID', $user->USR_ID)->first();
+
+        if (! $buyer) {
+            return response()->json([
+                'message' => 'No seller profile found.',
+            ], 404);
+        }
+
+        $farmer = Farmer::where('BUY_ID', $buyer->BUY_ID)->first();
+
+        if (! $farmer || (int) $farmer->FMR_SELLER_MODE_ACTIVE !== 1) {
+            return response()->json([
+                'message' => 'Seller mode is not currently active.',
+            ], 409);
+        }
+
+        $farmer->FMR_SELLER_MODE_ACTIVE = 0;
+        $farmer->save();
+
+        $user->USR_IS_SELLER = 0;
+        $user->save();
+
+        return response()->json([
+            'message' => 'Seller mode deactivated.',
+        ]);
+    }
 }

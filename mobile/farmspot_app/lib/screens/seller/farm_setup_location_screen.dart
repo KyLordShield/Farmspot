@@ -1,22 +1,45 @@
 import 'package:flutter/material.dart';
+import '../../../models/farm_setup_data.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
 import 'farm_setup_complete_screen.dart';
 
 class FarmSetupLocationScreen extends StatefulWidget {
-  const FarmSetupLocationScreen({super.key});
+  final FarmSetupData farmSetupData;
+
+  const FarmSetupLocationScreen({super.key, required this.farmSetupData});
 
   @override
-  State<FarmSetupLocationScreen> createState() => _FarmSetupLocationScreenState();
+  State<FarmSetupLocationScreen> createState() =>
+      _FarmSetupLocationScreenState();
 }
 
 class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
+  static const double _baseLat = 10.3178;
+  static const double _baseLng = 123.8742;
+  static const double _pxToDegrees = 0.00005;
+
   Offset _pinOffset = const Offset(0, 0); // relative drag offset from center
   bool _dragged = false;
+  String? _errorMessage;
+
+  double get _latitude => _baseLat - _pinOffset.dy * _pxToDegrees;
+
+  double get _longitude => _baseLng + _pinOffset.dx * _pxToDegrees;
 
   void _confirm() {
+    if (!_dragged) {
+      setState(() => _errorMessage =
+          'Drag the map to pin your farm\'s exact location.');
+      return;
+    }
+    widget.farmSetupData.latitude = _latitude;
+    widget.farmSetupData.longitude = _longitude;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FarmSetupCompleteScreen()),
+      MaterialPageRoute(
+        builder: (_) =>
+            FarmSetupCompleteScreen(farmSetupData: widget.farmSetupData),
+      ),
     );
   }
 
@@ -51,13 +74,17 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                             setState(() {
                               _pinOffset += details.delta;
                               _dragged = true;
+                              _errorMessage = null;
                             });
                           },
                           child: Container(
                             color: const Color(0xFFE8ECE6),
                             child: Stack(
                               children: [
-                                CustomPaint(size: Size.infinite, painter: _FakeMapPainter()),
+                                CustomPaint(
+                                  size: Size.infinite,
+                                  painter: _FakeMapPainter(),
+                                ),
                                 Center(
                                   child: Transform.translate(
                                     offset: _pinOffset,
@@ -84,7 +111,10 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                                       ),
                                       child: const Text(
                                         'Drag to adjust your location',
-                                        style: TextStyle(color: Colors.white, fontSize: 11),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -104,7 +134,10 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.location_on, color: AppColors.primaryGreen),
+                          const Icon(
+                            Icons.location_on,
+                            color: AppColors.primaryGreen,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -112,11 +145,20 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                               children: [
                                 const Text(
                                   'Sudlon dos. Maraag',
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 Text(
-                                  _dragged ? 'Location adjusted' : 'GPS detected, drag to adjust',
-                                  style: const TextStyle(fontSize: 11, color: Colors.black45),
+                                  _dragged
+                                      ? '${_latitude.toStringAsFixed(6)}, '
+                                          '${_longitude.toStringAsFixed(6)}'
+                                      : 'GPS detected, drag to adjust',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.black45,
+                                  ),
                                 ),
                               ],
                             ),
@@ -125,6 +167,29 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (_errorMessage != null) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.redAccent,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     WizardNextButton(
                       label: 'Confirm Farm Location',
                       icon: Icons.check,

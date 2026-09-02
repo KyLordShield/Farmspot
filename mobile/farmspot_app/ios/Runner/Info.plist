@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>FarmSpot uses the camera to take photos of your farm, crops, and verification documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FarmSpot accesses your photo library so you can add farm photos and verification documents.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
