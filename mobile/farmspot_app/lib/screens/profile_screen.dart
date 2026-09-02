@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/seller_widgets.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'edit_profile_screen.dart';
 import 'seller/farm_setup_details_screen.dart';
 import 'seller/seller_home_screen.dart';
+import 'seller/my_farm_screen.dart';
 import '../services/auth_service.dart';
 import '../services/farm_service.dart';
 import '../models/farm_setup_data.dart';
@@ -28,6 +30,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _hasFarm = false;
   bool _sellerBusy = false;
   String? _sellerError;
+
+  bool get isSellerNav => _isSeller;
 
   @override
   void initState() {
@@ -116,11 +120,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleNavTap(int i) {
-    if (i == 3) return; // already on Profile
+    if (i == (isSellerNav ? 4 : 3)) return; // already on Profile
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
         );
         break;
       case 1:
@@ -132,6 +136,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const InsightsScreen()),
         );
+        break;
+      case 3:
+        if (_isSeller) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MyFarmScreen()),
+          );
+        }
         break;
     }
   }
@@ -240,10 +251,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: FarmSpotBottomNav(
-        currentIndex: 3,
-        onTap: _handleNavTap,
-      ),
+      bottomNavigationBar: _isSeller
+          ? SellerBottomNav(currentIndex: 4, onTap: _handleNavTap)
+          : FarmSpotBottomNav(currentIndex: 3, onTap: _handleNavTap),
     );
   }
 

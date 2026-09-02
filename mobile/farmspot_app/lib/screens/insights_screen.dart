@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/seller_widgets.dart';
+import '../services/auth_service.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
+import 'seller/seller_home_screen.dart';
+import 'seller/my_farm_screen.dart';
 
-class InsightsScreen extends StatelessWidget {
+class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
+
+  @override
+  State<InsightsScreen> createState() => _InsightsScreenState();
+}
+
+class _InsightsScreenState extends State<InsightsScreen> {
+  bool _isSeller = false;
 
   static const _topSearched = ['Crop Name', 'Crop Name', 'Crop Name', 'Crop Name'];
 
@@ -16,12 +27,28 @@ class InsightsScreen extends StatelessWidget {
     ('December', 'Sili, cabbage'),
   ];
 
-  void _handleNavTap(BuildContext context, int i) {
-    if (i == 2) return; // already on Insights
+  @override
+  void initState() {
+    super.initState();
+    _loadSellerStatus();
+  }
+
+  Future<void> _loadSellerStatus() async {
+    final user = await AuthService.getUser();
+    if (!mounted) return;
+    if (user != null) {
+      final raw = user['USR_IS_SELLER'];
+      final intFlag = raw is int ? raw : int.tryParse(raw.toString()) ?? 0;
+      setState(() => _isSeller = intFlag == 1);
+    }
+  }
+
+  void _handleNavTap(int i) {
+    if (i == 2) return;
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
         );
         break;
       case 1:
@@ -31,8 +58,15 @@ class InsightsScreen extends StatelessWidget {
         break;
       case 3:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          MaterialPageRoute(builder: (_) => _isSeller ? const MyFarmScreen() : const ProfileScreen()),
         );
+        break;
+      case 4:
+        if (_isSeller) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+        }
         break;
     }
   }
@@ -132,10 +166,9 @@ class InsightsScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: FarmSpotBottomNav(
-        currentIndex: 2,
-        onTap: (i) => _handleNavTap(context, i),
-      ),
+      bottomNavigationBar: _isSeller
+          ? SellerBottomNav(currentIndex: 2, onTap: _handleNavTap)
+          : FarmSpotBottomNav(currentIndex: 2, onTap: _handleNavTap),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import 'seller_widgets.dart';
 
 /// Simple placeholder data model for a crop listing.
 /// Swap `imageUrl` for a real network/asset image once backend is ready.
@@ -234,13 +235,6 @@ class FarmSpotBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (Icons.home, 'Home'),
-      (Icons.map_outlined, 'Map'),
-      (Icons.insights, 'Insights'),
-      (Icons.person_outline, 'Profile'),
-    ];
-
     return BottomAppBar(
       color: Colors.white,
       elevation: 8,
@@ -248,7 +242,7 @@ class FarmSpotBottomNav extends StatelessWidget {
         height: 60,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(items.length, (i) {
+          children: List.generate(kBuyerTabs.length, (i) {
             final selected = i == currentIndex;
             final color = selected ? AppColors.primaryGreen : Colors.black45;
             return GestureDetector(
@@ -257,10 +251,10 @@ class FarmSpotBottomNav extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(items[i].$1, color: color, size: 24),
+                  Icon(kBuyerTabs[i].$1, color: color, size: 24),
                   const SizedBox(height: 2),
                   Text(
-                    items[i].$2,
+                    kBuyerTabs[i].$2,
                     style: TextStyle(color: color, fontSize: 11),
                   ),
                 ],

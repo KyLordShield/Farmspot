@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/seller_widgets.dart';
+import '../services/auth_service.dart';
 import 'insights_screen.dart';
 import 'profile_screen.dart';
 import 'home_screen.dart';
 import 'farm_directions_screen.dart';
+import 'seller/seller_home_screen.dart';
+import 'seller/my_farm_screen.dart';
 
 /// Simple placeholder model for a farm pin shown on the map / listing.
 class FarmPin {
@@ -27,6 +31,24 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  bool _isSeller = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSellerStatus();
+  }
+
+  Future<void> _loadSellerStatus() async {
+    final user = await AuthService.getUser();
+    if (!mounted) return;
+    if (user != null) {
+      final raw = user['USR_IS_SELLER'];
+      final intFlag = raw is int ? raw : int.tryParse(raw.toString()) ?? 0;
+      setState(() => _isSeller = intFlag == 1);
+    }
+  }
+
   // 0 = Listing view toggle, 1 = Map view toggle (both render the same
   // placeholder map for now — swap in a real Listing view later).
   int _viewToggle = 1;
@@ -38,11 +60,11 @@ class _MapScreenState extends State<MapScreen> {
   );
 
   void _handleNavTap(int i) {
-    if (i == 1) return; // already on Map
+    if (i == 1) return;
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
         );
         break;
       case 2:
@@ -52,8 +74,15 @@ class _MapScreenState extends State<MapScreen> {
         break;
       case 3:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          MaterialPageRoute(builder: (_) => _isSeller ? const MyFarmScreen() : const ProfileScreen()),
         );
+        break;
+      case 4:
+        if (_isSeller) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+        }
         break;
     }
   }
@@ -92,10 +121,9 @@ class _MapScreenState extends State<MapScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: FarmSpotBottomNav(
-        currentIndex: 1,
-        onTap: _handleNavTap,
-      ),
+      bottomNavigationBar: _isSeller
+          ? SellerBottomNav(currentIndex: 1, onTap: _handleNavTap)
+          : FarmSpotBottomNav(currentIndex: 1, onTap: _handleNavTap),
     );
   }
 

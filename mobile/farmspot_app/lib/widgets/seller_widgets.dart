@@ -1,6 +1,22 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
+/// Shared tab definitions so SellerBottomNav and FarmSpotBottomNav stay in sync.
+const kSellerTabs = [
+  (Icons.home, 'Home'),
+  (Icons.map_outlined, 'Map'),
+  (Icons.insights, 'Insights'),
+  (Icons.agriculture_outlined, 'My Farm'),
+  (Icons.person_outline, 'Profile'),
+];
+
+const kBuyerTabs = [
+  (Icons.home, 'Home'),
+  (Icons.map_outlined, 'Map'),
+  (Icons.insights, 'Insights'),
+  (Icons.person_outline, 'Profile'),
+];
+
 /// Green header used across the "Set Up Your Farm" wizard screens.
 class SetupHeader extends StatelessWidget {
   final String title;
@@ -411,14 +427,6 @@ class SellerBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (Icons.home, 'Home'),
-      (Icons.map_outlined, 'Map'),
-      (Icons.insights, 'Insights'),
-      (Icons.agriculture_outlined, 'My Farm'),
-      (Icons.person_outline, 'Profile'),
-    ];
-
     return BottomAppBar(
       color: Colors.white,
       elevation: 8,
@@ -426,7 +434,7 @@ class SellerBottomNav extends StatelessWidget {
         height: 60,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(items.length, (i) {
+          children: List.generate(kSellerTabs.length, (i) {
             final selected = i == currentIndex;
             final color = selected ? AppColors.primaryGreen : Colors.black45;
             return GestureDetector(
@@ -435,10 +443,10 @@ class SellerBottomNav extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(items[i].$1, color: color, size: 22),
+                  Icon(kSellerTabs[i].$1, color: color, size: 22),
                   const SizedBox(height: 2),
                   Text(
-                    items[i].$2,
+                    kSellerTabs[i].$2,
                     style: TextStyle(color: color, fontSize: 10),
                   ),
                 ],
