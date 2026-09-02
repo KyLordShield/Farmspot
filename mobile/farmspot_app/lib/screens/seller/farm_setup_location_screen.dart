@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/farm_setup_data.dart';
+import '../../../services/farm_service.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
 import 'farm_setup_complete_screen.dart';
@@ -22,25 +23,49 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   Offset _pinOffset = const Offset(0, 0); // relative drag offset from center
   bool _dragged = false;
   String? _errorMessage;
+  bool _isSubmitting = false;
+  String? _submitError;
 
   double get _latitude => _baseLat - _pinOffset.dy * _pxToDegrees;
 
   double get _longitude => _baseLng + _pinOffset.dx * _pxToDegrees;
 
-  void _confirm() {
+  Future<void> _confirm() async {
+    if (_isSubmitting) return;
+
     if (!_dragged) {
       setState(() => _errorMessage =
           'Drag the map to pin your farm\'s exact location.');
       return;
     }
+
     widget.farmSetupData.latitude = _latitude;
     widget.farmSetupData.longitude = _longitude;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            FarmSetupCompleteScreen(farmSetupData: widget.farmSetupData),
-      ),
-    );
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+      _submitError = null;
+    });
+
+    final result = await FarmService.createFarm(widget.farmSetupData);
+
+    if (!mounted) return;
+
+    if (result['success'] == true) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) =>
+              FarmSetupCompleteScreen(farmSetupData: widget.farmSetupData),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = false;
+      _submitError = result['message'] as String? ?? 'Something went wrong.';
+    });
   }
 
   @override
@@ -190,10 +215,60 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    WizardNextButton(
-                      label: 'Confirm Farm Location',
-                      icon: Icons.check,
-                      onPressed: _confirm,
+                    if (_submitError != null) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.redAccent,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _submitError!,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmitting ? null : _confirm,
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primaryGreen,
+                                ),
+                              )
+                            : const Icon(Icons.check),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryGreen,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppColors.primaryGreen,
+                          disabledForegroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        label: Text(
+                          _isSubmitting
+                              ? 'Creating your farm...'
+                              : 'Create My Farm',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(

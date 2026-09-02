@@ -1,56 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/farm_setup_data.dart';
-import '../../../services/farm_service.dart';
 import '../../../theme.dart';
 import 'add_crop_screen.dart';
 import 'seller_home_screen.dart';
 
-class FarmSetupCompleteScreen extends StatefulWidget {
+class FarmSetupCompleteScreen extends StatelessWidget {
   final FarmSetupData farmSetupData;
 
   const FarmSetupCompleteScreen({super.key, required this.farmSetupData});
-
-  @override
-  State<FarmSetupCompleteScreen> createState() =>
-      _FarmSetupCompleteScreenState();
-}
-
-class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
-  bool _isSubmitting = false;
-  String? _submitError;
-
-  Future<void> _createFarm() async {
-    if (!widget.farmSetupData.isReadyToSubmit) {
-      setState(() {
-        _submitError = 'Some required farm information is missing. '
-            'Please go back and complete the setup steps.';
-      });
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-      _submitError = null;
-    });
-
-    final result = await FarmService.createFarm(widget.farmSetupData);
-
-    if (!mounted) return;
-
-    if (result['success'] == true) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const SellerHomeScreen()),
-        (route) => false,
-      );
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = false;
-      _submitError = result['message'] as String? ?? 'Something went wrong.';
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,93 +65,31 @@ class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
                         height: 1.4,
                       ),
                     ),
-                    if (_submitError != null) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _submitError!,
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                     const Spacer(),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isSubmitting ? null : _createFarm,
-                        icon: _isSubmitting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primaryGreen,
-                                ),
-                              )
-                            : const Icon(Icons.check_circle_outline),
-                        label: Text(
-                          _isSubmitting ? 'Creating your farm...' : 'Create My Farm',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryGreen,
-                          disabledBackgroundColor: Colors.white,
-                          disabledForegroundColor: AppColors.primaryGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting
-                            ? null
-                            : () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const AddCropScreen(
-                                      isFirstCrop: true,
-                                    ),
-                                  ),
-                                );
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AddCropScreen(
+                                isFirstCrop: true,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text(
                           'Yes, add my first crop now',
                           style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.primaryGreen,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
@@ -201,16 +97,14 @@ class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: _isSubmitting
-                            ? null
-                            : () {
-                                Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const SellerHomeScreen(),
-                                  ),
-                                  (route) => false,
-                                );
-                              },
+                        onPressed: () {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const SellerHomeScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        },
                         icon: const Icon(
                           Icons.fast_forward,
                           color: Colors.white,
@@ -230,11 +124,6 @@ class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Step 3 of 3',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, color: Colors.white54),
-                    ),
                   ],
                 ),
               ),
@@ -247,10 +136,10 @@ class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
   }
 
   Widget _buildSummaryCard() {
-    final location = widget.farmSetupData.latitude != null &&
-            widget.farmSetupData.longitude != null
-        ? '${widget.farmSetupData.latitude!.toStringAsFixed(6)}, '
-            '${widget.farmSetupData.longitude!.toStringAsFixed(6)}'
+    final location = farmSetupData.latitude != null &&
+            farmSetupData.longitude != null
+        ? '${farmSetupData.latitude!.toStringAsFixed(6)}, '
+            '${farmSetupData.longitude!.toStringAsFixed(6)}'
         : '—';
     return Container(
       width: double.infinity,
@@ -274,21 +163,21 @@ class _FarmSetupCompleteScreenState extends State<FarmSetupCompleteScreen> {
           const SizedBox(height: 8),
           _summaryRow(
             'Farm',
-            widget.farmSetupData.name.isEmpty
+            farmSetupData.name.isEmpty
                 ? '—'
-                : widget.farmSetupData.name,
+                : farmSetupData.name,
           ),
           _summaryRow(
             'Barangay',
-            widget.farmSetupData.barangay.isEmpty
+            farmSetupData.barangay.isEmpty
                 ? '—'
-                : widget.farmSetupData.barangay,
+                : farmSetupData.barangay,
           ),
           _summaryRow('Location', location),
-          _summaryRow('Photos', '${widget.farmSetupData.photos.length}'),
+          _summaryRow('Photos', '${farmSetupData.photos.length}'),
           _summaryRow(
             'Verification',
-            widget.farmSetupData.verificationDocument != null
+            farmSetupData.verificationDocument != null
                 ? 'Document provided'
                 : 'None',
           ),
