@@ -27,4 +27,9 @@ class Farmer extends Model
     {
         return $this->hasMany(Farm::class, 'FMR_ID', 'FMR_ID');
     }
+
+    public function listings()
+    {
+        return $this->hasMany(Listing::class, 'FMR_ID', 'FMR_ID');
+    }
 }

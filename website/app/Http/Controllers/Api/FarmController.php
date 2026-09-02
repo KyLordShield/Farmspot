@@ -38,12 +38,25 @@ class FarmController extends Controller
             'longitude' => ['required', 'numeric'],
             'photos' => ['required', 'array', 'min:1'],
             'photos.*' => ['image', 'max:5120'],
+            'verification_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 
         try {
-            $photoUrls = DB::transaction(function () use ($validated, $farmId, $farmer) {
+            $result = DB::transaction(function () use ($validated, $farmId, $farmer) {
+                $verificationUrl = null;
+
+                if (isset($validated['verification_document'])) {
+                    $doc = $validated['verification_document'];
+                    $extension = $doc->getClientOriginalExtension() ?: 'jpg';
+                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+
+                    Storage::disk('cloudinary')->put($path, $doc->getRealPath());
+
+                    $verificationUrl = Storage::disk('cloudinary')->url($path);
+                }
+
                 $farm = Farm::create([
                     'FRM_ID' => $farmId,
                     'FRM_NAME' => $validated['name'],
@@ -53,6 +66,7 @@ class FarmController extends Controller
                     'FRM_LONGITUDE' => $validated['longitude'],
                     'FRM_PIN_ACTIVE' => 1,
                     'FRM_CREATED_AT' => now(),
+                    'FRM_VERIFICATION_DOC_PATH' => $verificationUrl,
                     'FMR_ID' => $farmer->FMR_ID,
                 ]);
 
@@ -76,7 +90,10 @@ class FarmController extends Controller
                     $urls[] = $url;
                 }
 
-                return $urls;
+                return [
+                    'photo_urls' => $urls,
+                    'verification_document_url' => $verificationUrl,
+                ];
             });
         } catch (\Throwable $e) {
             return response()->json([
@@ -87,7 +104,8 @@ class FarmController extends Controller
         return response()->json([
             'message' => 'Farm created successfully.',
             'farm_id' => $farmId,
-            'photo_urls' => $photoUrls,
+            'photo_urls' => $result['photo_urls'],
+            'verification_document_url' => $result['verification_document_url'],
         ], 201);
     }
 

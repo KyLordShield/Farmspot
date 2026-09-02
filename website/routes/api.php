@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ListingController;
+use App\Http\Controllers\Api\ListingCreateController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/seller/activate', [SellerController::class, 'activate']);
     Route::post('/farms', [FarmController::class, 'store']);
+    Route::post('/listings', [ListingCreateController::class, 'store']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();
