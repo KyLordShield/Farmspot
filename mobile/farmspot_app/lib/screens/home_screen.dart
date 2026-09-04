@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
+import '../services/auth_service.dart';
 import 'product_detail_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'profile_screen.dart';
+import 'seller/my_farm_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategory = 0;
+  bool _isSeller = false;
 
   final _categories = const ['All', 'Leafy Vegetables', 'Fruit Vegetables'];
 
@@ -28,6 +32,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadListings();
+    _loadSellerStatus();
+  }
+
+  /// Fetch fresh seller status so the bottom nav (seller vs buyer) is correct
+  /// on the very first screen after login, without waiting for ProfileScreen.
+  Future<void> _loadSellerStatus() async {
+    final isSeller = await AuthService.isSeller();
+    if (!mounted) return;
+    setState(() => _isSeller = isSeller);
   }
 
   @override
@@ -72,6 +85,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleNavTap(int i) {
     if (i == 0) return; // already on Home
+    if (_isSeller) {
+      switch (i) {
+        case 1:
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MapScreen()),
+          );
+          break;
+        case 2:
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const InsightsScreen()),
+          );
+          break;
+        case 3:
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MyFarmScreen()),
+          );
+          break;
+        case 4:
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+          break;
+      }
+      return;
+    }
+
     switch (i) {
       case 1:
         Navigator.of(context).pushReplacement(
@@ -133,10 +172,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: FarmSpotBottomNav(
-        currentIndex: 0,
-        onTap: _handleNavTap,
-      ),
+      bottomNavigationBar: _isSeller
+          ? SellerBottomNav(currentIndex: 0, onTap: _handleNavTap)
+          : FarmSpotBottomNav(currentIndex: 0, onTap: _handleNavTap),
     );
   }
 

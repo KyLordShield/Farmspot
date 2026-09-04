@@ -7,6 +7,7 @@ use App\Http\Controllers\ListingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WhitelistController;
+use App\Http\Controllers\SellerRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -36,6 +37,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/whitelist', [WhitelistController::class, 'store'])->name('whitelist.store');
     Route::get('/whitelist/{id}', [WhitelistController::class, 'show'])->name('whitelist.show');
     Route::patch('/whitelist/{id}/toggle', [WhitelistController::class, 'toggleStatus'])->name('whitelist.toggle');
+
+    Route::get('/seller-requests', [SellerRequestController::class, 'index'])->name('seller-requests');
+    Route::get('/seller-requests/{id}', [SellerRequestController::class, 'show'])->name('seller-requests.show');
+    Route::post('/seller-requests/{id}/approve', [SellerRequestController::class, 'approve'])->name('seller-requests.approve');
+    Route::post('/seller-requests/{id}/reject', [SellerRequestController::class, 'reject'])->name('seller-requests.reject');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

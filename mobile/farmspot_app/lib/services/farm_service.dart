@@ -71,6 +71,7 @@ class FarmService {
         return {
           'success': true,
           'farmId': json['farm_id'],
+          'frm_status': json['frm_status'] ?? 'APPROVED',
           'photoUrls': json['photo_urls'] ?? const <dynamic>[],
           'verificationDocumentUrl': json['verification_document_url'],
         };

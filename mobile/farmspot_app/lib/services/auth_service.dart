@@ -26,6 +26,15 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
         await prefs.setString('user_data', jsonEncode(data['user']));
+
+        // Make GET /api/user the single source of truth for the cached user
+        // BEFORE login returns (and before the first post-login screen builds).
+        // This guarantees `user_data` holds authoritative USR_IS_SELLER state
+        // (e.g. approved seller = 1), so the very first screen's isSeller()
+        // check can never fall back to an empty/stale cache and hide My Farm.
+        // Safe to ignore failure here; the login-response payload stays cached.
+        await fetchUser();
+
         return null; // null = success
       }
 
@@ -65,6 +74,11 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
         await prefs.setString('user_data', jsonEncode(data['user']));
+
+        // Same as login: fetch the authoritative user via GET /api/user so the
+        // cached copy is fresh before the app proceeds to the first screen.
+        await fetchUser();
+
         return null; // null = success
       }
 
@@ -124,6 +138,19 @@ class AuthService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Reports whether seller mode is active (USR_IS_SELLER == 1), fetching the
+  /// latest user from the server (GET /api/user) and falling back to the cached
+  /// copy if the request fails. Shared so the first post-login screen can decide
+  /// which bottom nav (seller vs buyer) to show without waiting for Profile.
+  static Future<bool> isSeller() async {
+    var user = await fetchUser();
+    user ??= await getUser();
+    if (user == null) return false;
+    final v = user['USR_IS_SELLER'];
+    final isSeller = v is int ? v == 1 : int.tryParse(v?.toString() ?? '') == 1;
+    return isSeller;
   }
 
   /// Activates seller mode for the authenticated user (POST /seller/activate).

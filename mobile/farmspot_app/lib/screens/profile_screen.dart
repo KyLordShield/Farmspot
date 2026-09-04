@@ -28,6 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _phone = '';
   bool _isSeller = false;
   bool _hasFarm = false;
+  bool _hasPendingReview = false;
   bool _sellerBusy = false;
   String? _sellerError;
 
@@ -63,12 +64,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final farms = await FarmService.getFarms();
     if (!mounted) return;
 
+    final hasPending = farms.any(
+      (f) => (f['FRM_STATUS'] as String? ?? '') == 'PENDING_REVIEW',
+    );
+    final hasApproved = farms.any(
+      (f) => (f['FRM_STATUS'] as String? ?? '') == 'APPROVED',
+    );
+
     setState(() {
       _firstName = firstName;
       _lastName = lastName;
       _phone = phone;
       _isSeller = isSeller;
       _hasFarm = farms.isNotEmpty;
+      _hasPendingReview = hasPending && !hasApproved;
     });
   }
 
@@ -101,7 +110,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     setState(() => _sellerBusy = false);
 
-    if (enable && _isSeller) {
+    // Note: activate() no longer flips USR_IS_SELLER — approval now happens at
+    // farm-submission time. So after successfully entering the seller flow, we
+    // always route into the wizard (or the seller shell if farms already exist)
+    // regardless of the (still 0) seller flag.
+    if (enable) {
       if (_hasFarm) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const SellerHomeScreen()),
@@ -359,6 +372,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBecomeSellerCard() {
+    if (_hasPendingReview) {
+      return _buildPendingApprovalCard();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -412,6 +429,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Non-interactive "Pending Approval" status row shown while a farm is
+  /// awaiting review. Replaces the Become-a-Seller toggle so the user can't
+  /// re-trigger the wizard while a request is pending.
+  Widget _buildPendingApprovalCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.shade400),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hourglass_top, color: Colors.amber, size: 26),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Pending Approval',
+                  style: TextStyle(
+                    color: Color(0xFFB26A00),
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Your seller application is under review. You\u2019ll be notified '
+            'once it\u2019s approved.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF8A6D1A), height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showContactSupport,
+              icon: const Icon(Icons.support_agent, size: 16),
+              label: const Text('Contact Support'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryGreen,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showContactSupport() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Contact Support'),
+        content: const Text(
+          'Need help with your seller application?\n\n'
+          'Contact the Association Secretary:\n'
+          '📞 [PHONE NUMBER HERE]\n'
+          '✉️ [EMAIL ADDRESS HERE]',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 

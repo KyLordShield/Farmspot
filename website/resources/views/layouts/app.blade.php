@@ -93,6 +93,13 @@
             </li>
 
             <li>
+                <a href="{{ route('seller-requests') }}">
+                    <i class="bi bi-person-check-fill"></i>
+                    Seller Requests
+                </a>
+            </li>
+
+            <li>
                 <a href="{{ route('analytics') }}">
                     <i class="bi bi-bar-chart"></i>
                     Analytics

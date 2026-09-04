@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Farm;
 use App\Models\FarmPhoto;
+use App\Models\Whitelist;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -13,10 +14,15 @@ use Illuminate\Support\Str;
 class FarmController extends Controller
 {
     /**
-     * Create a new farm for the authenticated seller.
-     * Gated on the user's Farmer record having seller mode active,
-     * then creates the Farm row and uploads its photos to Cloudinary,
-     * all inside a DB transaction.
+     * Create a new farm for the authenticated seller candidate.
+     *
+     * Requires only that the user has a Farmer row (created by the "Become a
+     * Seller" step) so they can submit a farm. Whitelist approval is decided
+     * here, at submission time: whitelisted users get an instant-approve farm
+     * (FRM_STATUS=APPROVED) and have their seller flags flipped, everyone else
+     * gets FRM_STATUS=PENDING_REVIEW for admin review. The old
+     * FMR_SELLER_MODE_ACTIVE gate is gone because that flag is now only set on
+     * this approval path.
      */
     public function store(Request $request)
     {
@@ -24,9 +30,9 @@ class FarmController extends Controller
 
         $farmer = $user->buyer?->farmer;
 
-        if (! $farmer || (int) $farmer->FMR_SELLER_MODE_ACTIVE !== 1) {
+        if (! $farmer) {
             return response()->json([
-                'message' => 'Seller mode not active.',
+                'message' => 'Start the seller setup first.',
             ], 403);
         }
 
@@ -41,10 +47,14 @@ class FarmController extends Controller
             'verification_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
+        $isWhitelisted = Whitelist::where('WLST_MOBILE_NUMBER', $user->USR_MOBILE_NUMBER)
+            ->where('WLST_IS_ACTIVE', 1)
+            ->exists();
+
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 
         try {
-            $result = DB::transaction(function () use ($validated, $farmId, $farmer) {
+            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $user, $isWhitelisted) {
                 $verificationUrl = null;
 
                 if (isset($validated['verification_document'])) {
@@ -64,11 +74,21 @@ class FarmController extends Controller
                     'FRM_BARANGAY' => $validated['barangay'],
                     'FRM_LATITUDE' => $validated['latitude'],
                     'FRM_LONGITUDE' => $validated['longitude'],
-                    'FRM_PIN_ACTIVE' => 1,
+                    'FRM_PIN_ACTIVE' => $isWhitelisted ? 1 : 0,
+                    'FRM_STATUS' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
                     'FRM_CREATED_AT' => now(),
                     'FRM_VERIFICATION_DOC_PATH' => $verificationUrl,
                     'FMR_ID' => $farmer->FMR_ID,
                 ]);
+
+                if ($isWhitelisted) {
+                    $farmer->FMR_SELLER_MODE_ACTIVE = 1;
+                    $farmer->FMR_VERIFIED_AT = $farmer->FMR_VERIFIED_AT ?? now();
+                    $farmer->save();
+
+                    $user->USR_IS_SELLER = 1;
+                    $user->save();
+                }
 
                 $urls = [];
 
@@ -104,6 +124,7 @@ class FarmController extends Controller
         return response()->json([
             'message' => 'Farm created successfully.',
             'farm_id' => $farmId,
+            'frm_status' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
             'photo_urls' => $result['photo_urls'],
             'verification_document_url' => $result['verification_document_url'],
         ], 201);

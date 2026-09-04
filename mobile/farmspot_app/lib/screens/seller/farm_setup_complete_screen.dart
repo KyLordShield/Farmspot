@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../../models/farm_setup_data.dart';
 import '../../../theme.dart';
+import '../profile_screen.dart';
 import 'add_crop_screen.dart';
 import 'seller_home_screen.dart';
 
 class FarmSetupCompleteScreen extends StatelessWidget {
   final FarmSetupData farmSetupData;
+  final String frmStatus;
 
-  const FarmSetupCompleteScreen({super.key, required this.farmSetupData});
+  const FarmSetupCompleteScreen({
+    super.key,
+    required this.farmSetupData,
+    this.frmStatus = 'APPROVED',
+  });
+
+  bool get _isPending => frmStatus == 'PENDING_REVIEW';
 
   @override
   Widget build(BuildContext context) {
@@ -22,111 +30,152 @@ class FarmSetupCompleteScreen extends StatelessWidget {
               child: IntrinsicHeight(
                 child: Padding(
                   padding: const EdgeInsets.all(28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Farm is Set Up!',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(
+                        _isPending
+                            ? 'Farm Submitted for Review'
+                            : 'Farm is Set Up!',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'One last thing before you go live',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildSummaryCard(),
-                    const Spacer(),
-                    const Center(
-                      child: Icon(Icons.eco, color: Colors.white, size: 56),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Do you have crops\nready to sell?',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        height: 1.3,
+                      const SizedBox(height: 6),
+                      Text(
+                        _isPending
+                            ? 'Your application is now with our team'
+                            : 'One last thing before you go live',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'If you have harvest available now or coming soon, you can add your first listing. '
-                      'If not, no problem — you can add crops anytime from My Farm.',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.4,
+                      const SizedBox(height: 20),
+                      _buildSummaryCard(),
+                      const Spacer(),
+                      const Center(
+                        child: Icon(Icons.eco, color: Colors.white, size: 56),
                       ),
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const AddCropScreen(
-                                isFirstCrop: true,
+                      const SizedBox(height: 20),
+                      Text(
+                        _isPending
+                            ? 'Thanks for\nsubmitting!'
+                            : 'Do you have crops\nready to sell?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _isPending
+                            ? "Your farm has been submitted for review. You'll be "
+                                'notified once approved. You cannot list crops until then.'
+                            : 'If you have harvest available now or coming soon, you can add your first listing. '
+                                'If not, no problem — you can add crops anytime from My Farm.',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_isPending)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const ProfileScreen(),
+                                ),
+                                (route) => false,
+                              );
+                            },
+                            icon: const Icon(Icons.person_outline),
+                            label: const Text(
+                              'Back to My Profile',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.primaryGreen,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text(
-                          'Yes, add my first crop now',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
                           ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(
-                              builder: (_) => const SellerHomeScreen(),
+                        )
+                      else ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const AddCropScreen(
+                                    isFirstCrop: true,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text(
+                              'Yes, add my first crop now',
+                              style: TextStyle(fontWeight: FontWeight.w600),
                             ),
-                            (route) => false,
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.fast_forward,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        label: const Text(
-                          'Skip for now - go to My Farm',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white54),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.primaryGreen,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const SellerHomeScreen(),
+                                ),
+                                (route) => false,
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.fast_forward,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            label: const Text(
+                              'Skip for now - go to My Farm',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white54),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
-              ),
               ),
             ),
           ),

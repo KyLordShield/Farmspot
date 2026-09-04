@@ -55,8 +55,10 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
     if (result['success'] == true) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              FarmSetupCompleteScreen(farmSetupData: widget.farmSetupData),
+          builder: (_) => FarmSetupCompleteScreen(
+            farmSetupData: widget.farmSetupData,
+            frmStatus: result['frm_status'] as String? ?? 'APPROVED',
+          ),
         ),
       );
       return;

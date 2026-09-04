@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\ListingCreateController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
+use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -25,4 +26,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+});
+
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/seller-requests', [SellerRequestController::class, 'index']);
+    Route::post('/seller-requests/{farmId}/approve', [SellerRequestController::class, 'approve']);
+    Route::post('/seller-requests/{farmId}/reject', [SellerRequestController::class, 'reject']);
 });
