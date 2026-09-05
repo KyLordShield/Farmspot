@@ -7,7 +7,6 @@ import 'insights_screen.dart';
 import 'profile_screen.dart';
 import 'home_screen.dart';
 import 'farm_directions_screen.dart';
-import 'seller/seller_home_screen.dart';
 import 'seller/my_farm_screen.dart';
 
 /// Simple placeholder model for a farm pin shown on the map / listing.
@@ -64,7 +63,7 @@ class _MapScreenState extends State<MapScreen> {
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
         break;
       case 2:

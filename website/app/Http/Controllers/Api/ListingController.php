@@ -4,10 +4,28 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Listing;
+use App\Models\CropCategory;
 use Illuminate\Http\Request;
 
 class ListingController extends Controller
 {
+    /**
+     * Catalog of all crop categories. Simple, unfiltered list — no farmer
+     * association needed.
+     */
+    public function cropCategories()
+    {
+        $categories = CropCategory::orderBy('CAT_NAME')->get()->map(
+            fn ($c) => [
+                'id' => $c->CAT_ID,
+                'name' => $c->CAT_NAME,
+                'icon' => $c->CAT_ICON,
+                'description' => $c->CAT_DESCRIPTION,
+            ]
+        );
+
+        return response()->json(['categories' => $categories]);
+    }
     /**
      * Browse feed — active listings only, buyer-facing.
      */
@@ -17,6 +35,7 @@ class ListingController extends Controller
 
         $listings = Listing::with(['farm', 'category', 'farmer.buyer.user'])
             ->where('LST_AVAILABILITY', 'ACTIVE')
+            ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->whereHas('farm', function ($fq) use ($search) {
@@ -42,6 +61,7 @@ class ListingController extends Controller
     {
         $listing = Listing::with(['farm', 'category', 'farmer.buyer.user'])
             ->where('LST_AVAILABILITY', 'ACTIVE')
+            ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->find($id);
 
         if (! $listing) {

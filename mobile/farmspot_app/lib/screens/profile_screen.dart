@@ -7,7 +7,6 @@ import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'edit_profile_screen.dart';
 import 'seller/farm_setup_details_screen.dart';
-import 'seller/seller_home_screen.dart';
 import 'seller/my_farm_screen.dart';
 import '../services/auth_service.dart';
 import '../services/farm_service.dart';
@@ -117,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (enable) {
       if (_hasFarm) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const SellerHomeScreen()),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
           (route) => false,
         );
       } else {
@@ -137,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
         break;
       case 1:

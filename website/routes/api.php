@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\ListingCreateController;
+use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
@@ -14,6 +15,7 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
+Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -22,6 +24,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/farms', [FarmController::class, 'store']);
     Route::get('/farms', [FarmController::class, 'index']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
+    Route::get('/my-listings', [FarmerListingController::class, 'myListings']);
+    Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

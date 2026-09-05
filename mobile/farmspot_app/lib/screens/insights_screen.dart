@@ -6,7 +6,6 @@ import '../services/auth_service.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
-import 'seller/seller_home_screen.dart';
 import 'seller/my_farm_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
@@ -48,7 +47,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => _isSeller ? const SellerHomeScreen() : const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
         break;
       case 1:

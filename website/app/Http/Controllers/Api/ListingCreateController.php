@@ -85,11 +85,7 @@ class ListingCreateController extends Controller
                     'CAT_ID' => $validated['category_id'],
                 ]);
 
-                return [
-                    'listing_id' => $listingId,
-                    'expiry_date' => $expiryDate,
-                    'image_url' => $imageUrl,
-                ];
+                return Listing::with(['farm', 'category'])->find($listingId);
             });
         } catch (HttpResponseException $e) {
             throw $e;
@@ -101,10 +97,36 @@ class ListingCreateController extends Controller
 
         return response()->json([
             'message' => 'Listing created successfully.',
-            'listing_id' => $result['listing_id'],
-            'expiry_date' => $result['expiry_date'],
-            'image_url' => $result['image_url'],
+            'listing' => $this->formatListing($result),
         ], 201);
+    }
+
+    /**
+     * Shape a Listing model into the flat JSON structure shared by the
+     * farmer-facing listing endpoints.
+     */
+    private function formatListing(Listing $listing): array
+    {
+        return [
+            'id' => $listing->LST_ID,
+            'crop_icon' => $listing->LST_CROP_ICON,
+            'status' => $listing->LST_STATUS,
+            'availability' => $listing->LST_AVAILABILITY,
+            'harvest_date' => $listing->LST_HARVEST_DATE,
+            'expiry_date' => $listing->LST_EXPIRY_DATE,
+            'image' => $listing->LST_IMAGE,
+            'created_at' => $listing->LST_CREATED_AT,
+            'category' => [
+                'id' => $listing->category->CAT_ID ?? null,
+                'name' => $listing->category->CAT_NAME ?? null,
+                'icon' => $listing->category->CAT_ICON ?? null,
+            ],
+            'farm' => [
+                'id' => $listing->farm->FRM_ID ?? null,
+                'name' => $listing->farm->FRM_NAME ?? null,
+                'barangay' => $listing->farm->FRM_BARANGAY ?? null,
+            ],
+        ];
     }
 
     private function uniqueId($table, $column): string

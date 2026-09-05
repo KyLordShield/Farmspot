@@ -37,9 +37,12 @@ class ProductDetailScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Crop name:',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    Text(
+                      listing.cropName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -185,6 +188,7 @@ class ProductDetailScreen extends StatelessWidget {
   }
 
   Widget _buildImage() {
+    final url = listing.imageUrl;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Stack(
@@ -192,17 +196,29 @@ class ProductDetailScreen extends StatelessWidget {
           Container(
             width: double.infinity,
             height: 220,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: AppColors.fieldBackground,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: AppColors.fieldBorder),
             ),
-            // Swap this Icon for Image.network(...) / Image.asset(...) later.
-            child: Icon(
-              listing.placeholderIcon,
-              size: 90,
-              color: AppColors.primaryGreen,
-            ),
+            child: (url == null || url.trim().isEmpty)
+                ? Icon(
+                    listing.placeholderIcon,
+                    size: 90,
+                    color: AppColors.primaryGreen,
+                  )
+                : Image.network(
+                    url,
+                    width: double.infinity,
+                    height: 220,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      listing.placeholderIcon,
+                      size: 90,
+                      color: AppColors.primaryGreen,
+                    ),
+                  ),
           ),
           Positioned(
             right: 14,

@@ -5,6 +5,7 @@ class Listing {
   final String id;
   final String? cropIcon;
   final String status;
+  final String? availability;
   final String? harvestDate;
   final String? expiryDate;
   final String? image;
@@ -19,6 +20,7 @@ class Listing {
     required this.id,
     this.cropIcon,
     required this.status,
+    this.availability,
     this.harvestDate,
     this.expiryDate,
     this.image,
@@ -35,6 +37,7 @@ class Listing {
       id: json['id'] as String,
       cropIcon: json['crop_icon'] as String?,
       status: json['status'] as String? ?? 'NOT_AVAILABLE',
+      availability: json['availability'] as String?,
       harvestDate: json['harvest_date'] as String?,
       expiryDate: json['expiry_date'] as String?,
       image: json['image'] as String?,
@@ -51,14 +54,18 @@ class Listing {
   /// widgets (CropCard, ProductDetailScreen) don't need to change.
   /// NOTE: `distance` and `sitio` have no backend source yet (no geolocation
   /// implemented, and the pilot is single-sitio) — kept as sensible defaults.
-  /// `placeholderIcon` also stays default for now — real photos (LST_IMAGE)
-  /// aren't wired to Image.network yet, that's a separate future task.
   CropListing toCropListing() {
     return CropListing(
-      cropName: categoryName ?? 'Crop',
+      // crop_icon holds the seller-typed crop name (e.g. "Screen-Test Crop");
+      // fall back to the category label for older entries with no name.
+      cropName: (cropIcon?.trim().isNotEmpty ?? false)
+          ? cropIcon!
+          : (categoryName ?? 'Crop'),
       farmName: farmName ?? 'Unknown Farm',
+      // Category filtering keys off the real category, not the crop name.
       cropType: categoryName ?? 'Vegetable',
       status: status,
+      imageUrl: image,
       barangay: barangay ?? 'Brgy. Sudlon',
       postedLabel: _relativeDate(createdAt),
       expiresLabel: _relativeExpiry(expiryDate),

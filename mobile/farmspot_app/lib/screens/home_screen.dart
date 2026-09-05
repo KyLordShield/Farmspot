@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   final _searchController = TextEditingController();
+  int? _activeListingCount;
 
   @override
   void initState() {
@@ -41,6 +42,25 @@ class _HomeScreenState extends State<HomeScreen> {
     final isSeller = await AuthService.isSeller();
     if (!mounted) return;
     setState(() => _isSeller = isSeller);
+    if (isSeller) {
+      await _loadActiveListingCount();
+    }
+  }
+
+  /// Seller-only acknowledgment: a real count of the user's own live listings
+  /// (everything not NOT_AVAILABLE). Full management lives on MyFarmScreen, so
+  /// this stays a small banner — it never duplicates the marketplace feed.
+  Future<void> _loadActiveListingCount() async {
+    try {
+      final listings = await ListingService.fetchMyListings();
+      if (!mounted) return;
+      setState(() {
+        _activeListingCount =
+            listings.where((l) => l.status != 'NOT_AVAILABLE').length;
+      });
+    } catch (_) {
+      // Fall back to the generic seller text if the count can't be fetched.
+    }
   }
 
   @override
@@ -147,6 +167,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildCategoryRow(),
+                        if (_isSeller) ...[
+                          const SizedBox(height: 14),
+                          _buildSellerBanner(),
+                        ],
                         const SizedBox(height: 20),
                         _buildSectionTitle(),
                         const SizedBox(height: 12),
@@ -203,6 +227,40 @@ class _HomeScreenState extends State<HomeScreen> {
           selected: _selectedCategory == i,
           onTap: () => setState(() => _selectedCategory = i),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSellerBanner() {
+    final count = _activeListingCount;
+    final label = count == null
+        ? 'You are a seller on FarmSpot'
+        : 'You have $count active listing${count == 1 ? '' : 's'}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF6EC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primaryGreen.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.storefront, size: 20, color: AppColors.primaryGreen),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

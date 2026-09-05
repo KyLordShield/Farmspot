@@ -33,6 +33,9 @@ void main() {
 
     expect(find.byType(SellerBottomNav), findsWidgets);
     expect(find.byType(FarmSpotBottomNav), findsNothing);
+    // Seller-only acknowledgment banner appears (network is blocked in widget
+    // tests, so the count can't load and the generic text is shown).
+    expect(find.text('You are a seller on FarmSpot'), findsOneWidget);
   });
 
   // Buyer (USR_IS_SELLER=0) must keep the buyer-only nav, no regression.
@@ -54,5 +57,8 @@ void main() {
 
     expect(find.byType(FarmSpotBottomNav), findsWidgets);
     expect(find.byType(SellerBottomNav), findsNothing);
+    // No seller banner for a plain buyer — nothing else changes.
+    expect(find.text('You are a seller on FarmSpot'), findsNothing);
+    expect(find.textContaining('active listing'), findsNothing);
   });
 }

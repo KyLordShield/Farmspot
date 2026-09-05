@@ -4,15 +4,20 @@ import '../../../models/farm_setup_data.dart';
 import '../../../theme.dart';
 import '../profile_screen.dart';
 import 'add_crop_screen.dart';
-import 'seller_home_screen.dart';
+import '../home_screen.dart';
 
 class FarmSetupCompleteScreen extends StatelessWidget {
   final FarmSetupData farmSetupData;
   final String frmStatus;
 
+  /// FRM_ID of the farm just created. Passed through to the first-crop flow so
+  /// AddCropScreen can list against the REAL farm instead of guessing one.
+  final String? farmId;
+
   const FarmSetupCompleteScreen({
     super.key,
     required this.farmSetupData,
+    this.farmId,
     this.frmStatus = 'APPROVED',
   });
 
@@ -120,8 +125,9 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => const AddCropScreen(
+                                  builder: (_) => AddCropScreen(
                                     isFirstCrop: true,
+                                    farmId: farmId,
                                   ),
                                 ),
                               );
@@ -148,7 +154,7 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                             onPressed: () {
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(
-                                  builder: (_) => const SellerHomeScreen(),
+                                  builder: (_) => const HomeScreen(),
                                 ),
                                 (route) => false,
                               );

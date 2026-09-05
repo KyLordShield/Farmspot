@@ -58,6 +58,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
           builder: (_) => FarmSetupCompleteScreen(
             farmSetupData: widget.farmSetupData,
             frmStatus: result['frm_status'] as String? ?? 'APPROVED',
+            farmId: result['farmId'] as String?,
           ),
         ),
       );

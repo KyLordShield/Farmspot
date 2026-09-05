@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../theme.dart';
-import 'seller_home_screen.dart';
+import '../home_screen.dart';
 
 class FarmLiveScreen extends StatelessWidget {
   final String cropName;
@@ -113,7 +113,7 @@ class FarmLiveScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const SellerHomeScreen()),
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
                       (route) => false,
                     );
                   },

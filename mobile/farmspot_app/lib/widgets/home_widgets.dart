@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'seller_widgets.dart';
 
-/// Simple placeholder data model for a crop listing.
-/// Swap `imageUrl` for a real network/asset image once backend is ready.
+/// Data model for a crop listing shown in the Home feed.
 class CropListing {
   final String cropName;
   final String farmName;
@@ -15,6 +14,7 @@ class CropListing {
   final String postedLabel;
   final String expiresLabel;
   final String contactNumber;
+  final String? imageUrl;
   final IconData placeholderIcon;
 
   const CropListing({
@@ -28,12 +28,12 @@ class CropListing {
     this.postedLabel = 'today',
     this.expiresLabel = '3 days',
     this.contactNumber = '0900-000-0000',
+    this.imageUrl,
     this.placeholderIcon = Icons.eco,
   });
 }
 
-/// Rounded green square used as a temporary image placeholder.
-/// Replace with Image.network(imageUrl) / Image.asset(...) later.
+/// Rounded green square placeholder used when a listing has no photo yet.
 class CropImagePlaceholder extends StatelessWidget {
   final double size;
   final IconData icon;
@@ -57,6 +57,40 @@ class CropImagePlaceholder extends StatelessWidget {
         border: Border.all(color: AppColors.fieldBorder),
       ),
       child: Icon(icon, color: AppColors.primaryGreen, size: size * 0.5),
+    );
+  }
+}
+
+/// Thumbnail for a listing: real photo when available, icon placeholder
+/// otherwise (or if the network image fails to load).
+class CropThumb extends StatelessWidget {
+  final String? imageUrl;
+  final double size;
+  final IconData placeholderIcon;
+
+  const CropThumb({
+    super.key,
+    this.imageUrl,
+    this.size = 56,
+    this.placeholderIcon = Icons.eco,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    if (url == null || url.trim().isEmpty) {
+      return CropImagePlaceholder(size: size, icon: placeholderIcon);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            CropImagePlaceholder(size: size, icon: placeholderIcon),
+      ),
     );
   }
 }
@@ -182,15 +216,21 @@ class CropCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CropImagePlaceholder(size: 56, icon: listing.placeholderIcon),
+            CropThumb(
+              imageUrl: listing.imageUrl,
+              placeholderIcon: listing.placeholderIcon,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Crop name:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  Text(
+                    listing.cropName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                   Text(
                     listing.farmName,
