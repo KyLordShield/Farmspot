@@ -47,22 +47,30 @@ class ProductDetailScreen extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Text(
-                          listing.cropType,
-                          style: const TextStyle(
-                            color: AppColors.primaryGreen,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            listing.cropType,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
                           child: Text('•', style: TextStyle(color: Colors.black45)),
                         ),
-                        Text(
-                          listing.farmName,
-                          style: const TextStyle(
-                            color: AppColors.primaryGreen,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            listing.farmName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -71,18 +79,26 @@ class ProductDetailScreen extends StatelessWidget {
                     Row(
                       children: [
                         const Text('Posted ', style: TextStyle(color: Colors.black54)),
-                        Text(
-                          listing.postedLabel,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            listing.postedLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 6),
                           child: Text('•', style: TextStyle(color: Colors.black45)),
                         ),
                         const Text('expires in ', style: TextStyle(color: Colors.black54)),
-                        Text(
-                          listing.expiresLabel,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            listing.expiresLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
@@ -91,12 +107,23 @@ class ProductDetailScreen extends StatelessWidget {
                       children: [
                         const Icon(Icons.location_on, color: AppColors.primaryGreen, size: 20),
                         const SizedBox(width: 6),
-                        Text(
-                          listing.barangay,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        Flexible(
+                          child: Text(
+                            listing.barangay,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                         const SizedBox(width: 16),
-                        Text(listing.sitio, style: const TextStyle(color: Colors.black54)),
+                        Flexible(
+                          child: Text(
+                            listing.sitio,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),

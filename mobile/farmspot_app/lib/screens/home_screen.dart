@@ -81,6 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
   }
 
+  void _openDetail(CropListing listing) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductDetailScreen(listing: listing),
+      ),
+    );
+  }
+
   Future<void> _loadListings({String? search}) async {
     setState(() {
       _isLoading = true;
@@ -325,20 +333,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _filteredListings.map(
-        (listing) => CropCard(
-          listing: listing,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ProductDetailScreen(listing: listing),
-              ),
-            );
-          },
-        ),
-      ).toList(),
+    return CropCardGrid(
+      listings: _filteredListings,
+      onTap: _openDetail,
     );
   }
 }
