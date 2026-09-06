@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContactLog;
 use App\Models\Farm;
 use App\Models\FarmPhoto;
 use App\Models\FarmVisitLog;
@@ -204,6 +205,48 @@ class FarmController extends Controller
             'visit_id' => $visitId,
             'farm_id' => $farm->FRM_ID,
         ], 201);
+    }
+
+    /**
+     * Performance stats for the authenticated seller's own farm (auth-only,
+     * ownership required — 403 when the caller doesn't own the farm).
+     *
+     * Flipped from the buyer perspective to the farm-owner perspective:
+     *   - profile_views: real farm_visit_log rows whose FRM_ID is this farm
+     *     (every time anyone opens this farm's profile, logged by logVisit)
+     *   - buyer_contacts: real contact_log rows whose LST_ID is one of THIS
+     *     farm's listings (buyers who actually tapped Call/SMS on the farm)
+     *   - active_listings: listings on this farm that are both
+     *     LST_STATUS='AVAILABLE_NOW' and LST_AVAILABILITY='ACTIVE'
+     */
+    public function stats(Request $request, $farmId)
+    {
+        $farm = Farm::find($farmId);
+
+        if (! $farm) {
+            return response()->json([
+                'message' => 'Farm not found.',
+            ], 404);
+        }
+
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer || $farm->FMR_ID !== $farmer->FMR_ID) {
+            return response()->json([
+                'message' => 'You do not own this farm.',
+            ], 403);
+        }
+
+        $listingIds = Listing::where('FRM_ID', $farm->FRM_ID)->pluck('LST_ID');
+
+        return response()->json([
+            'profile_views' => FarmVisitLog::where('FRM_ID', $farm->FRM_ID)->count(),
+            'buyer_contacts' => ContactLog::whereIn('LST_ID', $listingIds)->count(),
+            'active_listings' => Listing::where('FRM_ID', $farm->FRM_ID)
+                ->where('LST_STATUS', 'AVAILABLE_NOW')
+                ->where('LST_AVAILABILITY', 'ACTIVE')
+                ->count(),
+        ]);
     }
 
     /**

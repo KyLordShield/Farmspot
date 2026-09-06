@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../models/farm_stats.dart';
 import '../../models/listing.dart';
 import '../../services/farm_service.dart';
 import '../../services/listing_service.dart';
 import '../../theme.dart';
 import '../../widgets/seller_widgets.dart';
+import '../../widgets/stat_box.dart';
 import '../insights_screen.dart';
 import '../map_screen.dart';
 import '../profile_screen.dart';
@@ -21,6 +23,11 @@ class MyFarmScreen extends StatefulWidget {
 class _MyFarmScreenState extends State<MyFarmScreen> {
   bool _farmsLoading = true;
   Map<String, dynamic>? _farm;
+
+  /// Farm-owner performance totals (profile views / buyer contacts / active
+  /// listings) from GET /api/farms/{id}/stats. Null while loading or on
+  /// failure, so the boxes show "—" instead of flashing a misleading '0'.
+  FarmStats? _stats;
 
   bool _listingsLoading = true;
   List<Listing> _listings = [];
@@ -45,6 +52,28 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       // "One active farm" convention — the first farm returned is the farm.
       _farm = farms.isNotEmpty ? farms.first : null;
     });
+    // Stats depend on this farm's id; only fetch once the farm is known.
+    if (_farm != null) {
+      await _loadStats();
+    }
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final stats = await FarmService.fetchFarmStats(_farm!['FRM_ID'] as String);
+      if (!mounted) return;
+      setState(() => _stats = stats);
+    } catch (_) {
+      // Stats are supplementary — a failure keeps "—" and never breaks the screen.
+      if (!mounted) return;
+      setState(() => _stats = null);
+    }
+  }
+
+  /// Pull-to-refresh: reloads the farm card, its stats, and the listings.
+  Future<void> _refresh() async {
+    await _loadFarm();
+    await _loadListings(showLoading: false);
   }
 
   Future<void> _loadListings({bool showLoading = true}) async {
@@ -216,12 +245,16 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildFarmCard(),
-                  const SizedBox(height: 20),
-                  Row(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildFarmCard(),
+                    const SizedBox(height: 20),
+                    _buildStatsRow(),
+                    const SizedBox(height: 20),
+                    Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
@@ -243,8 +276,9 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
       ),
       bottomNavigationBar: SellerBottomNav(
         currentIndex: 3,
@@ -321,6 +355,36 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
           ?badge,
         ],
       ),
+    );
+  }
+
+  /// Farm-owner performance boxes (Profile Views / Buyer Contacts / Active
+  /// Listings). Values stay "—" while the stats fetch is in flight or failed —
+  /// never a misleading '0' (mirrors the old Profile stats-row behavior).
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: StatBox(
+            label: 'Profile Views',
+            value: _stats?.profileViews.toString() ?? '—',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: StatBox(
+            label: 'Buyer Contacts',
+            value: _stats?.buyerContacts.toString() ?? '—',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: StatBox(
+            label: 'Active Listings',
+            value: _stats?.activeListings.toString() ?? '—',
+          ),
+        ),
+      ],
     );
   }
 

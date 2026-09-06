@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/farm_profile.dart';
 import '../models/farm_setup_data.dart';
+import '../models/farm_stats.dart';
 import 'auth_service.dart';
 
 class FarmService {
@@ -144,6 +145,43 @@ class FarmService {
 
     final json = jsonDecode(response.body);
     return FarmProfileData.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Fetches the authenticated seller's own farm performance totals
+  /// (GET /api/farms/{id}/stats, auth + ownership required). Same error-handling
+  /// pattern as [fetchFarmProfile]: throws an Exception with a user-friendly
+  /// message on failure.
+  static Future<FarmStats> fetchFarmStats(String farmId) async {
+    final token = await AuthService.getToken();
+    if (token == null) {
+      throw Exception('Not logged in.');
+    }
+
+    http.Response response;
+    try {
+      response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId/stats'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    if (response.statusCode == 404) {
+      throw Exception('Farm not found.');
+    }
+    if (response.statusCode == 403) {
+      throw Exception('You do not own this farm.');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load farm stats.');
+    }
+
+    final json = jsonDecode(response.body);
+    return FarmStats.fromJson(json as Map<String, dynamic>);
   }
 
   /// Logs a farm-profile visit for the currently logged-in user

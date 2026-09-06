@@ -26,6 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/farms', [FarmController::class, 'store']);
     Route::get('/farms', [FarmController::class, 'index']);
     Route::post('/farms/{farmId}/log-visit', [FarmController::class, 'logVisit']);
+    Route::get('/farms/{farmId}/stats', [FarmController::class, 'stats']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
     Route::post('/listings/{listingId}/log-contact', [ListingController::class, 'logContact']);
     Route::get('/my-listings', [FarmerListingController::class, 'myListings']);

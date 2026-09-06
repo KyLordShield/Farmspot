@@ -30,13 +30,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _sellerBusy = false;
   String? _sellerError;
 
-  // Buyer-activity totals from GET /api/user/stats. Null while the initial
-  // fetch is in flight (or if it fails), so the stats row shows "—" instead of
-  // flashing a misleading '0' before the real numbers arrive.
-  int? _searches;
-  int? _farmsVisited;
-  int? _contactsMade;
-
   bool get isSellerNav => _isSeller;
 
   @override
@@ -67,9 +60,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isSeller = _parseSellerFlag(user);
 
     final farms = await FarmService.getFarms();
-    // Stats can load independently of the farms call; a failure leaves the
-    // row on "—" rather than flashing '0'.
-    final stats = await AuthService.fetchUserStats();
     if (!mounted) return;
 
     final hasPending = farms.any(
@@ -85,9 +75,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _phone = phone;
       _isSeller = isSeller;
       _hasPendingReview = hasPending && !hasApproved;
-      _searches = stats?['searches'] as int?;
-      _farmsVisited = stats?['farms_visited'] as int?;
-      _contactsMade = stats?['contacts_made'] as int?;
     });
   }
 
@@ -236,8 +223,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatsRow(),
-                  const SizedBox(height: 16),
                   _buildBecomeSellerCard(),
                   const SizedBox(height: 20),
                   const Text(
@@ -372,18 +357,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatsRow() {
-    return Row(
-      children: [
-        Expanded(child: _StatBox(label: 'Searches', value: _searches?.toString() ?? '—')),
-        const SizedBox(width: 10),
-        Expanded(child: _StatBox(label: 'Farm Visited', value: _farmsVisited?.toString() ?? '—')),
-        const SizedBox(width: 10),
-        Expanded(child: _StatBox(label: 'Contact Made', value: _contactsMade?.toString() ?? '—')),
-      ],
     );
   }
 
@@ -556,30 +529,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StatBox extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatBox({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-        ],
       ),
     );
   }

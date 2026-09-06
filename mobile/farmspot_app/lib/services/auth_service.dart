@@ -140,32 +140,6 @@ class AuthService {
     }
   }
 
-  /// Fetches the logged-in user's buyer-activity totals
-  /// (GET /api/user/stats) → {searches, farms_visited, contacts_made}.
-  /// Same auth/error pattern as [fetchUser]: returns null when not logged in
-  /// or the request fails, leaving the caller's previous values intact.
-  static Future<Map<String, dynamic>?> fetchUserStats() async {
-    final token = await getToken();
-    if (token == null) return null;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/user/stats'),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      if (response.statusCode != 200) return null;
-
-      final data = jsonDecode(response.body);
-      if (data is! Map<String, dynamic>) return null;
-      return data;
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Reports whether seller mode is active (USR_IS_SELLER == 1), fetching the
   /// latest user from the server (GET /api/user) and falling back to the cached
   /// copy if the request fails. Shared so the first post-login screen can decide
