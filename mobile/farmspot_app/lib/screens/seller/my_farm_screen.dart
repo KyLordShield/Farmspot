@@ -12,6 +12,7 @@ import '../map_screen.dart';
 import '../profile_screen.dart';
 import '../home_screen.dart';
 import 'add_crop_screen.dart';
+import 'edit_farm_screen.dart';
 
 class MyFarmScreen extends StatefulWidget {
   const MyFarmScreen({super.key});
@@ -74,6 +75,24 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   Future<void> _refresh() async {
     await _loadFarm();
     await _loadListings(showLoading: false);
+  }
+
+  /// Opens the farm editor. Pops true after a successful save — reload the
+  /// farm card (name/description) so the changes show up immediately, and the
+  /// stats stay in sync with the refreshed farm.
+  Future<void> _openEditFarm() async {
+    final farmId = _farm?['FRM_ID'] as String?;
+    if (farmId == null) return;
+
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EditFarmScreen(farmId: farmId),
+      ),
+    );
+    if (saved == true && mounted) {
+      await _loadFarm();
+      await _loadListings(showLoading: false);
+    }
   }
 
   Future<void> _loadListings({bool showLoading = true}) async {
@@ -203,6 +222,58 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     }
   }
 
+  /// Full edit entry point (edit mode of AddCropScreen). Pops true after a
+  /// successful save — refresh so the label/status/photo changes show up.
+  Future<void> _openEditCrop(Listing listing) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddCropScreen(existingListing: listing),
+      ),
+    );
+    if (saved == true && mounted) {
+      await _loadListings(showLoading: false);
+    }
+  }
+
+  /// Deletes the listing after an explicit confirmation, then refreshes the
+  /// list so the tile disappears (same post-change refresh used by add/edit).
+  Future<void> _deleteListing(Listing listing) async {
+    final label = listing.cropIcon ?? listing.categoryName ?? 'Crop';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete crop?'),
+        content: Text('"$label" will be permanently removed from your farm.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ListingService.deleteListing(listing.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$label" deleted.')),
+      );
+      await _loadListings(showLoading: false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_friendlyError(e))),
+      );
+    }
+  }
+
   static String _friendlyError(Object error) {
     final text = error.toString();
     return text.startsWith('Exception: ')
@@ -318,43 +389,12 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       );
     }
 
-    final name = _farm?['FRM_NAME'] as String? ?? '';
-    final barangay = _farm?['FRM_BARANGAY'] as String? ?? '';
-    final badge = _buildStatusBadge();
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF6EC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.primaryGreen,
-            child: Icon(Icons.agriculture, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name.isEmpty ? 'Your Farm' : name,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                Text(
-                  barangay.isEmpty ? 'Farm location' : barangay,
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-          ?badge,
-        ],
-      ),
+    return FarmCard(
+      name: _farm?['FRM_NAME'] as String? ?? '',
+      // Location is locked post-approval; shown read-only and never editable.
+      barangay: _farm?['FRM_BARANGAY'] as String? ?? '',
+      status: _farm?['FRM_STATUS'] as String? ?? '',
+      onEditTap: _openEditFarm,
     );
   }
 
@@ -385,33 +425,6 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  /// "Live" only when the farm is APPROVED; otherwise show an appropriate
-  /// label (Pending Review) or nothing at all.
-  Widget? _buildStatusBadge() {
-    final status = _farm?['FRM_STATUS'] as String? ?? '';
-    if (status == 'APPROVED') {
-      return _badge('Live', AppColors.primaryGreen);
-    }
-    if (status == 'PENDING_REVIEW') {
-      return _badge('Pending Review', Colors.orange);
-    }
-    return null;
-  }
-
-  Widget _badge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(color: Colors.white, fontSize: 11),
-      ),
     );
   }
 
@@ -460,137 +473,14 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     return Column(
       children: [
         for (final listing in _listings)
-          _CropListTile(
+          CropListTile(
             listing: listing,
             updating: _updatingId == listing.id,
             onStatusTap: () => _openStatusPicker(listing),
+            onEditTap: () => _openEditCrop(listing),
+            onDeleteTap: () => _deleteListing(listing),
           ),
       ],
-    );
-  }
-}
-
-class _CropListTile extends StatelessWidget {
-  final Listing listing;
-  final bool updating;
-  final VoidCallback onStatusTap;
-
-  const _CropListTile({
-    required this.listing,
-    required this.updating,
-    required this.onStatusTap,
-  });
-
-  (String, Color) get _statusInfo => switch (listing.status) {
-        'AVAILABLE_NOW' => ('Available Now', AppColors.primaryGreen),
-        'SOON_TO_HARVEST' => ('Soon to Harvest', Colors.orange),
-        'NOT_AVAILABLE' => ('Not Available', Colors.grey),
-        _ => ('Not Available', Colors.grey),
-      };
-
-  String get _label =>
-      listing.cropIcon ?? listing.categoryName ?? 'Crop';
-
-  String get _imageUrl => listing.image ?? '';
-
-  @override
-  Widget build(BuildContext context) {
-    final (statusLabel, statusColor) = _statusInfo;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          _buildThumbnail(),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (updating)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            GestureDetector(
-              onTap: onStatusTap,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      statusLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(Icons.expand_more, size: 14, color: statusColor),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildThumbnail() {
-    if (_imageUrl.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Image.network(
-            _imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) => _iconThumbnail(),
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Container(
-                color: Colors.green.shade50,
-                child: const Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    }
-    return _iconThumbnail();
-  }
-
-  Widget _iconThumbnail() {
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: Colors.green.shade50,
-      child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 22),
     );
   }
 }

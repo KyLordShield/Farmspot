@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/crop_category.dart';
+import '../../models/listing.dart';
 import '../../services/farm_service.dart';
 import '../../services/listing_service.dart';
 import '../../theme.dart';
@@ -34,7 +35,19 @@ class AddCropScreen extends StatefulWidget {
   /// by the wizard. Ignored otherwise (the "Which Farm?" picker supplies it).
   final String? farmId;
 
-  const AddCropScreen({super.key, this.isFirstCrop = false, this.farmId});
+  /// When provided, this screen edits that listing instead of creating one:
+  /// the farm picker is hidden (a listing can't move farms), the form is
+  /// pre-filled with the listing's current values, and submit calls
+  /// updateListing() (+ updateListingPhoto() when a new photo was picked)
+  /// instead of createListing(). Pops true after a successful edit.
+  final Listing? existingListing;
+
+  const AddCropScreen({
+    super.key,
+    this.isFirstCrop = false,
+    this.farmId,
+    this.existingListing,
+  });
 
   @override
   State<AddCropScreen> createState() => _AddCropScreenState();
@@ -53,6 +66,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
   String? _categoriesError;
   int _selectedCategoryIndex = -1;
 
+  /// Category-grid index the form started on (first category for a new crop,
+  /// the listing's current category when editing). The back button compares
+  /// against this to decide whether the user has unsaved changes.
+  int _baselineCategoryIndex = -1;
+
   AvailabilityStatus _status = AvailabilityStatus.availableNow;
   DateTime? _harvestDate;
   XFile? _photo;
@@ -60,10 +78,33 @@ class _AddCropScreenState extends State<AddCropScreen> {
   bool _isSubmitting = false;
   String? _submitError;
 
+  /// True when an existing listing is being edited rather than a new one
+  /// created. Hides the farm picker and switches submit to the update path.
+  bool get _isEditing => widget.existingListing != null;
+
+  AvailabilityStatus _statusFromBackend(String value) {
+    switch (value) {
+      case 'AVAILABLE_NOW':
+        return AvailabilityStatus.availableNow;
+      case 'SOON_TO_HARVEST':
+        return AvailabilityStatus.soonToHarvest;
+      default:
+        return AvailabilityStatus.notAvailable;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    if (!widget.isFirstCrop) {
+    final existing = widget.existingListing;
+    if (existing != null) {
+      // Edit mode: no farm picker (a listing can't change farms), and the
+      // form starts pre-filled from the listing's current values.
+      _farmsLoading = false;
+      _cropLabelCtrl.text = existing.cropIcon ?? '';
+      _status = _statusFromBackend(existing.status);
+      _harvestDate = DateTime.tryParse(existing.harvestDate ?? '');
+    } else if (!widget.isFirstCrop) {
       _loadFarms();
     } else {
       _farmsLoading = false;
@@ -101,7 +142,8 @@ class _AddCropScreenState extends State<AddCropScreen> {
       setState(() {
         _categoriesLoading = false;
         _categories = categories;
-        _selectedCategoryIndex = categories.isEmpty ? -1 : 0;
+        _selectedCategoryIndex = _initialCategoryIndex(categories);
+        _baselineCategoryIndex = _selectedCategoryIndex;
       });
     } catch (e) {
       if (!mounted) return;
@@ -111,6 +153,17 @@ class _AddCropScreenState extends State<AddCropScreen> {
         _categoriesError = _friendlyError(e);
       });
     }
+  }
+
+  /// Edit mode starts on the listing's current category; otherwise the first
+  /// (only) item is selected like before. Falls back to 0 when the listing's
+  /// category no longer exists.
+  int _initialCategoryIndex(List<CropCategory> categories) {
+    if (categories.isEmpty) return -1;
+    final currentId = widget.existingListing?.categoryId;
+    if (currentId == null || currentId.isEmpty) return 0;
+    final index = categories.indexWhere((c) => c.id == currentId);
+    return index == -1 ? 0 : index;
   }
 
   Future<void> _pickPhoto() async {
@@ -165,6 +218,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   Future<void> _submit() async {
     if (_isSubmitting) return;
+
+    if (_isEditing) {
+      await _submitEdit();
+      return;
+    }
 
     final farmId = _farmIdForSubmit;
     if (farmId.isEmpty) {
@@ -223,6 +281,115 @@ class _AddCropScreenState extends State<AddCropScreen> {
     return text.startsWith('Exception: ')
         ? text.substring('Exception: '.length)
         : text;
+  }
+
+  /// True when the form differs from how it started (edit mode compares
+  /// against the listing) — the back button asks before discarding those.
+  bool get _hasUnsavedChanges {
+    final existing = widget.existingListing;
+    if (existing != null) {
+      final dateStr = _harvestDate != null ? _dateOnly(_harvestDate!) : null;
+      final baseline = existing.harvestDate;
+      final baselineDateStr = (baseline == null || baseline.length < 10)
+          ? null
+          : baseline.substring(0, 10);
+      return _cropLabelCtrl.text.trim() != (existing.cropIcon ?? '') ||
+          _status != _statusFromBackend(existing.status) ||
+          dateStr != baselineDateStr ||
+          _photo != null ||
+          _selectedCategoryIndex != _baselineCategoryIndex;
+    }
+    return _cropLabelCtrl.text.trim().isNotEmpty ||
+        _status != AvailabilityStatus.availableNow ||
+        _harvestDate != null ||
+        _photo != null ||
+        _selectedCategoryIndex != _baselineCategoryIndex;
+  }
+
+  /// Top-left back: pops straight out when nothing was typed/changed, and
+  /// asks for confirmation otherwise (Cancel / red "Discard", matching the
+  /// app's logout and delete dialogs) so an accidental back can't silently
+  /// drop real work.
+  Future<void> _maybePop() async {
+    if (_isSubmitting) return;
+    if (!_hasUnsavedChanges) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// Edit-mode submit: calls updateListing() with the current form values and
+  /// — only when a NEW photo was picked — updateListingPhoto() afterwards
+  /// (the JSON PATCH and the multipart upload are separate backend calls).
+  /// Pops true so MyFarmScreen can refresh its list.
+  Future<void> _submitEdit() async {
+    final existing = widget.existingListing!;
+    if (_selectedCategoryIndex < 0 || _categories.isEmpty) {
+      setState(() => _submitError = 'Please select a crop category.');
+      return;
+    }
+    final category = _categories[_selectedCategoryIndex];
+    final label = _cropLabelCtrl.text.trim();
+
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+
+    try {
+      await ListingService.updateListing(
+        listingId: existing.id,
+        categoryId: category.id,
+        cropIcon: label.isEmpty ? null : label,
+        harvestDate:
+            _harvestDate != null ? _dateOnly(_harvestDate!) : null,
+        status: _status.backendValue,
+      );
+
+      if (_photo != null) {
+        await ListingService.updateListingPhoto(
+          listingId: existing.id,
+          photo: _photo!,
+        );
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _submitError = _friendlyError(e);
+      });
+    }
+  }
+
+  static String _dateOnly(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
   }
 
   static String _formatDate(DateTime d) {
@@ -287,16 +454,21 @@ class _AddCropScreenState extends State<AddCropScreen> {
         child: Column(
           children: [
             SetupHeader(
-              title: widget.isFirstCrop ? 'Add First Crop' : 'Add Crop',
-              subtitle: widget.isFirstCrop
-                  ? 'What are you selling this harvest?'
-                  : 'Pick farm, crop, and availability',
+              title: _isEditing
+                  ? 'Edit Crop'
+                  : (widget.isFirstCrop ? 'Add First Crop' : 'Add Crop'),
+              subtitle: _isEditing
+                  ? 'Update crop details and availability'
+                  : (widget.isFirstCrop
+                      ? 'What are you selling this harvest?'
+                      : 'Pick farm, crop, and availability'),
+              onBack: _maybePop,
             ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 children: [
-                  if (!widget.isFirstCrop) ...[
+                  if (!_isEditing && !widget.isFirstCrop) ...[
                     const FieldLabel('WHICH FARM?'),
                     if (_farmsLoading)
                       const Padding(
@@ -442,11 +614,33 @@ class _AddCropScreenState extends State<AddCropScreen> {
                             onRemove: () => setState(() => _photo = null),
                           ),
                           const SizedBox(width: 12),
+                        ] else if (_isEditing &&
+                            (widget.existingListing?.image?.isEmpty ?? true) ==
+                                false) ...[
+                          // Edit mode: show the listing's CURRENT photo until a
+                          // replacement is picked (PhotoPlaceholder's add tile
+                          // swaps it out via _pickPhoto).
+                          _ExistingPhotoTile(
+                            url: widget.existingListing!.image!,
+                          ),
+                          const SizedBox(width: 12),
                         ],
                         PhotoPlaceholder(isAddButton: true, onTap: _pickPhoto),
                       ],
                     ),
                   ),
+                  if (_isEditing) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _photo != null
+                          ? 'Current photo will be replaced on save.'
+                          : 'Tap + to replace the current photo.',
+                      style: const TextStyle(
+                        color: Colors.black45,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   if (_submitError != null) ...[
                     const SizedBox(height: 12),
@@ -459,10 +653,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   const SizedBox(height: 20),
                   WizardNextButton(
                     label: _isSubmitting
-                        ? 'Adding Crop...'
-                        : (widget.isFirstCrop
-                            ? 'Add Crop & Go Live'
-                            : 'Add Crop'),
+                        ? 'Saving...'
+                        : (_isEditing ? 'Save Changes' : (
+                            widget.isFirstCrop ? 'Add Crop & Go Live' : 'Add Crop')),
                     icon: Icons.check,
                     onPressed: _isSubmitting ? () {} : _submit,
                   ),
@@ -493,6 +686,48 @@ class _AddCropScreenState extends State<AddCropScreen> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+      ),
+    );
+  }
+}
+
+/// Static thumbnail of a listing's CURRENT photo (edit mode, before a
+/// replacement is picked). Rendered directly from the stored Cloudinary URL —
+/// no remove affordance, because deleting a photo isn't part of editing.
+class _ExistingPhotoTile extends StatelessWidget {
+  final String url;
+
+  const _ExistingPhotoTile({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 96,
+        height: 96,
+        child: Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stack) => Container(
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image_outlined,
+                color: Colors.grey, size: 24),
+          ),
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

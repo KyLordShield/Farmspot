@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/listing.dart';
 import '../theme.dart';
 
 /// Shared tab definitions so SellerBottomNav and FarmSpotBottomNav stay in sync.
@@ -18,21 +19,42 @@ const kBuyerTabs = [
 ];
 
 /// Green header used across the "Set Up Your Farm" wizard screens.
+///
+/// [onBack] adds a top-left back arrow that matches the app's existing back
+/// convention on colored headers (a bare white arrow). Screen owners decide
+/// what it does — a plain pop, or a "Discard changes?" guard for dirty forms.
 class SetupHeader extends StatelessWidget {
   final String title;
   final String subtitle;
+  final VoidCallback? onBack;
 
-  const SetupHeader({super.key, required this.title, required this.subtitle});
+  const SetupHeader({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       color: AppColors.primaryGreen,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (onBack != null) ...[
+            IconButton(
+              onPressed: onBack,
+              tooltip: 'Back',
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              alignment: Alignment.centerLeft,
+            ),
+            const SizedBox(height: 6),
+          ],
           Text(
             title,
             style: const TextStyle(
@@ -408,6 +430,335 @@ class WizardNextButton extends StatelessWidget {
             Icon(icon, size: 16),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One listing row in My Farm's management list: a large photo thumbnail, the
+/// crop name on up to two lines, the tappable status chip beneath the name,
+/// and the overflow (Edit/Delete) menu on the right.
+///
+/// The name and status live in their own column so a long crop name wraps to
+/// two lines instead of being squeezed to a truncated fragment, and the status
+/// control gets its own line instead of competing with the name for space.
+class CropListTile extends StatelessWidget {
+  final Listing listing;
+  final bool updating;
+  final VoidCallback onStatusTap;
+  final VoidCallback onEditTap;
+  final VoidCallback onDeleteTap;
+
+  const CropListTile({
+    super.key,
+    required this.listing,
+    required this.updating,
+    required this.onStatusTap,
+    required this.onEditTap,
+    required this.onDeleteTap,
+  });
+
+  (String, Color) get _statusInfo => switch (listing.status) {
+        'AVAILABLE_NOW' => ('Available Now', AppColors.primaryGreen),
+        'SOON_TO_HARVEST' => ('Soon to Harvest', Colors.orange),
+        'NOT_AVAILABLE' => ('Not Available', Colors.grey),
+        _ => ('Not Available', Colors.grey),
+      };
+
+  String get _label => listing.cropIcon ?? listing.categoryName ?? 'Crop';
+
+  String get _imageUrl => listing.image ?? '';
+
+  @override
+  Widget build(BuildContext context) {
+    final (statusLabel, statusColor) = _statusInfo;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildThumbnail(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (updating)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  GestureDetector(
+                    onTap: onStatusTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Flexible + ellipsis: the chip must shrink to its
+                          // column (narrow screens / large text scale) instead
+                          // of overflowing the tile like the old one-row layout.
+                          Flexible(
+                            child: Text(
+                              statusLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: statusColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Icon(Icons.expand_more, size: 14, color: statusColor),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Overflow menu stays in its own trailing slot, away from the name
+          // and status, so it never competes with either.
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            icon: const Icon(Icons.more_vert, size: 20, color: Colors.black45),
+            onSelected: (value) {
+              if (value == 'edit') {
+                onEditTap();
+              } else if (value == 'delete') {
+                onDeleteTap();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Edit'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThumbnail() {
+    if (_imageUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 68,
+          height: 68,
+          child: Image.network(
+            _imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stack) => _iconThumbnail(),
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                color: Colors.green.shade50,
+                child: const Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    return _iconThumbnail();
+  }
+
+  Widget _iconThumbnail() {
+    return Container(
+      width: 68,
+      height: 68,
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 30),
+    );
+  }
+}
+
+/// Farm summary card shown at the top of My Farm: farm icon, name/barangay,
+/// and the "Edit Farm" action + status badge.
+///
+/// The name/barangay texts live in an [Expanded] column with single-line
+/// ellipsis, and the actions sit on their own second row beneath the text. This
+/// keeps a long real farm name from pushing into (or overlapping) the buttons
+/// and prevents RenderFlex overflow at narrow 360px widths.
+class FarmCard extends StatelessWidget {
+  final String name;
+  final String barangay;
+  final String status;
+  final VoidCallback onEditTap;
+
+  const FarmCard({
+    super.key,
+    required this.name,
+    required this.barangay,
+    required this.status,
+    required this.onEditTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF6EC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.primaryGreen,
+                child: Icon(Icons.agriculture, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.isEmpty ? 'Your Farm' : name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      barangay.isEmpty ? 'Farm location' : barangay,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Actions on their own row so they never collide with the text.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: onEditTap,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.edit_outlined, size: 14, color: Colors.white),
+                      SizedBox(width: 4),
+                      Text(
+                        'Edit Farm',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_badge case final Widget badge) badge,
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Live" only when the farm is APPROVED; otherwise show an appropriate
+  /// label (Pending Review) or nothing at all.
+  Widget? get _badge {
+    if (status == 'APPROVED') {
+      return _statusBadge('Live', AppColors.primaryGreen);
+    }
+    if (status == 'PENDING_REVIEW') {
+      return _statusBadge('Pending Review', Colors.orange);
+    }
+    return null;
+  }
+
+  Widget _statusBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 11),
       ),
     );
   }

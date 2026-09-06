@@ -30,7 +30,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/listings', [ListingCreateController::class, 'store']);
     Route::post('/listings/{listingId}/log-contact', [ListingController::class, 'logContact']);
     Route::get('/my-listings', [FarmerListingController::class, 'myListings']);
+    Route::post('/listings', [ListingCreateController::class, 'store']);
+    Route::patch('/listings/{id}', [FarmerListingController::class, 'update']);
+    Route::post('/listings/{id}/photo', [FarmerListingController::class, 'uploadPhoto']);
+    Route::delete('/listings/{id}', [FarmerListingController::class, 'destroy']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
+    Route::patch('/farms/{id}', [FarmController::class, 'update']);
+    Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

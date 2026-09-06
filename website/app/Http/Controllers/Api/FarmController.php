@@ -161,17 +161,119 @@ class FarmController extends Controller
             ->map(fn ($listing) => $this->formatListing($listing));
 
         return response()->json([
-            'farm' => [
-                'id' => $farm->FRM_ID,
-                'name' => $farm->FRM_NAME,
-                'description' => $farm->FRM_DESCRIPTION,
-                'barangay' => $farm->FRM_BARANGAY,
-                'latitude' => $farm->FRM_LATITUDE,
-                'longitude' => $farm->FRM_LONGITUDE,
-                'status' => $farm->FRM_STATUS,
-                'photos' => $farm->photos->pluck('FPHOTO_FILE_PATH'),
-            ],
+            'farm' => $this->formatFarm($farm),
             'listings' => $listings,
+        ]);
+    }
+
+    /**
+     * Edit the authenticated seller's own farm (auth + ownership required).
+     *
+     * JSON-only: name and description. Location is locked after approval — a
+     * request that tries to send latitude/longitude/barangay is rejected with
+     * a validation error. FRM_STATUS is never touched — editing an approved
+     * farm doesn't send it back to review.
+     *
+     * NOTE: photo uploads CANNOT ride this PATCH — PHP only populates
+     * $_FILES (and $_POST) for POST requests, so a multipart PATCH arrives
+     * with empty input/files on this stack. Photos go through
+     * POST /api/farms/{id}/photos instead.
+     */
+    public function update(Request $request, $farmId)
+    {
+        $farm = Farm::with('photos')->find($farmId);
+
+        if (! $farm) {
+            return response()->json([
+                'message' => 'Farm not found.',
+            ], 404);
+        }
+
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer || $farm->FMR_ID !== $farmer->FMR_ID) {
+            return response()->json([
+                'message' => 'You do not own this farm.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:150'],
+            'description' => ['nullable', 'string'],
+            // Location is locked after approval — reject any attempt to change it.
+            // ("prohibited" passes only when the field is absent or empty, so an
+            // edit form that always sends blank coord fields still works.)
+            'latitude' => ['prohibited'],
+            'longitude' => ['prohibited'],
+            'barangay' => ['prohibited'],
+        ], [
+            'latitude.prohibited' => 'Location cannot be changed after the farm is approved.',
+            'longitude.prohibited' => 'Location cannot be changed after the farm is approved.',
+            'barangay.prohibited' => 'Location cannot be changed after the farm is approved.',
+        ]);
+
+        if (array_key_exists('name', $validated)) {
+            $farm->FRM_NAME = $validated['name'];
+        }
+
+        if (array_key_exists('description', $validated)) {
+            $farm->FRM_DESCRIPTION = $validated['description'];
+        }
+
+        $farm->save();
+
+        return response()->json([
+            'message' => 'Farm updated successfully.',
+            'farm' => $this->formatFarm(Farm::with('photos')->find($farm->FRM_ID)),
+        ]);
+    }
+
+    /**
+     * Append new photos to the authenticated seller's own farm (POST so the
+     * multipart uploads are actually parsed by PHP). New uploads go to
+     * Cloudinary exactly like POST /api/farms and are APPENDED as new
+     * farm_photo rows — the existing set is never replaced or deleted.
+     */
+    public function addPhotos(Request $request, $farmId)
+    {
+        $farm = Farm::with('photos')->find($farmId);
+
+        if (! $farm) {
+            return response()->json([
+                'message' => 'Farm not found.',
+            ], 404);
+        }
+
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer || $farm->FMR_ID !== $farmer->FMR_ID) {
+            return response()->json([
+                'message' => 'You do not own this farm.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'photos' => ['required', 'array', 'min:1'],
+            'photos.*' => ['image', 'max:5120'],
+        ]);
+
+        foreach ($validated['photos'] as $photo) {
+            $extension = $photo->getClientOriginalExtension() ?: 'jpg';
+            $path = "farm-photos/{$farm->FRM_ID}/" . uniqid() . ".{$extension}";
+
+            Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+
+            FarmPhoto::create([
+                'FPHOTO_ID' => $this->uniqueId('farm_photo', 'FPHOTO_ID'),
+                'FPHOTO_FILE_PATH' => Storage::disk('cloudinary')->url($path),
+                'FPHOTO_UPLOADED_AT' => now(),
+                'FRM_ID' => $farm->FRM_ID,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Farm photos added successfully.',
+            'farm' => $this->formatFarm(Farm::with('photos')->find($farm->FRM_ID)),
         ]);
     }
 
@@ -263,6 +365,25 @@ class FarmController extends Controller
         return response()->json([
             'farms' => $farms,
         ]);
+    }
+
+    /**
+     * Shape a Farm model into the structured farm object the public profile
+     * and the farm-edit endpoints share (id, name, description, barangay,
+     * coordinates, status, photos).
+     */
+    private function formatFarm(Farm $farm): array
+    {
+        return [
+            'id' => $farm->FRM_ID,
+            'name' => $farm->FRM_NAME,
+            'description' => $farm->FRM_DESCRIPTION,
+            'barangay' => $farm->FRM_BARANGAY,
+            'latitude' => $farm->FRM_LATITUDE,
+            'longitude' => $farm->FRM_LONGITUDE,
+            'status' => $farm->FRM_STATUS,
+            'photos' => $farm->photos->pluck('FPHOTO_FILE_PATH'),
+        ];
     }
 
     /**

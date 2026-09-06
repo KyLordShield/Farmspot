@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/farm_profile.dart';
@@ -207,8 +208,7 @@ class FarmService {
 
   /// Fetches the authenticated user's own farms (GET /api/farms).
   /// Returns an empty list when not logged in or on any failure — never throws.
-  static Future<List<Map<String, dynamic>>> getFarms() async {
-    final token = await AuthService.getToken();
+  static Future<List<Map<String, dynamic>>> getFarms() async {    final token = await AuthService.getToken();
     if (token == null) return const [];
 
     try {
@@ -234,10 +234,136 @@ class FarmService {
     }
   }
 
+  /// Edits the authenticated seller's own farm (PATCH /api/farms/{id}).
+  /// JSON-only — only the provided fields are sent, an absent one is left
+  /// untouched on the server. Location is locked post-approval and is never
+  /// sent here (the endpoint rejects any non-empty location field). Returns
+  /// normally on success, or throws an Exception carrying a user-friendly
+  /// message, matching this file's fetchFarmProfile/fetchFarmStats convention.
+  static Future<void> updateFarm({
+    required String farmId,
+    String? name,
+    String? description,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.patch(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: {
+          // Only fields explicitly provided (non-null) are sent — an absent
+          // one is left untouched. An empty string is still sent so a caller
+          // can deliberately clear the description back to blank.
+          if (name != null) 'name': name.trim(),
+          if (description != null) 'description': description.trim(),
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    _throwForError(response, 'Update farm failed.');
+  }
+
+  /// Appends new photos to the authenticated seller's own farm
+  /// (POST /api/farms/{id}/photos). This is a separate call from the JSON
+  /// PATCH because PHP only parses multipart uploads on POST — the same
+  /// bytes-based MultipartFile.fromBytes() pattern the farm wizard uses.
+  /// Existing photos are never removed (append-only). Returns normally on
+  /// success, or throws an Exception with a user-friendly message.
+  static Future<void> addFarmPhotos({
+    required String farmId,
+    required List<XFile> photos,
+  }) async {
+    if (photos.isEmpty) return;
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId/photos'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      for (final photo in photos) {
+        final bytes = await photo.readAsBytes();
+        final uploadName = _uploadFileName(photo.name, photo.path);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'photos[]',
+            bytes,
+            filename: uploadName,
+            contentType: _contentTypeFor(uploadName),
+          ),
+        );
+      }
+
+      final streamed = await request.send();
+      response = await http.Response.fromStream(streamed);
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    _throwForError(response, 'Add farm photos failed.');
+  }
+
+  /// Shared failure handling for the farm PATCH / photo-append endpoints:
+  /// 403/404/422 map to their messages, else the fallback — throws an
+  /// Exception so callers get a friendly message (never a raw http code).
+  static void _throwForError(http.Response response, String fallback) {
+    if (response.statusCode == 200) return;
+
+    dynamic json;
+    try {
+      json = jsonDecode(response.body);
+    } catch (_) {
+      json = null;
+    }
+    final message = json is Map && json['message'] is String
+        ? json['message'] as String
+        : null;
+
+    if (response.statusCode == 403) {
+      throw Exception(message ?? 'You do not own this farm.');
+    }
+    if (response.statusCode == 404) {
+      throw Exception(message ?? 'Farm not found.');
+    }
+    if (response.statusCode == 422) {
+      final errors = json is Map ? json['errors'] : null;
+      if (errors is Map) {
+        for (final fieldErrors in errors.values) {
+          if (fieldErrors is List && fieldErrors.isNotEmpty) {
+            throw Exception(fieldErrors.first.toString());
+          }
+        }
+      }
+      throw Exception(message ?? 'Please check your inputs.');
+    }
+
+    throw Exception(message ?? fallback);
+  }
+
   static String _uploadFileName(String name, String path) {
     if (name.isNotEmpty) return name;
     final normalized = path.replaceAll('\\', '/');
-    return normalized.substring(normalized.lastIndexOf('/') + 1);
+    if (normalized.isNotEmpty) {
+      final fromPath = normalized.substring(normalized.lastIndexOf('/') + 1);
+      if (fromPath.isNotEmpty) return fromPath;
+    }
+    // XFile.fromData/web pickers can yield an empty name AND empty path —
+    // without a real filename Laravel won't treat the part as a file upload,
+    // so the backend's "photos" field would appear missing entirely.
+    return 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
   }
 
   static http.MediaType _contentTypeFor(String fileName) {

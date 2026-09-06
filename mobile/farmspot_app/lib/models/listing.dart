@@ -10,6 +10,7 @@ class Listing {
   final String? expiryDate;
   final String? image;
   final String? createdAt;
+  final String? categoryId;
   final String? categoryName;
   final String? farmName;
   final String? farmId;
@@ -26,6 +27,7 @@ class Listing {
     this.expiryDate,
     this.image,
     this.createdAt,
+    this.categoryId,
     this.categoryName,
     this.farmName,
     this.farmId,
@@ -44,6 +46,7 @@ class Listing {
       expiryDate: json['expiry_date'] as String?,
       image: json['image'] as String?,
       createdAt: json['created_at'] as String?,
+      categoryId: (json['category'] as Map?)?['id'] as String?,
       categoryName: (json['category'] as Map?)?['name'] as String?,
       farmName: (json['farm'] as Map?)?['name'] as String?,
       farmId: (json['farm'] as Map?)?['id'] as String?,

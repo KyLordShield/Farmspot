@@ -211,6 +211,140 @@ class ListingService {
     return _listingResult(response, 'Update listing status failed.');
   }
 
+  /// Full edit of one of the farmer's own listings (PATCH /api/listings/{id}).
+  /// JSON-only — only the provided fields are sent, an absent one is left
+  /// untouched on the server. Returns the updated Listing on success, or
+  /// throws an Exception carrying a user-friendly message.
+  static Future<Listing> updateListing({
+    required String listingId,
+    String? categoryId,
+    String? cropIcon,
+    String? harvestDate,
+    String? status,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.patch(
+        Uri.parse('$baseUrl/listings/$listingId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: {
+          if (categoryId != null && categoryId.trim().isNotEmpty)
+            'category_id': categoryId.trim(),
+          if (cropIcon != null && cropIcon.trim().isNotEmpty)
+            'crop_icon': cropIcon.trim(),
+          if (harvestDate != null && harvestDate.trim().isNotEmpty)
+            'harvest_date': harvestDate.trim(),
+          if (status != null && status.trim().isNotEmpty)
+            'status': status.trim(),
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Update listing failed.');
+  }
+
+  /// Replaces the photo of one of the farmer's own listings
+  /// (POST /api/listings/{id}/photo). This is a separate call from the
+  /// JSON PATCH because PHP only parses multipart uploads on POST — the same
+  /// byte-based MultipartFile.fromBytes() pattern used by createListing().
+  /// Returns the updated Listing on success, or throws an Exception with a
+  /// user-friendly message.
+  static Future<Listing> updateListingPhoto({
+    required String listingId,
+    required XFile photo,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/listings/$listingId/photo'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      final bytes = await photo.readAsBytes();
+      final uploadName = _uploadFileName(photo.name, photo.path);
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          bytes,
+          filename: uploadName,
+          contentType: _contentTypeFor(uploadName),
+        ),
+      );
+
+      final streamed = await request.send();
+      response = await http.Response.fromStream(streamed);
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Update listing photo failed.');
+  }
+
+  /// Hard-deletes one of the farmer's own listings
+  /// (DELETE /api/listings/{id}). The server also destroys the Cloudinary
+  /// image and cascades its contact logs. Returns normally on success (204
+  /// semantics — nothing to return), or throws an Exception with a
+  /// user-friendly message on failure.
+  static Future<void> deleteListing(String listingId) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.delete(
+        Uri.parse('$baseUrl/listings/$listingId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    if (response.statusCode == 200) return;
+
+    dynamic json;
+    try {
+      json = jsonDecode(response.body);
+    } catch (_) {
+      json = null;
+    }
+    final message = json is Map && json['message'] is String
+        ? json['message'] as String
+        : null;
+
+    if (response.statusCode == 403) {
+      throw Exception(message ?? 'You do not own this listing.');
+    }
+    if (response.statusCode == 422) {
+      final errors = json is Map ? json['errors'] : null;
+      if (errors is Map) {
+        for (final fieldErrors in errors.values) {
+          if (fieldErrors is List && fieldErrors.isNotEmpty) {
+            throw Exception(fieldErrors.first.toString());
+          }
+        }
+      }
+      throw Exception(message ?? 'Please check your inputs.');
+    }
+
+    throw Exception(message ?? 'Delete listing failed.');
+  }
+
   /// Logs a contact action (CALL or SMS) the buyer took against a listing
   /// (POST /api/listings/{id}/log-contact). Fire-and-forget by design: silently
   /// a no-op when not logged in, and failures are ignored so a failed log never
