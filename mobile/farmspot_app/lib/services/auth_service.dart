@@ -154,10 +154,14 @@ class AuthService {
   }
 
   /// Activates seller mode for the authenticated user (POST /seller/activate).
-  /// Returns null on success, or an error message on failure.
-  static Future<String?> activateSeller() async {
+  /// Returns an error message (null on success) plus whether the server
+  /// reactivated an already-approved seller ({reactivated: true}) or routed the
+  /// user into the first-time wizard flow ({reactivated: false}).
+  static Future<({String? error, bool reactivated})> activateSeller() async {
     final token = await getToken();
-    if (token == null) return 'Not logged in.';
+    if (token == null) {
+      return (error: 'Not logged in.', reactivated: false);
+    }
 
     try {
       final response = await http.post(
@@ -168,10 +172,21 @@ class AuthService {
         },
       );
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200) return null;
-      return data['message'] ?? 'Could not activate seller mode.';
+      if (response.statusCode == 200) {
+        return (
+          error: null,
+          reactivated: data['reactivated'] == true,
+        );
+      }
+      return (
+        error: data['message'] as String? ?? 'Could not activate seller mode.',
+        reactivated: false,
+      );
     } catch (_) {
-      return 'Could not reach the server. Check your connection.';
+      return (
+        error: 'Could not reach the server. Check your connection.',
+        reactivated: false,
+      );
     }
   }
 

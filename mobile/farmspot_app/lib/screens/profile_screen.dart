@@ -26,7 +26,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _address = 'Address';
   String _phone = '';
   bool _isSeller = false;
-  bool _hasFarm = false;
   bool _hasPendingReview = false;
   bool _sellerBusy = false;
   String? _sellerError;
@@ -75,7 +74,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _lastName = lastName;
       _phone = phone;
       _isSeller = isSeller;
-      _hasFarm = farms.isNotEmpty;
       _hasPendingReview = hasPending && !hasApproved;
     });
   }
@@ -92,9 +90,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _sellerError = null;
     });
 
-    final error = enable
+    final result = enable
         ? await AuthService.activateSeller()
-        : await AuthService.deactivateSeller();
+        : (error: await AuthService.deactivateSeller(), reactivated: false);
+    final error = result.error;
 
     if (error != null) {
       if (!mounted) return;
@@ -109,25 +108,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     setState(() => _sellerBusy = false);
 
-    // Note: activate() no longer flips USR_IS_SELLER — approval now happens at
-    // farm-submission time. So after successfully entering the seller flow, we
-    // always route into the wizard (or the seller shell if farms already exist)
-    // regardless of the (still 0) seller flag.
     if (enable) {
-      if (_hasFarm) {
+      // Case A: the server found an APPROVED farm and flipped the seller flags
+      // back on, so refund straight onto seller Home (seller nav + My Farm +
+      // listings restored) without re-running the setup wizard.
+      if (result.reactivated) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
           (route) => false,
         );
-      } else {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => FarmSetupDetailsScreen(
-              farmSetupData: FarmSetupData(),
-            ),
-          ),
-        );
+        return;
       }
+
+      // Case B: first-timer or no approved farm yet — enter the wizard.
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FarmSetupDetailsScreen(
+            farmSetupData: FarmSetupData(),
+          ),
+        ),
+      );
     }
   }
 
