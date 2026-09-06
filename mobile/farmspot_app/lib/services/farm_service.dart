@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/farm_profile.dart';
 import '../models/farm_setup_data.dart';
 import 'auth_service.dart';
 
@@ -116,6 +117,53 @@ class FarmService {
         'success': false,
         'message': 'Could not reach the server. Check your connection.',
       };
+    }
+  }
+
+  /// Fetches a farm's public profile (GET /api/farms/{id}/profile) — the
+  /// farm's details + photos plus ALL of its listings (any status, ordered by
+  /// status priority). Public route, no token needed. Throws an Exception with
+  /// a user-friendly message on failure (matching ListingService's convention).
+  static Future<FarmProfileData> fetchFarmProfile(String farmId) async {
+    http.Response response;
+    try {
+      response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId/profile'),
+        headers: {'Accept': 'application/json'},
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    if (response.statusCode == 404) {
+      throw Exception('Farm not found.');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load farm profile.');
+    }
+
+    final json = jsonDecode(response.body);
+    return FarmProfileData.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Logs a farm-profile visit for the currently logged-in user
+  /// (POST /api/farms/{id}/log-visit). Fire-and-forget by design: silently a
+  /// no-op when not logged in, and failed visits never block or surface in the
+  /// UI — a failed visit log must not affect the buyer's experience.
+  static Future<void> logFarmVisit(String farmId) async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) return;
+
+      await http.post(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId/log-visit'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (_) {
+      // Ignored by design.
     }
   }
 

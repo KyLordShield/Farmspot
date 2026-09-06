@@ -12,6 +12,7 @@ class Listing {
   final String? createdAt;
   final String? categoryName;
   final String? farmName;
+  final String? farmId;
   final String? barangay;
   final String? farmerName;
   final String? farmerMobileNumber;
@@ -27,6 +28,7 @@ class Listing {
     this.createdAt,
     this.categoryName,
     this.farmName,
+    this.farmId,
     this.barangay,
     this.farmerName,
     this.farmerMobileNumber,
@@ -44,6 +46,7 @@ class Listing {
       createdAt: json['created_at'] as String?,
       categoryName: (json['category'] as Map?)?['name'] as String?,
       farmName: (json['farm'] as Map?)?['name'] as String?,
+      farmId: (json['farm'] as Map?)?['id'] as String?,
       barangay: (json['farm'] as Map?)?['barangay'] as String?,
       farmerName: (json['farmer'] as Map?)?['name'] as String?,
       farmerMobileNumber: (json['farmer'] as Map?)?['mobile_number'] as String?,
@@ -62,6 +65,11 @@ class Listing {
           ? cropIcon!
           : (categoryName ?? 'Crop'),
       farmName: farmName ?? 'Unknown Farm',
+      // Backend listing identity so detail-screen contact actions can log
+      // against the real listing, and the farm id so cards can tap into the
+      // Farm Profile screen.
+      listingId: id,
+      farmId: farmId,
       // Category filtering keys off the real category, not the crop name.
       cropType: categoryName ?? 'Vegetable',
       status: status,

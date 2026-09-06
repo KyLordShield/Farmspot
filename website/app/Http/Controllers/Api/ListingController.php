@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Listing;
+use App\Models\ContactLog;
 use App\Models\CropCategory;
+use App\Models\Listing;
+use App\Models\SearchLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ListingController extends Controller
 {
@@ -28,6 +31,11 @@ class ListingController extends Controller
     }
     /**
      * Browse feed — active listings only, buyer-facing.
+     *
+     * Also logs a search_log row whenever a non-empty ?search= is used by an
+     * authenticated user. Plain feed loads (no keyword) and unauthenticated
+     * browsing are NOT logged, so guest browsing keeps working with zero
+     * side effects.
      */
     public function index(Request $request)
     {
@@ -49,9 +57,67 @@ class ListingController extends Controller
             ->get()
             ->map(fn ($listing) => $this->formatListing($listing));
 
+        // Only real searches by logged-in users count toward the stats.
+        // /listings is a PUBLIC route (no auth middleware), so resolve the
+        // optional Sanctum user explicitly — a valid Bearer token present on
+        // the request gets resolved, guests stay null and skip logging.
+        $user = $request->user('sanctum');
+
+        if ($search && $user) {
+            do {
+                $searchId = strtoupper(Str::random(6));
+            } while (SearchLog::where('SRCH_ID', $searchId)->exists());
+
+            SearchLog::create([
+                'SRCH_ID' => $searchId,
+                'SRCH_KEYWORD' => $search,
+                'SRCH_FILTERS' => $request->query('filters'),
+                'SRCH_CREATED_AT' => now(),
+                'USR_ID' => $user->USR_ID,
+            ]);
+        }
+
         return response()->json([
             'listings' => $listings,
         ]);
+    }
+
+    /**
+     * Log a single contact action (CALL or SMS) against a listing for the
+     * authenticated user. Every tap inserts one row — no deduplication.
+     */
+    public function logContact(Request $request, $listingId)
+    {
+        $validated = $request->validate([
+            'method' => ['required', 'in:CALL,SMS'],
+        ]);
+
+        $listing = Listing::find($listingId);
+
+        if (! $listing) {
+            return response()->json([
+                'message' => 'Listing not found.',
+            ], 404);
+        }
+
+        do {
+            $contactId = strtoupper(Str::random(6));
+        } while (ContactLog::where('CTL_ID', $contactId)->exists());
+
+        ContactLog::create([
+            'CTL_ID' => $contactId,
+            'USR_ID' => $request->user()->USR_ID,
+            'LST_ID' => $listing->LST_ID,
+            'CTL_METHOD' => $validated['method'],
+            'CTL_CREATED_AT' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Contact logged.',
+            'contact_id' => $contactId,
+            'listing_id' => $listing->LST_ID,
+            'method' => $validated['method'],
+        ], 201);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ListingCreateController;
 use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
+use App\Http\Controllers\Api\UserStatsController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
 Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
+Route::get('/farms/{farmId}/profile', [FarmController::class, 'profile']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -23,13 +25,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/seller/deactivate', [SellerController::class, 'deactivate']);
     Route::post('/farms', [FarmController::class, 'store']);
     Route::get('/farms', [FarmController::class, 'index']);
+    Route::post('/farms/{farmId}/log-visit', [FarmController::class, 'logVisit']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
+    Route::post('/listings/{listingId}/log-contact', [ListingController::class, 'logContact']);
     Route::get('/my-listings', [FarmerListingController::class, 'myListings']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+    Route::get('/user/stats', [UserStatsController::class, 'show']);
 });
 
 Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {

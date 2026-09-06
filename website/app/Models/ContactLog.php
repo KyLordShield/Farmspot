@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class SearchLog extends Model
+class ContactLog extends Model
 {
-    protected $table = 'search_log';
+    protected $table = 'contact_log';
 
-    protected $primaryKey = 'SRCH_ID';
+    protected $primaryKey = 'CTL_ID';
 
     public $incrementing = false;
 
@@ -21,5 +21,10 @@ class SearchLog extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'USR_ID', 'USR_ID');
+    }
+
+    public function listing()
+    {
+        return $this->belongsTo(Listing::class, 'LST_ID', 'LST_ID');
     }
 }

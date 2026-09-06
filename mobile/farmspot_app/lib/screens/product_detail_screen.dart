@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/listing_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import 'farm_profile_screen.dart';
 
 class ProductDetailScreen extends StatelessWidget {
   final CropListing listing;
   const ProductDetailScreen({super.key, required this.listing});
 
   Future<void> _callSeller() async {
+    // Fire-and-forget analytics: never awaited, so the dialer opens the moment
+    // this handler runs regardless of logging success/network speed.
+    ListingService.logContact(
+      listingId: listing.listingId ?? '',
+      method: 'CALL',
+    );
     final uri = Uri(scheme: 'tel', path: listing.contactNumber);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -15,10 +23,26 @@ class ProductDetailScreen extends StatelessWidget {
   }
 
   Future<void> _smsSeller() async {
+    ListingService.logContact(
+      listingId: listing.listingId ?? '',
+      method: 'SMS',
+    );
     final uri = Uri(scheme: 'sms', path: listing.contactNumber);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
+  }
+
+  /// Opens the farm's public profile. No-op when the listing carries no farm id
+  /// (legacy rows) rather than navigating somewhere meaningless.
+  void _openFarmProfile(BuildContext context) {
+    final farmId = listing.farmId;
+    if (farmId == null || farmId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FarmProfileScreen(farmId: farmId),
+      ),
+    );
   }
 
   @override
@@ -63,13 +87,16 @@ class ProductDetailScreen extends StatelessWidget {
                           child: Text('•', style: TextStyle(color: Colors.black45)),
                         ),
                         Flexible(
-                          child: Text(
-                            listing.farmName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.primaryGreen,
-                              fontWeight: FontWeight.w600,
+                          child: GestureDetector(
+                            onTap: () => _openFarmProfile(context),
+                            child: Text(
+                              listing.farmName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.primaryGreen,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
@@ -103,28 +130,32 @@ class ProductDetailScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on, color: AppColors.primaryGreen, size: 20),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            listing.barangay,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                    GestureDetector(
+                      onTap: () => _openFarmProfile(context),
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on, color: AppColors.primaryGreen, size: 20),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              listing.barangay,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Flexible(
-                          child: Text(
-                            listing.sitio,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.black54),
+                          const SizedBox(width: 16),
+                          Flexible(
+                            child: Text(
+                              listing.sitio,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.black54),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Padding(

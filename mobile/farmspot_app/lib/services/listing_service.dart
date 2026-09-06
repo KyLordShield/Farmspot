@@ -211,6 +211,31 @@ class ListingService {
     return _listingResult(response, 'Update listing status failed.');
   }
 
+  /// Logs a contact action (CALL or SMS) the buyer took against a listing
+  /// (POST /api/listings/{id}/log-contact). Fire-and-forget by design: silently
+  /// a no-op when not logged in, and failures are ignored so a failed log never
+  /// blocks or delays the actual phone/SMS launch.
+  static Future<void> logContact({
+    required String listingId,
+    required String method,
+  }) async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) return;
+
+      await http.post(
+        Uri.parse('$baseUrl/listings/$listingId/log-contact'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: {'method': method},
+      );
+    } catch (_) {
+      // Ignored by design.
+    }
+  }
+
   /// Parses the {message, listing} shape returned by create/update and throws
   /// a user-friendly Exception for non-success status codes (mirroring this
   /// file's throw-on-failure convention).
