@@ -4,24 +4,16 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-
+<div class="page-head">
     <div>
-
-        <h2 class="fw-bold mb-0">
-            Whitelist
-        </h2>
-
-        <small class="text-muted">
-            Manage approved mobile numbers
-        </small>
-
+        <h1 class="page-title">Whitelist</h1>
+        <div class="page-desc">Manage approved mobile numbers</div>
     </div>
-
-    <a href="{{ route('whitelist.create') }}" class="btn btn-success">
-        <i class="bi bi-plus-circle-fill"></i> Add Number
-    </a>
-
+    <div class="page-actions">
+        <a href="{{ route('whitelist.create') }}" class="btn btn-farm">
+            <i class="bi bi-plus-circle me-1"></i> Add Number
+        </a>
+    </div>
 </div>
 
 @if(session('success'))
@@ -31,242 +23,155 @@
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
+<div class="stat-grid">
 
-<div class="card-body">
+    <div class="stat-card">
+        <div class="stat-icon tint-green">
+            <i class="bi bi-check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $whitelists->total() }}</div>
+            <div class="stat-label">Total numbers</div>
+        </div>
+    </div>
 
-<form method="GET" action="{{ route('whitelist') }}" class="row mb-3">
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-check-lg"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $whitelists->where('WLST_IS_ACTIVE', 1)->count() }}</div>
+            <div class="stat-label">Active</div>
+        </div>
+    </div>
 
-<div class="col-md-5">
-
-<div class="input-group">
-
-<span class="input-group-text">
-<i class="bi bi-search"></i>
-</span>
-
-<input
-type="text"
-name="search"
-value="{{ request('search') }}"
-class="form-control"
-placeholder="Search mobile number">
-
-<button class="btn btn-success" type="submit">
-Search
-</button>
-
-</div>
-
-</div>
-
-<div class="col-md-3">
-
-<select name="status" class="form-select" onchange="this.form.submit()">
-
-<option value="">All Status</option>
-
-<option value="Active" {{ request('status') == 'Active' ? 'selected' : '' }}>Active</option>
-
-<option value="Inactive" {{ request('status') == 'Inactive' ? 'selected' : '' }}>Inactive</option>
-
-</select>
+    <div class="stat-card">
+        <div class="stat-icon tint-slate">
+            <i class="bi bi-slash-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $whitelists->where('WLST_IS_ACTIVE', 0)->count() }}</div>
+            <div class="stat-label">Inactive</div>
+        </div>
+    </div>
 
 </div>
 
-</form>
+<div class="panel">
+
+    <form method="GET" action="{{ route('whitelist') }}" class="filter-bar">
+
+        <div class="filter-grow">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ request('search') }}"
+                    class="form-control"
+                    placeholder="Search mobile number">
+                <button class="btn btn-farm" type="submit">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <div class="filter-auto">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Status</option>
+                <option value="Active" {{ request('status') == 'Active' ? 'selected' : '' }}>Active</option>
+                <option value="Inactive" {{ request('status') == 'Inactive' ? 'selected' : '' }}>Inactive</option>
+            </select>
+        </div>
 
-<div class="row mb-4">
-
-<div class="col-md-4">
-
-<div class="dashboard-card">
-
-<div class="icon users">
-
-<i class="bi bi-check-circle-fill"></i>
-
-</div>
-
-<h2>{{ $whitelists->total() }}</h2>
-
-<p>Total Numbers</p>
-
-</div>
-
-</div>
-
-<div class="col-md-4">
-
-<div class="dashboard-card">
-
-<div class="icon farmers">
-
-<i class="bi bi-check-lg"></i>
-
-</div>
-
-<h2>{{ $whitelists->where('WLST_IS_ACTIVE', 1)->count() }}</h2>
-
-<p>Active</p>
-
-</div>
-
-</div>
-
-<div class="col-md-4">
-
-<div class="dashboard-card">
-
-<div class="icon reports">
-
-<i class="bi bi-slash-circle"></i>
-
-</div>
-
-<h2>{{ $whitelists->where('WLST_IS_ACTIVE', 0)->count() }}</h2>
-
-<p>Inactive</p>
-
-</div>
-
-</div>
-
-</div>
-
-<div class="table-responsive">
-
-<table class="table table-hover align-middle">
-
-<thead class="table-light">
-
-<tr>
-
-<th>ID</th>
-
-<th>Mobile Number</th>
-
-<th>Status</th>
-
-<th>Added At</th>
-
-<th>Added By</th>
-
-<th>Deactivated By</th>
-
-<th width="190">Actions</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-@forelse($whitelists as $whitelist)
-
-<tr>
-
-<td>{{ $whitelist->WLST_ID }}</td>
-
-<td>{{ $whitelist->WLST_MOBILE_NUMBER }}</td>
-
-<td>
-
-@if($whitelist->WLST_IS_ACTIVE)
-
-<span class="badge bg-success">
-
-Active
-
-</span>
-
-@else
-
-<span class="badge bg-danger">
-
-Inactive
-
-</span>
-
-@endif
-
-</td>
-
-<td>{{ $whitelist->WLST_ADDED_AT }}</td>
-
-<td>{{ $whitelist->addedBy?->USR_NAME ?? '-' }}</td>
-
-<td>{{ $whitelist->deactivatedBy?->USR_NAME ?? '—' }}</td>
-
-<td>
-
-<a href="{{ route('whitelist.show', $whitelist->WLST_ID) }}"
-   class="btn btn-sm btn-primary">
-    <i class="bi bi-eye-fill"></i>
-</a>
-
-@if($whitelist->WLST_IS_ACTIVE)
-
-    <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
-          class="d-inline"
-          onsubmit="return confirm('Are you sure you want to deactivate this number?');">
-        @csrf
-        @method('PATCH')
-        <button type="submit" class="btn btn-sm btn-danger" title="Deactivate">
-            <i class="bi bi-slash-circle"></i> Deactivate
-        </button>
     </form>
 
-@else
+    <div class="table-responsive">
+        <table class="data-table">
 
-    <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
-          class="d-inline">
-        @csrf
-        @method('PATCH')
-        <button type="submit" class="btn btn-sm btn-success" title="Reactivate">
-            <i class="bi bi-check-circle"></i> Reactivate
-        </button>
-    </form>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Mobile Number</th>
+                    <th>Status</th>
+                    <th>Added At</th>
+                    <th>Added By</th>
+                    <th>Deactivated By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
 
-@endif
+            <tbody>
 
-</td>
+            @forelse($whitelists as $whitelist)
 
-</tr>
+                <tr>
+                    <td><span class="id-cell">{{ $whitelist->WLST_ID }}</span></td>
+                    <td>{{ $whitelist->WLST_MOBILE_NUMBER }}</td>
+                    <td>
+                        @if($whitelist->WLST_IS_ACTIVE)
+                            <span class="badge badge-soft-success">Active</span>
+                        @else
+                            <span class="badge badge-soft-neutral">Inactive</span>
+                        @endif
+                    </td>
+                    <td class="cell-secondary">{{ $whitelist->WLST_ADDED_AT }}</td>
+                    <td class="cell-secondary">{{ $whitelist->addedBy?->USR_NAME ?? '-' }}</td>
+                    <td class="cell-secondary">{{ $whitelist->deactivatedBy?->USR_NAME ?? '—' }}</td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ route('whitelist.show', $whitelist->WLST_ID) }}"
+                               class="btn-icon" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
 
-@empty
+                            @if($whitelist->WLST_IS_ACTIVE)
+                                <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Are you sure you want to deactivate this number?');">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" class="btn-icon danger" title="Deactivate">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </form>
+                            @else
+                                <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
+                                      class="d-inline">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" class="btn-icon confirm" title="Reactivate">
+                                        <i class="bi bi-check-circle"></i>
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </td>
+                </tr>
 
-<tr>
+            @empty
 
-<td colspan="7" class="text-center py-5">
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i class="bi bi-check-circle empty-icon"></i>
+                            <p>No whitelist records found.</p>
+                        </div>
+                    </td>
+                </tr>
 
-<i class="bi bi-check-circle display-5 text-secondary"></i>
+            @endforelse
 
-<p class="mt-3">
+            </tbody>
 
-No whitelist records found.
+        </table>
+    </div>
 
-</p>
-
-</td>
-
-</tr>
-
-@endforelse
-
-</tbody>
-
-</table>
-
-</div>
-
-<div class="mt-3">
-
-{{ $whitelists->links() }}
-
-</div>
-
-</div>
+    <div class="panel-body pt-0 pb-3">
+        {{ $whitelists->links() }}
+    </div>
 
 </div>
 

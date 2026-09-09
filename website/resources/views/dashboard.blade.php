@@ -4,213 +4,158 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
 
     <div>
-        <h2 class="fw-bold mb-0">Overview</h2>
-        <small class="text-muted">
-            FarmSpot Management Dashboard
-        </small>
+        <h1 class="page-title">Overview</h1>
+        <div class="page-desc">FarmSpot Management Dashboard</div>
     </div>
 
-    <button class="btn btn-success">
-        <i class="bi bi-download"></i>
-        Export Data
-    </button>
+    <div class="page-actions">
+        <button class="btn btn-ghost">
+            <i class="bi bi-download me-1"></i>
+            Export Data
+        </button>
+    </div>
 
 </div>
 
+<div class="stat-grid">
+
+    <div class="stat-card">
+        <div class="stat-icon tint-green">
+            <i class="bi bi-people"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $users }}</div>
+            <div class="stat-label">Total Users</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-slate">
+            <i class="bi bi-person-badge"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $farmers }}</div>
+            <div class="stat-label">Total Farmers</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-basket"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $listings }}</div>
+            <div class="stat-label">Active Listings</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-red">
+            <i class="bi bi-flag"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $reports }}</div>
+            <div class="stat-label">New Reports</div>
+        </div>
+    </div>
+
+</div>
 
 <div class="row g-4">
-
-    <!-- Users -->
-
-    <div class="col-lg-3 col-md-6">
-
-        <div class="dashboard-card">
-
-            <div class="icon users">
-
-                <i class="bi bi-people-fill"></i>
-
-            </div>
-
-            <h2>{{ $users }}</h2>
-
-            <p>Total Users</p>
-
-        </div>
-
-    </div>
-
-
-    <!-- Farmers -->
-
-    <div class="col-lg-3 col-md-6">
-
-        <div class="dashboard-card">
-
-            <div class="icon farmers">
-
-                <i class="bi bi-person-badge-fill"></i>
-
-            </div>
-
-            <h2>{{ $farmers }}</h2>
-
-            <p>Total Farmers</p>
-
-        </div>
-
-    </div>
-
-
-    <!-- Listings -->
-
-    <div class="col-lg-3 col-md-6">
-
-        <div class="dashboard-card">
-
-            <div class="icon listings">
-
-                <i class="bi bi-basket-fill"></i>
-
-            </div>
-
-            <h2>{{ $listings }}</h2>
-
-            <p>Active Listings</p>
-
-        </div>
-
-    </div>
-
-
-    <!-- Reports -->
-
-    <div class="col-lg-3 col-md-6">
-
-        <div class="dashboard-card">
-
-            <div class="icon reports">
-
-                <i class="bi bi-flag-fill"></i>
-
-            </div>
-
-            <h2>{{ $reports }}</h2>
-
-            <p>New Reports</p>
-
-        </div>
-
-    </div>
-
-</div>
-<div class="row mt-4">
 
     <!-- Top Crops -->
     <div class="col-lg-8">
 
-        <div class="card shadow-sm border-0 rounded-4">
-
-            <div class="card-body">
-
-                <h5 class="fw-bold mb-3">
-                    🌱 Top Crops This Week
-                </h5>
-
-                <canvas id="cropChart" height="120"></canvas>
-
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-flower1"></i>
+                        Top Crops This Week
+                    </h5>
+                    <div class="panel-sub">Listings per category</div>
+                </div>
             </div>
-
+            <div class="panel-body">
+                <div class="chart-box">
+                    <canvas id="cropChart"></canvas>
+                </div>
+            </div>
         </div>
 
     </div>
 
-    <!-- Empty for now (Pie Chart goes here next) -->
+    <!-- User Breakdown -->
     <div class="col-lg-4">
 
-    <div class="card shadow-sm border-0 rounded-4">
-
-        <div class="card-body">
-
-            <h5 class="fw-bold mb-3">
-                👥 User Breakdown
-            </h5>
-
-            <!-- Pie Chart -->
-            <canvas id="userChart" height="180"></canvas>
-
-            <!-- Statistics -->
-            <div class="row mt-4">
-
-                <div class="col-6 mb-3">
-                    <div class="mini-card">
-                        <h4>{{ $farmers }}</h4>
-                        <small>Active Farms</small>
-                    </div>
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-people"></i>
+                        User Breakdown
+                    </h5>
+                    <div class="panel-sub">Account mix today</div>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box-sm">
+                    <canvas id="userChart"></canvas>
                 </div>
 
-                <div class="col-6 mb-3">
-                    <div class="mini-card">
-                        <h4>{{ $listings }}</h4>
-                        <small>Live Listings</small>
+                <div class="kpi-grid">
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $farmers }}</div>
+                        <div class="kpi-label">Farm accounts</div>
                     </div>
-                </div>
-
-                <div class="col-6">
-                    <div class="mini-card">
-                        <h4>0</h4>
-                        <small>Searches Today</small>
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $listings }}</div>
+                        <div class="kpi-label">Live listings</div>
                     </div>
-                </div>
-
-                <div class="col-6">
-                    <div class="mini-card">
-                        <h4>0</h4>
-                        <small>Contacts Made</small>
+                    <div class="kpi">
+                        <div class="kpi-value">0</div>
+                        <div class="kpi-label">Searches today</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value">0</div>
+                        <div class="kpi-label">Contacts made</div>
                     </div>
                 </div>
 
             </div>
-
         </div>
 
     </div>
 
 </div>
 
-<div class="card shadow-sm border-0 rounded-4 mt-4">
+<div class="panel mt-4">
 
-    <div class="card-header bg-white">
-        <h5 class="fw-bold mb-0">
-            🚩 Recent Reports
-        </h5>
+    <div class="panel-header">
+        <div>
+            <h5 class="panel-title">
+                <i class="bi bi-flag"></i>
+                Recent Reports
+            </h5>
+            <div class="panel-sub">Latest moderation queue activity</div>
+        </div>
     </div>
 
-    <div class="card-body">
-
-        <table class="table table-hover align-middle">
+    <div class="table-responsive">
+        <table class="data-table">
 
             <thead>
-
                 <tr>
-
                     <th>Report ID</th>
-
                     <th>Reporter</th>
-
                     <th>Listing</th>
-
                     <th>Reason</th>
-
                     <th>Status</th>
-
                     <th>Date</th>
-
                 </tr>
-
             </thead>
 
             <tbody>
@@ -218,44 +163,33 @@
             @forelse($recentReports as $report)
 
                 <tr>
-
-                    <td>{{ $report->RPT_ID }}</td>
-
-                    <td>{{ optional($report->user)->USR_NAME ?? 'Unknown User' }}</td>
-
-                    <td>{{ optional($report->listing)->LST_ID ?? 'Unknown Listing' }}</td>
-
-                    <td>{{ $report->RPT_REASON }}</td>
-
+                    <td><span class="id-cell">{{ $report->RPT_ID }}</span></td>
+                    <td class="cell-secondary">{{ optional($report->user)->USR_NAME ?? 'Unknown User' }}</td>
+                    <td><span class="id-cell">{{ optional($report->listing)->LST_ID ?? 'Unknown Listing' }}</span></td>
+                    <td class="cell-secondary">{{ $report->RPT_REASON }}</td>
                     <td>
-
                         @if($report->RPT_STATUS == 'New')
-                            <span class="badge bg-danger">New</span>
-
+                            <span class="badge badge-soft-danger">New</span>
                         @elseif($report->RPT_STATUS == 'Reviewing')
-                            <span class="badge bg-warning text-dark">Reviewing</span>
-
+                            <span class="badge badge-soft-warning">Reviewing</span>
                         @elseif($report->RPT_STATUS == 'Resolved')
-                            <span class="badge bg-success">Resolved</span>
-
+                            <span class="badge badge-soft-success">Resolved</span>
                         @else
-                            <span class="badge bg-secondary">Dismissed</span>
+                            <span class="badge badge-soft-neutral">Dismissed</span>
                         @endif
-
                     </td>
-
-                    <td>{{ date('M d, Y', strtotime($report->RPT_CREATED_AT)) }}</td>
-
+                    <td class="cell-faint">{{ date('M d, Y', strtotime($report->RPT_CREATED_AT)) }}</td>
                 </tr>
 
             @empty
 
                 <tr>
-
-                    <td colspan="6" class="text-center text-muted">
-                        No reports found.
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i class="bi bi-flag empty-icon"></i>
+                            <p>No reports found.</p>
+                        </div>
                     </td>
-
                 </tr>
 
             @endforelse
@@ -263,10 +197,8 @@
             </tbody>
 
         </table>
-
     </div>
 
-</div>
 </div>
 
 @endsection
@@ -277,8 +209,6 @@
 const labels = @json($cropStats->pluck('CAT_NAME'));
 const values = @json($cropStats->pluck('total'));
 
-
-
 new Chart(document.getElementById('cropChart'), {
     type: 'bar',
     data: {
@@ -286,24 +216,60 @@ new Chart(document.getElementById('cropChart'), {
         datasets: [{
             label: 'Listings',
             data: values,
-            backgroundColor: '#4CAF50',
-            borderRadius: 10
+            backgroundColor: '#2b6d3c',
+            borderRadius: 6
         }]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: {
                 display: false
             }
         },
         scales: {
+            x: {
+                grid: { display: false }
+            },
             y: {
-                beginAtZero: true
+                beginAtZero: true,
+                grid: { color: '#eef1f0' }
             }
         }
     }
 });
+
+if (document.getElementById('userChart')) {
+    new Chart(document.getElementById('userChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Farmers', 'Buyers'],
+            datasets: [{
+                data: [@json($farmers), @json(max($users - $farmers, 0))],
+                backgroundColor: ['#2b6d3c', '#d3dad6'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+}
 
 </script>
 @endpush

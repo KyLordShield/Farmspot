@@ -4,22 +4,27 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Report Details</h2>
-        <small class="text-muted">Report #{{ $report->RPT_ID }}</small>
+        <h1 class="page-title">Report Details</h1>
+        <div class="page-desc">Report #{{ $report->RPT_ID }}</div>
     </div>
-    <a href="{{ route('reports') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Reports
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('reports') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Reports
+        </a>
+    </div>
 </div>
 
-<div class="card shadow-sm border-0 rounded-4">
-    <div class="card-header bg-success text-white">
-        <h4 class="mb-0"><i class="bi bi-flag-fill"></i> Report #{{ $report->RPT_ID }}</h4>
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-flag"></i>
+            Report #{{ $report->RPT_ID }}
+        </h5>
     </div>
-    <div class="card-body">
-        <table class="table">
+    <div class="panel-body p-0">
+        <table class="detail-table">
 
             <tr>
                 <th>Reason</th>
@@ -30,20 +35,20 @@
                 <th>Status</th>
                 <td>
                     @if($report->RPT_STATUS == 'New')
-                        <span class="badge bg-danger">New</span>
+                        <span class="badge badge-soft-danger">New</span>
                     @elseif($report->RPT_STATUS == 'Reviewing')
-                        <span class="badge bg-warning text-dark">Reviewing</span>
+                        <span class="badge badge-soft-warning">Reviewing</span>
                     @elseif($report->RPT_STATUS == 'Resolved')
-                        <span class="badge bg-success">Resolved</span>
+                        <span class="badge badge-soft-success">Resolved</span>
                     @else
-                        <span class="badge bg-secondary">Dismissed</span>
+                        <span class="badge badge-soft-neutral">Dismissed</span>
                     @endif
                 </td>
             </tr>
 
             <tr>
                 <th>Submitted</th>
-                <td>{{ \Carbon\Carbon::parse($report->RPT_CREATED_AT)->format('M d, Y h:i A') }}</td>
+                <td class="cell-secondary">{{ \Carbon\Carbon::parse($report->RPT_CREATED_AT)->format('M d, Y h:i A') }}</td>
             </tr>
 
             <tr>
@@ -58,12 +63,12 @@
 
             <tr>
                 <th>Reporter ID</th>
-                <td>{{ $report->USR_ID }}</td>
+                <td><span class="id-cell">{{ $report->USR_ID }}</span></td>
             </tr>
 
             <tr>
                 <th>Reported Listing</th>
-                <td>{{ $report->listing?->LST_ID ?? '-' }}</td>
+                <td><span class="id-cell">{{ $report->listing?->LST_ID ?? '-' }}</span></td>
             </tr>
 
             <tr>
@@ -85,16 +90,19 @@
     </div>
 </div>
 
-<div class="card shadow-sm border-0 rounded-4 mt-4">
-    <div class="card-header bg-primary text-white">
-        <h4 class="mb-0"><i class="bi bi-pencil-square"></i> Update Status</h4>
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-pencil-square"></i>
+            Update Status
+        </h5>
     </div>
-    <div class="card-body">
-        <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}">
+    <div class="panel-body">
+        <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}" class="row g-3 align-items-end">
             @csrf
             @method('PATCH')
 
-            <div class="mb-3">
+            <div class="col-md-4">
                 <label for="status" class="form-label">Status</label>
                 <select class="form-select" id="status" name="status" required>
                     <option value="New" {{ old('status', $report->RPT_STATUS) == 'New' ? 'selected' : '' }}>New</option>
@@ -104,9 +112,11 @@
                 </select>
             </div>
 
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Update Status
-            </button>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-farm">
+                    <i class="bi bi-check-lg me-1"></i> Update Status
+                </button>
+            </div>
         </form>
     </div>
 </div>

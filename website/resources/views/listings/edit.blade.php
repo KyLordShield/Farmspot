@@ -4,31 +4,37 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Edit Listing</h2>
-        <small class="text-muted">Update details for {{ $listing->LST_ID }}</small>
+        <h1 class="page-title">Edit Listing</h1>
+        <div class="page-desc">Update details for {{ $listing->LST_ID }}</div>
     </div>
-    <a href="{{ route('listings') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Listings
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('listings') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Listings
+        </a>
+    </div>
 </div>
 
 @if($errors->any())
-    <div class="alert alert-danger">
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <ul class="mb-0">
             @foreach($errors->all() as $error)
                 <li>{{ $error }}</li>
             @endforeach
         </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
-    <div class="card-header bg-success text-white">
-        <h4 class="mb-0"><i class="bi bi-pencil-fill"></i> {{ $listing->LST_ID }}</h4>
+<div class="panel form-card">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-pencil"></i>
+            {{ $listing->LST_ID }}
+        </h5>
     </div>
-    <div class="card-body">
+    <div class="panel-body">
         <form method="POST" action="{{ route('listings.update', $listing->LST_ID) }}">
             @csrf
             @method('PUT')
@@ -113,16 +119,16 @@
                 @enderror
             </div>
 
-            <div class="alert alert-secondary" role="alert">
+            <div class="alert alert-secondary d-flex align-items-center" role="alert">
                 <i class="bi bi-lock me-2"></i>
-                Farmer and Farm ownership cannot be changed here.
+                <div>Farmer and Farm ownership cannot be changed here.</div>
             </div>
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">
-                    <i class="bi bi-check-lg"></i> Update Listing
+                <button type="submit" class="btn btn-farm">
+                    <i class="bi bi-check-lg me-1"></i> Update Listing
                 </button>
-                <a href="{{ route('listings') }}" class="btn btn-secondary">Cancel</a>
+                <a href="{{ route('listings') }}" class="btn btn-ghost">Cancel</a>
             </div>
         </form>
     </div>

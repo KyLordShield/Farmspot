@@ -4,31 +4,37 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Add Mobile Number</h2>
-        <small class="text-muted">Pre-approve a new mobile number</small>
+        <h1 class="page-title">Add Mobile Number</h1>
+        <div class="page-desc">Pre-approve a new mobile number</div>
     </div>
-    <a href="{{ route('whitelist') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Whitelist
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('whitelist') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Whitelist
+        </a>
+    </div>
 </div>
 
 @if($errors->any())
-    <div class="alert alert-danger">
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <ul class="mb-0">
             @foreach($errors->all() as $error)
                 <li>{{ $error }}</li>
             @endforeach
         </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
-    <div class="card-header bg-success text-white">
-        <h4 class="mb-0"><i class="bi bi-plus-circle-fill"></i> New Number</h4>
+<div class="panel form-card">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-plus-circle"></i>
+            New Number
+        </h5>
     </div>
-    <div class="card-body">
+    <div class="panel-body">
         <form method="POST" action="{{ route('whitelist.store') }}">
             @csrf
 
@@ -42,16 +48,18 @@
                 @enderror
             </div>
 
-            <div class="alert alert-info" role="alert">
-                <i class="bi bi-info-circle-fill me-2"></i>
-                This number will be marked as <strong>Active</strong> immediately upon adding.
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle me-2"></i>
+                <div>
+                    This number will be marked as <strong>Active</strong> immediately upon adding.
+                </div>
             </div>
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">
-                    <i class="bi bi-check-lg"></i> Add Number
+                <button type="submit" class="btn btn-farm">
+                    <i class="bi bi-check-lg me-1"></i> Add Number
                 </button>
-                <a href="{{ route('whitelist') }}" class="btn btn-secondary">Cancel</a>
+                <a href="{{ route('whitelist') }}" class="btn btn-ghost">Cancel</a>
             </div>
         </form>
     </div>

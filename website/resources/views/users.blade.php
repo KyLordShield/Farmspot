@@ -4,18 +4,18 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
 
     <div>
-        <h2 class="fw-bold mb-0">Users</h2>
-        <small class="text-muted">
-            Manage all registered users
-        </small>
+        <h1 class="page-title">Users</h1>
+        <div class="page-desc">Manage all registered users</div>
     </div>
 
-    <a href="{{ route('users.create') }}" class="btn btn-success">
-        <i class="bi bi-person-plus-fill"></i> Add User
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('users.create') }}" class="btn btn-farm">
+            <i class="bi bi-person-plus me-1"></i> Add User
+        </a>
+    </div>
 
 </div>
 
@@ -26,205 +26,153 @@
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
+<div class="stat-grid">
 
-    <div class="card-body">
-
-        <!-- Search & Filters -->
-        <form method="GET" action="{{ route('users') }}" class="row mb-3">
-
-            <div class="col-md-4">
-
-               <div class="input-group">
-
-    <span class="input-group-text">
-        <i class="bi bi-search"></i>
-    </span>
-
-    <input
-        type="text"
-        name="search"
-        value="{{ request('search') }}"
-        class="form-control"
-        placeholder="Search by name, email or ID">
-
-    <button class="btn btn-success" type="submit">
-        Search
-    </button>
-
-</div>
-            </div>
-<div class="col-md-3">
-
-    <select name="role" class="form-select" onchange="this.form.submit()">
-
-        <option value="">All Roles</option>
-        <option value="ADMIN" {{ request('role') == 'ADMIN' ? 'selected' : '' }}>Admin</option>
-        <option value="GENERAL_USER" {{ request('role') == 'GENERAL_USER' ? 'selected' : '' }}>General User</option>
-
-    </select>
-
-</div>
-
-<div class="col-md-3">
-
-    <select name="status" class="form-select" onchange="this.form.submit()">
-
-        <option value="">All Status</option>
-        <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
-        <option value="PENDING_VERIFICATION" {{ request('status') == 'PENDING_VERIFICATION' ? 'selected' : '' }}>Pending Verification</option>
-        <option value="DEACTIVATED" {{ request('status') == 'DEACTIVATED' ? 'selected' : '' }}>Deactivated</option>
-
-    </select>
-
-</div>
-        </form>
-
-        <div class="row mb-4">
-
-    <div class="col-md-4">
-        <div class="dashboard-card">
-            <div class="icon users">
-                <i class="bi bi-people-fill"></i>
-            </div>
-
-            <h2>{{ $users->total() }}</h2>
-            <p>Total Registered Users</p>
+    <div class="stat-card">
+        <div class="stat-icon tint-green">
+            <i class="bi bi-people"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $users->total() }}</div>
+            <div class="stat-label">Total registered users</div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="dashboard-card">
-            <div class="icon farmers">
-                <i class="bi bi-person-check-fill"></i>
-            </div>
-
-            <h2>{{ $users->where('USR_STATUS','ACTIVE')->count() }}</h2>
-            <p>Active Users</p>
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-person-check"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $users->where('USR_STATUS','ACTIVE')->count() }}</div>
+            <div class="stat-label">Active users</div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="dashboard-card">
-            <div class="icon reports">
-                <i class="bi bi-person-x-fill"></i>
-            </div>
-
-            <h2>{{ $users->where('USR_STATUS','DEACTIVATED')->count() }}</h2>
-            <p>Deactivated</p>
+    <div class="stat-card">
+        <div class="stat-icon tint-red">
+            <i class="bi bi-person-x"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $users->where('USR_STATUS','DEACTIVATED')->count() }}</div>
+            <div class="stat-label">Deactivated</div>
         </div>
     </div>
 
 </div>
 
-        <!-- Users Table -->
-         <div class="table-responsive">
+<div class="panel">
 
-        <table class="table table-hover align-middle">
+    <!-- Search & Filters -->
+    <form method="GET" action="{{ route('users') }}" class="filter-bar">
 
-            <thead class="table-light">
+        <div class="filter-grow">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ request('search') }}"
+                    class="form-control"
+                    placeholder="Search by name, email or ID">
+                <button class="btn btn-farm" type="submit">
+                    Search
+                </button>
+            </div>
+        </div>
 
+        <div class="filter-auto">
+            <select name="role" class="form-select" onchange="this.form.submit()">
+                <option value="">All Roles</option>
+                <option value="ADMIN" {{ request('role') == 'ADMIN' ? 'selected' : '' }}>Admin</option>
+                <option value="GENERAL_USER" {{ request('role') == 'GENERAL_USER' ? 'selected' : '' }}>General User</option>
+            </select>
+        </div>
+
+        <div class="filter-auto">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Status</option>
+                <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
+                <option value="PENDING_VERIFICATION" {{ request('status') == 'PENDING_VERIFICATION' ? 'selected' : '' }}>Pending Verification</option>
+                <option value="DEACTIVATED" {{ request('status') == 'DEACTIVATED' ? 'selected' : '' }}>Deactivated</option>
+            </select>
+        </div>
+
+    </form>
+
+    <div class="table-responsive">
+        <table class="data-table">
+
+            <thead>
                 <tr>
-
                     <th>ID</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
                     <th>Status</th>
-                    <th width="170">Actions</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
 
-</div>
             <tbody>
 
             @forelse($users as $user)
 
                 <tr>
-
-                    <td>{{ $user->USR_ID }}</td>
-
+                    <td><span class="id-cell">{{ $user->USR_ID }}</span></td>
                     <td>{{ $user->USR_NAME }}</td>
-
-                    <td>{{ $user->USR_EMAIL }}</td>
-
+                    <td class="cell-secondary">{{ $user->USR_EMAIL }}</td>
                     <td>
-
                         @if($user->USR_ROLE == 'ADMIN')
-
-                            <span class="badge bg-danger">
-                                Admin
-                            </span>
-
+                            <span class="badge badge-soft-danger">Admin</span>
                         @elseif($user->USR_ROLE == 'FARMER')
-
-                            <span class="badge bg-success">
-                                Farmer
-                            </span>
-
+                            <span class="badge badge-soft-success">Farmer</span>
                         @else
-
-                            <span class="badge bg-primary">
-                                Buyer
-                            </span>
-
+                            <span class="badge badge-soft-neutral">Buyer</span>
                         @endif
-
                     </td>
-
                     <td>
-
                         @if($user->USR_STATUS == 'ACTIVE')
-
-                            <span class="badge bg-success">
-                                Active
-                            </span>
-
+                            <span class="badge badge-soft-success">Active</span>
                         @else
-
-                            <span class="badge bg-secondary">
-                                {{ $user->USR_STATUS }}
-                            </span>
-
+                            <span class="badge badge-soft-neutral">{{ $user->USR_STATUS }}</span>
                         @endif
-
                     </td>
-
                     <td>
+                        <div class="actions">
+                            <a href="{{ route('users.show', $user->USR_ID) }}"
+                               class="btn-icon" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
 
-    <a href="{{ route('users.show', $user->USR_ID) }}"
-       class="btn btn-sm btn-primary">
-        <i class="bi bi-eye-fill"></i>
-    </a>
+                            <a href="{{ route('users.edit', $user->USR_ID) }}"
+                               class="btn-icon" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
 
-    <a href="{{ route('users.edit', $user->USR_ID) }}"
-       class="btn btn-sm btn-warning">
-        <i class="bi bi-pencil-fill"></i>
-    </a>
-
-    <form method="POST" action="{{ route('users.destroy', $user->USR_ID) }}"
-          class="d-inline"
-          onsubmit="return confirm('Are you sure you want to deactivate this user?');">
-        @csrf
-        @method('DELETE')
-        <button type="submit" class="btn btn-sm btn-danger" title="Deactivate">
-            <i class="bi bi-trash-fill"></i>
-        </button>
-    </form>
-
-</td>
+                            <form method="POST" action="{{ route('users.destroy', $user->USR_ID) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Are you sure you want to deactivate this user?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn-icon danger" title="Deactivate">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
 
             @empty
 
                 <tr>
-
-                    <td colspan="6" class="text-center text-muted">
-
-                        No users found.
-
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i class="bi bi-people empty-icon"></i>
+                            <p>No users found.</p>
+                        </div>
                     </td>
-
                 </tr>
 
             @endforelse
@@ -232,13 +180,10 @@
             </tbody>
 
         </table>
+    </div>
 
-        <div class="mt-3">
-
-            {{ $users->links() }}
-
-        </div>
-
+    <div class="panel-body pt-0 pb-3">
+        {{ $users->links() }}
     </div>
 
 </div>

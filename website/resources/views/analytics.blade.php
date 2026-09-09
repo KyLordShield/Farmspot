@@ -4,123 +4,84 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-
+<div class="page-head">
     <div>
-
-        <h2 class="fw-bold mb-0">
-            System Analytics
-        </h2>
-
-        <small class="text-muted">
-            Demand trends & system usage
-        </small>
-
+        <h1 class="page-title">System Analytics</h1>
+        <div class="page-desc">Demand trends &amp; system usage</div>
     </div>
-
-    <div>
-
-        <button class="btn btn-outline-success me-2">
-            <i class="bi bi-download"></i>
+    <div class="page-actions">
+        <button class="btn btn-ghost">
+            <i class="bi bi-download me-1"></i>
             Export Data
         </button>
-
     </div>
-
 </div>
 
 <div class="row g-4">
 
     <!-- Top Crops -->
-
     <div class="col-lg-7">
 
-        <div class="card shadow-sm border-0 rounded-4 h-100">
-
-            <div class="card-body">
-
-                <h6 class="fw-bold mb-3">
-
-                    🌱 Top Searched Crops This Week
-
-                </h6>
-
-                <canvas id="cropChart" height="130"></canvas>
-
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-flower1"></i>
+                        Top Searched Crops This Week
+                    </h5>
+                    <div class="panel-sub">Listings per category</div>
+                </div>
             </div>
-
+            <div class="panel-body">
+                <div class="chart-box">
+                    <canvas id="cropChart"></canvas>
+                </div>
+            </div>
         </div>
 
     </div>
 
     <!-- Seasonal Trends -->
-
     <div class="col-lg-5">
 
-        <div class="card shadow-sm border-0 rounded-4 h-100">
-
-            <div class="card-body">
-
-                <h6 class="fw-bold mb-3">
-
-                    📅 Seasonal Trends
-
-                </h6>
-
-                <table class="table table-borderless align-middle">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>Month</th>
-
-                            <th>Trending Crop</th>
-
-                            <th>Listings</th>
-
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        <tr>
-
-                            <td>March</td>
-
-                            <td class="text-muted">No data yet</td>
-
-                            <td>0</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>June</td>
-
-                            <td class="text-muted">No data yet</td>
-
-                            <td>0</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>October</td>
-
-                            <td class="text-muted">No data yet</td>
-
-                            <td>0</td>
-
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-calendar3"></i>
+                        Seasonal Trends
+                    </h5>
+                    <div class="panel-sub">Expected peak months vs. data</div>
+                </div>
             </div>
-
+            <div class="panel-body p-0">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Trending Crop</th>
+                            <th>Listings</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="cell-secondary">March</td>
+                            <td class="cell-faint">No data yet</td>
+                            <td>0</td>
+                        </tr>
+                        <tr>
+                            <td class="cell-secondary">June</td>
+                            <td class="cell-faint">No data yet</td>
+                            <td>0</td>
+                        </tr>
+                        <tr>
+                            <td class="cell-secondary">October</td>
+                            <td class="cell-faint">No data yet</td>
+                            <td>0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
     </div>
@@ -130,119 +91,68 @@
 <div class="row g-4 mt-1">
 
     <!-- User Growth -->
-
     <div class="col-lg-7">
 
-        <div class="card shadow-sm border-0 rounded-4">
-
-            <div class="card-body">
-
-                <h6 class="fw-bold mb-3">
-
-                    📈 User Growth (This Month)
-
-                </h6>
-
-                <canvas id="growthChart" height="140"></canvas>
-
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-graph-up"></i>
+                        User Growth (This Month)
+                    </h5>
+                    <div class="panel-sub">New registrations per week</div>
+                </div>
             </div>
-
+            <div class="panel-body">
+                <div class="chart-box-sm">
+                    <canvas id="growthChart"></canvas>
+                </div>
+            </div>
         </div>
 
     </div>
 
     <!-- Summary -->
-
     <div class="col-lg-5">
 
-        <div class="card shadow-sm border-0 rounded-4">
-
-            <div class="card-body">
-
-                <h6 class="fw-bold mb-3">
-
-                    📦 System Summary
-
-                </h6>
-
-                <div class="row g-3">
-
-                    <div class="col-6">
-
-                        <div class="summary-card">
-
-                            <h3>{{ $totalUsers }}</h3>
-
-                            <small>Total Users</small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="col-6">
-
-                        <div class="summary-card">
-
-                            <h3>{{ $totalFarmers }}</h3>
-
-                            <small>Active Farmers</small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="col-6">
-
-                        <div class="summary-card">
-
-                            <h3>{{ $totalListings }}</h3>
-
-                            <small>Live Listings</small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="col-6">
-
-                        <div class="summary-card">
-
-                            <h3>{{ $totalBuyers }}</h3>
-
-                            <small>Registered Buyers</small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="col-6">
-
-                        <div class="summary-card">
-
-                            <h3>0</h3>
-
-                            <small>Searches Today</small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="col-6">
-
-                        <div class="summary-card summary-danger">
-
-                            <h3>{{ $totalReports }}</h3>
-
-                            <small>Pending Reports</small>
-
-                        </div>
-
-                    </div>
-
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <h5 class="panel-title">
+                        <i class="bi bi-box-seam"></i>
+                        System Summary
+                    </h5>
+                    <div class="panel-sub">Key metrics at a glance</div>
                 </div>
-
             </div>
-
+            <div class="panel-body">
+                <div class="kpi-grid">
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $totalUsers }}</div>
+                        <div class="kpi-label">Total Users</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $totalFarmers }}</div>
+                        <div class="kpi-label">Active Farmers</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $totalListings }}</div>
+                        <div class="kpi-label">Live Listings</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value">{{ $totalBuyers }}</div>
+                        <div class="kpi-label">Registered Buyers</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value">0</div>
+                        <div class="kpi-label">Searches Today</div>
+                    </div>
+                    <div class="kpi">
+                        <div class="kpi-value text-danger">{{ $totalReports }}</div>
+                        <div class="kpi-label">Pending Reports</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -267,84 +177,60 @@ const cropValues = [
 @endforeach
 ];
 
-new Chart(document.getElementById('cropChart'),{
-
-type:'bar',
-
-data:{
-
-labels:cropLabels,
-
-datasets:[{
-
-data:cropValues,
-
-backgroundColor:[
-'#2E7D32',
-'#388E3C',
-'#43A047',
-'#66BB6A',
-'#81C784',
-'#A5D6A7'
-],
-
-borderRadius:10
-
-}]
-
-},
-
-options:{
-
-plugins:{
-legend:{display:false}
-},
-
-scales:{
-y:{beginAtZero:true}
-}
-
-}
-
+new Chart(document.getElementById('cropChart'), {
+    type: 'bar',
+    data: {
+        labels: cropLabels,
+        datasets: [{
+            data: cropValues,
+            backgroundColor: ['#2b6d3c', '#4f8a60', '#87ad93', '#a9c3b3', '#c8d9cf', '#e2ebe5'],
+            borderRadius: 6
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            x: {
+                grid: { display: false }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: '#eef1f0' }
+            }
+        }
+    }
 });
 
-new Chart(document.getElementById('growthChart'),{
-
-type:'bar',
-
-data:{
-
-labels:['Week 1','Week 2','Week 3','Week 4'],
-
-datasets:[{
-
-data:[0,0,0,0],
-
-backgroundColor:[
-'#C8E6C9',
-'#81C784',
-'#4CAF50',
-'#2E7D32'
-],
-
-borderRadius:10
-
-}]
-
-},
-
-options:{
-
-plugins:{
-legend:{display:false}
-},
-
-scales:{
-y:{beginAtZero:true}
-}
-
-}
-
+new Chart(document.getElementById('growthChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+        datasets: [{
+            data: [0, 0, 0, 0],
+            backgroundColor: ['#e2ebe5', '#c8d9cf', '#87ad93', '#2b6d3c'],
+            borderRadius: 6
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            x: {
+                grid: { display: false }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: '#eef1f0' }
+            }
+        }
+    }
 });
 
 </script>

@@ -4,22 +4,30 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Listing Details</h2>
-        <small class="text-muted">{{ $listing->LST_ID }}</small>
+        <h1 class="page-title">Listing Details</h1>
+        <div class="page-desc">{{ $listing->LST_ID }}</div>
     </div>
-    <a href="{{ route('listings') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Listings
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('listings') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Listings
+        </a>
+        <a href="{{ route('listings.edit', $listing->LST_ID) }}" class="btn btn-farm">
+            <i class="bi bi-pencil me-1"></i> Edit Listing
+        </a>
+    </div>
 </div>
 
-<div class="card shadow-sm border-0 rounded-4">
-    <div class="card-header bg-success text-white">
-        <h4 class="mb-0"><i class="bi bi-basket-fill"></i> {{ $listing->LST_ID }}</h4>
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-basket"></i>
+            {{ $listing->LST_ID }}
+        </h5>
     </div>
-    <div class="card-body">
-        <table class="table">
+    <div class="panel-body p-0">
+        <table class="detail-table">
 
             <tr>
                 <th>Crop</th>
@@ -50,11 +58,11 @@
                 <th>Status</th>
                 <td>
                     @if($listing->LST_STATUS == 'AVAILABLE_NOW')
-                        <span class="badge bg-success">Available Now</span>
+                        <span class="badge badge-soft-success">Available Now</span>
                     @elseif($listing->LST_STATUS == 'SOON_TO_HARVEST')
-                        <span class="badge bg-warning text-dark">Soon to Harvest</span>
+                        <span class="badge badge-soft-warning">Soon to Harvest</span>
                     @else
-                        <span class="badge bg-secondary">Not Available</span>
+                        <span class="badge badge-soft-neutral">Not Available</span>
                     @endif
                 </td>
             </tr>
@@ -76,24 +84,20 @@
 
             <tr>
                 <th>Image</th>
-                <td>{{ $listing->LST_IMAGE ?: '-' }}</td>
+                <td class="cell-faint">{{ $listing->LST_IMAGE ?: '-' }}</td>
             </tr>
 
             <tr>
                 <th>Created</th>
-                <td>{{ $listing->LST_CREATED_AT ?: '-' }}</td>
+                <td class="cell-secondary">{{ $listing->LST_CREATED_AT ?: '-' }}</td>
             </tr>
 
             <tr>
                 <th>Last Updated</th>
-                <td>{{ $listing->LST_UPDATED_AT ?: '-' }}</td>
+                <td class="cell-secondary">{{ $listing->LST_UPDATED_AT ?: '-' }}</td>
             </tr>
 
         </table>
-
-        <a href="{{ route('listings.edit', $listing->LST_ID) }}" class="btn btn-warning">
-            <i class="bi bi-pencil-fill"></i> Edit Listing
-        </a>
     </div>
 </div>
 

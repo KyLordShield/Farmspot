@@ -4,22 +4,27 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Whitelist Details</h2>
-        <small class="text-muted">{{ $whitelist->WLST_ID }}</small>
+        <h1 class="page-title">Whitelist Details</h1>
+        <div class="page-desc">{{ $whitelist->WLST_ID }} · {{ $whitelist->WLST_MOBILE_NUMBER }}</div>
     </div>
-    <a href="{{ route('whitelist') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Whitelist
-    </a>
+    <div class="page-actions">
+        <a href="{{ route('whitelist') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Whitelist
+        </a>
+    </div>
 </div>
 
-<div class="card shadow-sm border-0 rounded-4">
-    <div class="card-header bg-success text-white">
-        <h4 class="mb-0"><i class="bi bi-check-circle-fill"></i> {{ $whitelist->WLST_ID }}</h4>
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-check-circle"></i>
+            {{ $whitelist->WLST_ID }}
+        </h5>
     </div>
-    <div class="card-body">
-        <table class="table">
+    <div class="panel-body p-0">
+        <table class="detail-table">
 
             <tr>
                 <th>Mobile Number</th>
@@ -30,16 +35,16 @@
                 <th>Status</th>
                 <td>
                     @if($whitelist->WLST_IS_ACTIVE)
-                        <span class="badge bg-success">Active</span>
+                        <span class="badge badge-soft-success">Active</span>
                     @else
-                        <span class="badge bg-danger">Inactive</span>
+                        <span class="badge badge-soft-neutral">Inactive</span>
                     @endif
                 </td>
             </tr>
 
             <tr>
                 <th>Added At</th>
-                <td>{{ $whitelist->WLST_ADDED_AT }}</td>
+                <td class="cell-secondary">{{ $whitelist->WLST_ADDED_AT }}</td>
             </tr>
 
             <tr>
@@ -53,27 +58,30 @@
             </tr>
 
         </table>
-
-        @if($whitelist->WLST_IS_ACTIVE)
-            <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
-                  class="d-inline"
-                  onsubmit="return confirm('Are you sure you want to deactivate this number?');">
-                @csrf
-                @method('PATCH')
-                <button type="submit" class="btn btn-danger">
-                    <i class="bi bi-slash-circle"></i> Deactivate
-                </button>
-            </form>
-        @else
-            <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
-                  class="d-inline">
-                @csrf
-                @method('PATCH')
-                <button type="submit" class="btn btn-success">
-                    <i class="bi bi-check-circle"></i> Reactivate
-                </button>
-            </form>
-        @endif
+    </div>
+    <div class="panel-body">
+        <div class="detail-actions">
+            @if($whitelist->WLST_IS_ACTIVE)
+                <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
+                      class="d-inline"
+                      onsubmit="return confirm('Are you sure you want to deactivate this number?');">
+                    @csrf
+                    @method('PATCH')
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-slash-circle me-1"></i> Deactivate
+                    </button>
+                </form>
+            @else
+                <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
+                      class="d-inline">
+                    @csrf
+                    @method('PATCH')
+                    <button type="submit" class="btn btn-farm">
+                        <i class="bi bi-check-circle me-1"></i> Reactivate
+                    </button>
+                </form>
+            @endif
+        </div>
     </div>
 </div>
 

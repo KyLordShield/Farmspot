@@ -21,39 +21,30 @@
     <!-- Sidebar -->
     <aside class="sidebar">
 
-        <div class="logo">
-            🌱 <strong>FarmSpot</strong>
-            <small>ADMIN DASHBOARD</small>
+        <div class="brand">
+            <div class="brand-mark">
+                <i class="bi bi-flower1"></i>
+            </div>
+            <div>
+                <span class="brand-name">FarmSpot</span>
+                <span class="brand-sub">Admin</span>
+            </div>
         </div>
 
         <div class="admin-profile">
 
-    <div class="avatar">
+            <div class="avatar">
+                {{ isset($associationOfficer) && $associationOfficer ? strtoupper(substr($associationOfficer->USR_NAME,0,2)) : 'AA' }}
+            </div>
 
-          {{ isset($associationOfficer) && $associationOfficer ? strtoupper(substr($associationOfficer->USR_NAME,0,2)) : 'AA' }}
-    </div>
+            <div class="admin-meta">
+                <h6>
+                    {{ isset($associationOfficer) && $associationOfficer ? $associationOfficer->USR_NAME : 'No Admin Yet' }}
+                </h6>
+                <small>Association Officer</small>
+            </div>
 
-    <div>
-
-        <h6>
-
-          {{ isset($associationOfficer) && $associationOfficer ? $associationOfficer->USR_NAME : 'No Admin Yet' }}
-
-        </h6>
-
-        <small>Association Officer</small>
-
-    </div>
-
-    <form method="POST" action="{{ route('logout') }}" class="px-3 mb-3">
-    @csrf
-    <button type="submit" class="btn btn-sm btn-outline-light w-100">
-        <i class="bi bi-box-arrow-right"></i>
-        Logout
-    </button>
-    </form>
-
-</div>  
+        </div>
 
         <ul class="menu">
 
@@ -94,7 +85,7 @@
 
             <li>
                 <a href="{{ route('seller-requests') }}">
-                    <i class="bi bi-person-check-fill"></i>
+                    <i class="bi bi-person-check"></i>
                     Seller Requests
                 </a>
             </li>
@@ -107,6 +98,16 @@
             </li>
 
         </ul>
+
+        <div class="sidebar-footer">
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="btn-logout">
+                    <i class="bi bi-box-arrow-right"></i>
+                    Logout
+                </button>
+            </form>
+        </div>
 
     </aside>
 

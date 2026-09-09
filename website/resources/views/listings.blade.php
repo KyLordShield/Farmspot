@@ -4,15 +4,11 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-
+<div class="page-head">
     <div>
-        <h2 class="fw-bold mb-0">Listings</h2>
-        <small class="text-muted">
-            Manage all crop listings
-        </small>
+        <h1 class="page-title">Listings</h1>
+        <div class="page-desc">Manage all crop listings</div>
     </div>
-
 </div>
 
 @if(session('success'))
@@ -22,148 +18,96 @@
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
+<div class="stat-grid">
 
-    <div class="card-body">
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-basket"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $listings->total() }}</div>
+            <div class="stat-label">Total listings</div>
+        </div>
+    </div>
 
-        <!-- Filters -->
+    <div class="stat-card">
+        <div class="stat-icon tint-green">
+            <i class="bi bi-check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $listings->where('LST_AVAILABILITY','ACTIVE')->count() }}</div>
+            <div class="stat-label">Active</div>
+        </div>
+    </div>
 
-        <form method="GET" action="{{ route('listings') }}" class="row mb-3">
+    <div class="stat-card">
+        <div class="stat-icon tint-slate">
+            <i class="bi bi-x-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $listings->where('LST_AVAILABILITY','NOT_AVAILABLE')->count() }}</div>
+            <div class="stat-label">Not available</div>
+        </div>
+    </div>
 
-            <div class="col-md-4">
+</div>
 
-                <div class="input-group">
+<div class="panel">
 
-                    <span class="input-group-text">
-                        <i class="bi bi-search"></i>
-                    </span>
+    <!-- Filters -->
+    <form method="GET" action="{{ route('listings') }}" class="filter-bar">
 
-                    <input
-                        type="text"
-                        name="search"
-                        value="{{ request('search') }}"
-                        class="form-control"
-                        placeholder="Search listing">
-
-                    <button class="btn btn-success" type="submit">
-                        Search
-                    </button>
-
-                </div>
-
+        <div class="filter-grow">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ request('search') }}"
+                    class="form-control"
+                    placeholder="Search listing">
+                <button class="btn btn-farm" type="submit">
+                    Search
+                </button>
             </div>
-
-            <div class="col-md-4">
-
-                <select name="category" class="form-select" onchange="this.form.submit()">
-
-                    <option value="">All Categories</option>
-
-                    @foreach($categories as $category)
-                        <option value="{{ $category->CAT_ID }}"
-                            {{ request('category') == $category->CAT_ID ? 'selected' : '' }}>
-                            {{ $category->CAT_NAME }}
-                        </option>
-                    @endforeach
-
-                </select>
-
-            </div>
-
-            <div class="col-md-4">
-
-                <select name="status" class="form-select" onchange="this.form.submit()">
-
-                    <option value="">All Status</option>
-
-                    <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>
-                        Active
-                    </option>
-
-                    <option value="NOT_AVAILABLE" {{ request('status') == 'NOT_AVAILABLE' ? 'selected' : '' }}>
-                        Not Available
-                    </option>
-
-                    <option value="REMOVED" {{ request('status') == 'REMOVED' ? 'selected' : '' }}>
-                        Removed
-                    </option>
-
-                </select>
-
-            </div>
-
-        </form>
-
-        <!-- Summary Cards -->
-
-        <div class="row mb-4">
-
-            <div class="col-md-4">
-
-                <div class="dashboard-card">
-
-                    <div class="icon listings">
-                        <i class="bi bi-basket-fill"></i>
-                    </div>
-
-                    <h2>{{ $listings->total() }}</h2>
-
-                    <p>Total Listings</p>
-
-                </div>
-
-            </div>
-
-            <div class="col-md-4">
-
-                <div class="dashboard-card">
-
-                    <div class="icon farmers">
-                        <i class="bi bi-check-circle-fill"></i>
-                    </div>
-
-                    <h2>{{ $listings->where('LST_AVAILABILITY','ACTIVE')->count() }}</h2>
-
-                    <p>Active</p>
-
-                </div>
-
-            </div>
-
-            <div class="col-md-4">
-
-                <div class="dashboard-card">
-
-                    <div class="icon reports">
-                        <i class="bi bi-x-circle-fill"></i>
-                    </div>
-
-                    <h2>{{ $listings->where('LST_AVAILABILITY','NOT_AVAILABLE')->count() }}</h2>
-
-                    <p>Not Available</p>
-
-                </div>
-
-            </div>
-
         </div>
 
-        <!-- Table -->
+        <div class="filter-auto">
+            <select name="category" class="form-select" onchange="this.form.submit()">
+                <option value="">All Categories</option>
+                @foreach($categories as $category)
+                    <option value="{{ $category->CAT_ID }}"
+                        {{ request('category') == $category->CAT_ID ? 'selected' : '' }}>
+                        {{ $category->CAT_NAME }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
 
-        <table class="table table-hover align-middle">
+        <div class="filter-auto">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Status</option>
+                <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
+                <option value="NOT_AVAILABLE" {{ request('status') == 'NOT_AVAILABLE' ? 'selected' : '' }}>Not Available</option>
+                <option value="REMOVED" {{ request('status') == 'REMOVED' ? 'selected' : '' }}>Removed</option>
+            </select>
+        </div>
 
-            <thead class="table-light">
+    </form>
 
+    <div class="table-responsive">
+        <table class="data-table">
+
+            <thead>
                 <tr>
-
                     <th>ID</th>
                     <th>Crop</th>
                     <th>Farmer</th>
                     <th>Status</th>
-                    <th width="170">Actions</th>
-
+                    <th>Actions</th>
                 </tr>
-
             </thead>
 
             <tbody>
@@ -171,71 +115,52 @@
             @forelse($listings as $listing)
 
                 <tr>
-
-                    <td>{{ $listing->LST_ID }}</td>
-
+                    <td><span class="id-cell">{{ $listing->LST_ID }}</span></td>
                     <td>{{ $listing->category?->CAT_NAME ?? '-' }}</td>
-
-                    <td>{{ $listing->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
-
+                    <td class="cell-secondary">{{ $listing->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
                     <td>
-
                         @if($listing->LST_STATUS == 'AVAILABLE_NOW')
-
-                            <span class="badge bg-success">
-                                Available Now
-                            </span>
-
+                            <span class="badge badge-soft-success">Available Now</span>
                         @elseif($listing->LST_STATUS == 'SOON_TO_HARVEST')
-
-                            <span class="badge bg-warning text-dark">
-                                Soon to Harvest
-                            </span>
-
+                            <span class="badge badge-soft-warning">Soon to Harvest</span>
                         @else
-
-                            <span class="badge bg-secondary">
-                                Not Available
-                            </span>
-
+                            <span class="badge badge-soft-neutral">Not Available</span>
                         @endif
-
                     </td>
-
                     <td>
+                        <div class="actions">
+                            <a href="{{ route('listings.show', $listing->LST_ID) }}"
+                               class="btn-icon" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
 
-                        <a href="{{ route('listings.show', $listing->LST_ID) }}"
-                           class="btn btn-sm btn-primary">
-                            <i class="bi bi-eye-fill"></i>
-                        </a>
+                            <a href="{{ route('listings.edit', $listing->LST_ID) }}"
+                               class="btn-icon" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
 
-                        <a href="{{ route('listings.edit', $listing->LST_ID) }}"
-                           class="btn btn-sm btn-warning">
-                            <i class="bi bi-pencil-fill"></i>
-                        </a>
-
-                        <form method="POST" action="{{ route('listings.destroy', $listing->LST_ID) }}"
-                              class="d-inline"
-                              onsubmit="return confirm('Are you sure you want to remove this listing?');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-sm btn-danger" title="Remove">
-                                <i class="bi bi-trash-fill"></i>
-                            </button>
-                        </form>
-
+                            <form method="POST" action="{{ route('listings.destroy', $listing->LST_ID) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Are you sure you want to remove this listing?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn-icon danger" title="Remove">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
-
                 </tr>
 
             @empty
 
                 <tr>
-
-                    <td colspan="5" class="text-center text-muted">
-                        No listings found.
+                    <td colspan="5">
+                        <div class="empty-state">
+                            <i class="bi bi-basket empty-icon"></i>
+                            <p>No listings found.</p>
+                        </div>
                     </td>
-
                 </tr>
 
             @endforelse
@@ -243,13 +168,10 @@
             </tbody>
 
         </table>
+    </div>
 
-        <div class="mt-3">
-
-            {{ $listings->links() }}
-
-        </div>
-
+    <div class="panel-body pt-0 pb-3">
+        {{ $listings->links() }}
     </div>
 
 </div>

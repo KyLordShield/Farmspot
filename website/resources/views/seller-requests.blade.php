@@ -4,20 +4,11 @@
 
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-
+<div class="page-head">
     <div>
-
-        <h2 class="fw-bold mb-0">
-            Seller Requests
-        </h2>
-
-        <small class="text-muted">
-            Review pending farm submissions
-        </small>
-
+        <h1 class="page-title">Seller Requests</h1>
+        <div class="page-desc">Review pending farm submissions</div>
     </div>
-
 </div>
 
 @if(session('success'))
@@ -34,143 +25,98 @@
     </div>
 @endif
 
-<div class="card shadow-sm border-0 rounded-4">
+<div class="stat-grid">
 
-<div class="card-body">
-
-<form method="GET" action="{{ route('seller-requests') }}" class="row mb-3">
-
-<div class="col-md-5">
-
-<div class="input-group">
-
-<span class="input-group-text">
-<i class="bi bi-search"></i>
-</span>
-
-<input
-type="text"
-name="search"
-value="{{ request('search') }}"
-class="form-control"
-placeholder="Search farm or owner name">
-
-<button class="btn btn-success" type="submit">
-Search
-</button>
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-hourglass-split"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $sellerRequests->total() }}</div>
+            <div class="stat-label">Pending requests</div>
+        </div>
+    </div>
 
 </div>
 
-</div>
+<div class="panel">
 
-</form>
+    <form method="GET" action="{{ route('seller-requests') }}" class="filter-bar">
 
-<div class="row mb-4">
+        <div class="filter-grow">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ request('search') }}"
+                    class="form-control"
+                    placeholder="Search farm or owner name">
+                <button class="btn btn-farm" type="submit">
+                    Search
+                </button>
+            </div>
+        </div>
 
-<div class="col-md-4">
+    </form>
 
-<div class="dashboard-card">
+    <div class="table-responsive">
+        <table class="data-table">
 
-<div class="icon users">
+            <thead>
+                <tr>
+                    <th>Farm Name</th>
+                    <th>Owner Name</th>
+                    <th>Mobile Number</th>
+                    <th>Barangay</th>
+                    <th>Submitted At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
 
-<i class="bi bi-hourglass-split"></i>
+            <tbody>
 
-</div>
+            @forelse($sellerRequests as $farm)
 
-<h2>{{ $sellerRequests->total() }}</h2>
+                <tr>
+                    <td>{{ $farm->FRM_NAME }}</td>
+                    <td class="cell-secondary">{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
+                    <td>{{ $farm->farmer?->buyer?->user?->USR_MOBILE_NUMBER ?? '-' }}</td>
+                    <td class="cell-secondary">{{ $farm->FRM_BARANGAY }}</td>
+                    <td class="cell-faint">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->format('M d, Y h:i A') }}</td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ route('seller-requests.show', $farm->FRM_ID) }}"
+                               class="btn-icon" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
 
-<p>Pending Requests</p>
+            @empty
 
-</div>
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <i class="bi bi-hourglass-split empty-icon"></i>
+                            <p>No pending seller requests found.</p>
+                        </div>
+                    </td>
+                </tr>
 
-</div>
+            @endforelse
 
-</div>
+            </tbody>
 
-<div class="table-responsive">
+        </table>
+    </div>
 
-<table class="table table-hover align-middle">
-
-<thead class="table-light">
-
-<tr>
-
-<th>Farm Name</th>
-
-<th>Owner Name</th>
-
-<th>Mobile Number</th>
-
-<th>Barangay</th>
-
-<th>Submitted At</th>
-
-<th width="120">Actions</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-@forelse($sellerRequests as $farm)
-
-<tr>
-
-<td>{{ $farm->FRM_NAME }}</td>
-
-<td>{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
-
-<td>{{ $farm->farmer?->buyer?->user?->USR_MOBILE_NUMBER ?? '-' }}</td>
-
-<td>{{ $farm->FRM_BARANGAY }}</td>
-
-<td>{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->format('M d, Y h:i A') }}</td>
-
-<td>
-
-<a href="{{ route('seller-requests.show', $farm->FRM_ID) }}"
-   class="btn btn-sm btn-primary" title="View">
-    <i class="bi bi-eye-fill"></i>
-</a>
-
-</td>
-
-</tr>
-
-@empty
-
-<tr>
-
-<td colspan="6" class="text-center py-5">
-
-<i class="bi bi-hourglass-split display-5 text-secondary"></i>
-
-<p class="mt-3">
-
-No pending seller requests found.
-
-</p>
-
-</td>
-
-</tr>
-
-@endforelse
-
-</tbody>
-
-</table>
-
-</div>
-
-<div class="mt-3">
-
-{{ $sellerRequests->links() }}
-
-</div>
-
-</div>
+    <div class="panel-body pt-0 pb-3">
+        {{ $sellerRequests->links() }}
+    </div>
 
 </div>
 

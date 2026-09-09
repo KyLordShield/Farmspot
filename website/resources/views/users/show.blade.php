@@ -4,19 +4,34 @@
 
 @section('content')
 
-<div class="card shadow-sm border-0 rounded-4">
-
-    <div class="card-header bg-success text-white">
-        <h4>User Information</h4>
+<div class="page-head">
+    <div>
+        <h1 class="page-title">User Details</h1>
+        <div class="page-desc">{{ $user->USR_ID }} · {{ $user->USR_NAME }}</div>
     </div>
+    <div class="page-actions">
+        <a href="{{ route('users') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> Back to Users
+        </a>
+        <a href="{{ route('users.edit', $user->USR_ID) }}" class="btn btn-farm">
+            <i class="bi bi-pencil me-1"></i> Edit User
+        </a>
+    </div>
+</div>
 
-    <div class="card-body">
-
-        <table class="table">
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-person"></i>
+            User Information
+        </h5>
+    </div>
+    <div class="panel-body p-0">
+        <table class="detail-table">
 
             <tr>
                 <th>User ID</th>
-                <td>{{ $user->USR_ID }}</td>
+                <td><span class="id-cell">{{ $user->USR_ID }}</span></td>
             </tr>
 
             <tr>
@@ -36,12 +51,26 @@
 
             <tr>
                 <th>Role</th>
-                <td>{{ $user->USR_ROLE }}</td>
+                <td>
+                    @if($user->USR_ROLE == 'ADMIN')
+                        <span class="badge badge-soft-danger">Admin</span>
+                    @elseif($user->USR_ROLE == 'FARMER')
+                        <span class="badge badge-soft-success">Farmer</span>
+                    @else
+                        <span class="badge badge-soft-neutral">Buyer</span>
+                    @endif
+                </td>
             </tr>
 
             <tr>
                 <th>Status</th>
-                <td>{{ $user->USR_STATUS }}</td>
+                <td>
+                    @if($user->USR_STATUS == 'ACTIVE')
+                        <span class="badge badge-soft-success">Active</span>
+                    @else
+                        <span class="badge badge-soft-neutral">{{ $user->USR_STATUS }}</span>
+                    @endif
+                </td>
             </tr>
 
             <tr>
@@ -51,17 +80,11 @@
 
             <tr>
                 <th>Registered</th>
-                <td>{{ $user->USR_CREATED_AT }}</td>
+                <td class="cell-secondary">{{ $user->USR_CREATED_AT }}</td>
             </tr>
 
         </table>
-
-        <a href="{{ route('users') }}" class="btn btn-secondary">
-            Back
-        </a>
-
     </div>
-
 </div>
 
 @endsection
