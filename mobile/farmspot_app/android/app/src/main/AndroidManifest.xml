@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Geolocation (geolocator): fine is used when both are declared. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Required to load OpenStreetMap tiles and talk to the Farmspot API. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="farmspot_app"
         android:name="${applicationName}"
