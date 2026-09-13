@@ -286,7 +286,7 @@ class _FakeRoadsPainter extends CustomPainter {
       Offset(size.width * 0.2, 0),
       Offset(size.width * 0.35, size.height),
       paint,
-    );
+    ); 
     canvas.drawLine(
       Offset(size.width * 0.7, 0),
       Offset(size.width * 0.6, size.height),

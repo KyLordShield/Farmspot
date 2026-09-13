@@ -17,6 +17,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
 Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
+Route::get('/farms/public', [FarmController::class, 'mapPins']);
 Route::get('/farms/{farmId}/profile', [FarmController::class, 'profile']);
 
 Route::middleware('auth:sanctum')->group(function () {

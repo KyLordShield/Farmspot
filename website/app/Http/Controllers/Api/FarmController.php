@@ -134,6 +134,45 @@ class FarmController extends Controller
     }
 
     /**
+     * Public farm map pins for the buyer-facing map screen.
+     *
+     * Requires no authentication (same public access level as the buyer feed).
+     * Returns every farm that should be visible on the map — FRM_STATUS =
+     * APPROVED and FRM_PIN_ACTIVE = 1 — in a compact shape for a map card:
+     * coordinates, the farm's name/barangay, a count of currently
+     * AVAILABLE_NOW + ACTIVE listings, and the first uploaded photo as a
+     * thumbnail. Ordered newest-first, no pagination (pilot scale).
+     */
+    public function mapPins(Request $request)
+    {
+        $farms = Farm::with([
+            'photos' => fn ($query) => $query->orderBy('FPHOTO_UPLOADED_AT'),
+        ])
+            ->withCount([
+                'listings as active_listings_count' => function ($query) {
+                    $query->where('LST_STATUS', 'AVAILABLE_NOW')
+                        ->where('LST_AVAILABILITY', 'ACTIVE');
+                },
+            ])
+            ->where('FRM_STATUS', 'APPROVED')
+            ->where('FRM_PIN_ACTIVE', 1)
+            ->orderByDesc('FRM_CREATED_AT')
+            ->get();
+
+        return response()->json([
+            'farms' => $farms->map(fn ($farm) => [
+                'id' => $farm->FRM_ID,
+                'name' => $farm->FRM_NAME,
+                'barangay' => $farm->FRM_BARANGAY,
+                'latitude' => $farm->FRM_LATITUDE,
+                'longitude' => $farm->FRM_LONGITUDE,
+                'active_listings_count' => $farm->active_listings_count,
+                'photo_url' => $farm->photos->first()?->FPHOTO_FILE_PATH,
+            ]),
+        ]);
+    }
+
+    /**
      * Public farm profile for the buyer-facing Farm Profile screen.
      *
      * Requires no authentication (same public access level as the buyer feed).

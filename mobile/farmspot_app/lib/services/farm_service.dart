@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/farm_pin.dart';
 import '../models/farm_profile.dart';
 import '../models/farm_setup_data.dart';
 import '../models/farm_stats.dart';
@@ -203,6 +204,32 @@ class FarmService {
       );
     } catch (_) {
       // Ignored by design.
+    }
+  }
+
+  /// Fetches the approved, pin-active farms shown on the buyer-facing map
+  /// (GET /api/farms/public — public, no auth needed). Parses the backend's
+  /// decimal lat/lng strings into doubles. Failure-tolerant like [getFarms]:
+  /// returns an empty list on any failure so the map degrades gracefully
+  /// (showing just the buyer's own position) instead of crashing.
+  static Future<List<FarmPin>> fetchPublicFarms() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/farms/public'),
+        headers: {'Accept': 'application/json'},
+      );
+      if (response.statusCode != 200) return const [];
+
+      final json = jsonDecode(response.body);
+      final farms = json is Map ? json['farms'] : null;
+      if (farms is! List) return const [];
+
+      return farms
+          .whereType<Map>()
+          .map((farm) => FarmPin.fromJson(Map<String, dynamic>.from(farm)))
+          .toList();
+    } catch (_) {
+      return const [];
     }
   }
 
