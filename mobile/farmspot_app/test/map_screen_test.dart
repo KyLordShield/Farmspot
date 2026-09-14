@@ -36,6 +36,7 @@ Future<void> _pump(
   WidgetTester tester, {
   List<FarmPin> farms = const [],
   Future<LatLng> Function()? position,
+  void Function(BuildContext context, FarmPin farm)? onDirectionsRequested,
 }) async {
   SharedPreferences.setMockInitialValues({});
   await tester.pumpWidget(
@@ -43,6 +44,7 @@ Future<void> _pump(
       home: MapScreen(
         loadFarms: () async => farms,
         loadPosition: position ?? () async => _userPos,
+        onDirectionsRequested: onDirectionsRequested,
       ),
     ),
   );
@@ -55,50 +57,85 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('renders a real OSM map with farm pins at real coordinates',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
-      _pin('F2', 'Agus Farm', 10.3172, 123.8742, count: 1),
-    ]);
+  testWidgets('renders a real OSM map with farm pins at real coordinates', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      farms: [
+        _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
+        _pin('F2', 'Agus Farm', 10.3172, 123.8742, count: 1),
+      ],
+    );
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(FlutterMap), findsOneWidget,
-        reason: 'the placeholder map must be gone; a real OSM map renders');
-    expect(find.byType(TileLayer), findsOneWidget,
-        reason: 'the OSM tile layer (same setup as the wizard) must be present');
-    expect(find.byIcon(Icons.location_on), findsNWidgets(2),
-        reason: 'two farm pins must plot, one per farm');
-    expect(find.byIcon(Icons.navigation), findsOneWidget,
-        reason: 'the distinct blue buyer-position marker must render');
-    expect(find.text('Sitio Maraag Farm'), findsNothing,
-        reason: 'no card until a pin is tapped');
+    expect(
+      find.byType(FlutterMap),
+      findsOneWidget,
+      reason: 'the placeholder map must be gone; a real OSM map renders',
+    );
+    expect(
+      find.byType(TileLayer),
+      findsOneWidget,
+      reason: 'the OSM tile layer (same setup as the wizard) must be present',
+    );
+    expect(
+      find.byIcon(Icons.location_on),
+      findsNWidgets(2),
+      reason: 'two farm pins must plot, one per farm',
+    );
+    expect(
+      find.byIcon(Icons.navigation),
+      findsOneWidget,
+      reason: 'the distinct blue buyer-position marker must render',
+    );
+    expect(
+      find.text('Sitio Maraag Farm'),
+      findsNothing,
+      reason: 'no card until a pin is tapped',
+    );
   });
 
-  testWidgets('tapping a farm pin shows real farm data, not the mockup',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
-      _pin('F2', 'Lahug Farm', 10.3200, 123.8830, count: 1),
-    ]);
+  testWidgets('tapping a farm pin shows real farm data, not the mockup', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      farms: [
+        _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
+        _pin('F2', 'Lahug Farm', 10.3200, 123.8830, count: 1),
+      ],
+    );
 
     await tester.tap(find.byIcon(Icons.location_on).first);
     await tester.pump();
 
-    expect(find.text('Sitio Maraag Farm'), findsOneWidget,
-        reason: 'the card must show the tapped farm real name');
-    expect(find.text('3 crops available'), findsOneWidget,
-        reason: 'the real active-listing count must show');
-    expect(find.textContaining('Sudlon II'), findsWidgets,
-        reason: 'the farm barangay must show');
+    expect(
+      find.text('Sitio Maraag Farm'),
+      findsOneWidget,
+      reason: 'the card must show the tapped farm real name',
+    );
+    expect(
+      find.text('3 crops available'),
+      findsOneWidget,
+      reason: 'the real active-listing count must show',
+    );
+    expect(
+      find.textContaining('Sudlon II'),
+      findsWidgets,
+      reason: 'the farm barangay must show',
+    );
 
     final distanceText = tester
         .widgetList<Text>(find.textContaining('away'))
         .map((t) => t.data)
         .whereType<String>()
         .toList();
-    expect(distanceText, isNotEmpty,
-        reason: 'a real distance from the buyer must be shown');
+    expect(
+      distanceText,
+      isNotEmpty,
+      reason: 'a real distance from the buyer must be shown',
+    );
 
     // The entire fake mockup must be gone — no hardcoded farm, no fake crops.
     expect(find.text('Mr. A Farm'), findsNothing);
@@ -107,9 +144,10 @@ void main() {
   });
 
   testWidgets('tapping the map clears the selected farm card', (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742),
-    ]);
+    await _pump(
+      tester,
+      farms: [_pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742)],
+    );
 
     await tester.tap(find.byIcon(Icons.location_on).first);
     await tester.pump();
@@ -120,46 +158,69 @@ void main() {
     await tester.tapAt(mapRect.topLeft + const Offset(12, 12));
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('Sitio Maraag Farm'), findsNothing,
-        reason: 'tapping open map space must dismiss the card');
+    expect(
+      find.text('Sitio Maraag Farm'),
+      findsNothing,
+      reason: 'tapping open map space must dismiss the card',
+    );
   });
 
-  testWidgets('Listing toggle shows a real scrollable list of farms',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 2),
-      _pin('F2', 'Agus Farm', 10.3200, 123.9000, count: 0),
-    ]);
+  testWidgets('Listing toggle shows a real scrollable list of farms', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      farms: [
+        _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 2),
+        _pin('F2', 'Agus Farm', 10.3200, 123.9000, count: 0),
+      ],
+    );
 
     await tester.tap(find.text('Listing'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byType(ListView), findsOneWidget,
-        reason: 'the Listing option must render a scrollable list');
+    expect(
+      find.byType(ListView),
+      findsOneWidget,
+      reason: 'the Listing option must render a scrollable list',
+    );
     expect(find.text('Sitio Maraag Farm'), findsOneWidget);
     expect(find.text('Agus Farm'), findsOneWidget);
-    expect(find.text('2 crops available'), findsOneWidget,
-        reason: 'list rows show the real active-listing count');
+    expect(
+      find.text('2 crops available'),
+      findsOneWidget,
+      reason: 'list rows show the real active-listing count',
+    );
     expect(find.text('0 crops available'), findsOneWidget);
-    expect(find.textContaining('km away'), findsWidgets,
-        reason: 'list rows show the real distance from the buyer');
+    expect(
+      find.textContaining('km away'),
+      findsWidgets,
+      reason: 'list rows show the real distance from the buyer',
+    );
 
     await tester.tap(find.text('Agus Farm'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(FarmProfileScreen), findsOneWidget,
-        reason: 'tapping a list row must open that farm profile');
-    expect(tester.widget<FarmProfileScreen>(find.byType(FarmProfileScreen)).farmId,
-        'F2');
+    expect(
+      find.byType(FarmProfileScreen),
+      findsOneWidget,
+      reason: 'tapping a list row must open that farm profile',
+    );
+    expect(
+      tester.widget<FarmProfileScreen>(find.byType(FarmProfileScreen)).farmId,
+      'F2',
+    );
   });
 
-  testWidgets('tap on the bottom card farm name opens the real Farm Profile',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
-    ]);
+  testWidgets('tap on the bottom card farm name opens the real Farm Profile', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      farms: [_pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3)],
+    );
 
     await tester.tap(find.byIcon(Icons.location_on).first);
     await tester.pump();
@@ -168,61 +229,87 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(FarmProfileScreen), findsOneWidget,
-        reason: 'the farm name on the bottom card must open the real profile '
-            '(same affordance as ProductDetailScreen)');
     expect(
-        tester
-            .widget<FarmProfileScreen>(find.byType(FarmProfileScreen))
-            .farmId,
-        'F1');
-  });
-
-  testWidgets('tap on the bottom card photo thumbnail opens the real Farm Profile',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
-    ]);
-
-    await tester.tap(find.byIcon(Icons.location_on).first);
-    await tester.pump();
-
-    // No photoUrl -> the crop placeholder thumbnail renders; it must be
-    // tappable the same way the real network photo is.
-    await tester.tap(find.byType(CropImagePlaceholder));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(FarmProfileScreen), findsOneWidget,
-        reason: 'the photo thumbnail on the bottom card must open the profile');
+      find.byType(FarmProfileScreen),
+      findsOneWidget,
+      reason:
+          'the farm name on the bottom card must open the real profile '
+          '(same affordance as ProductDetailScreen)',
+    );
     expect(
-        tester
-            .widget<FarmProfileScreen>(find.byType(FarmProfileScreen))
-            .farmId,
-        'F1');
+      tester.widget<FarmProfileScreen>(find.byType(FarmProfileScreen)).farmId,
+      'F1',
+    );
   });
 
-  testWidgets('Directions shows the coming-soon notice, never the profile',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3),
-    ]);
+  testWidgets(
+    'tap on the bottom card photo thumbnail opens the real Farm Profile',
+    (tester) async {
+      await _pump(
+        tester,
+        farms: [_pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3)],
+      );
 
-    await tester.tap(find.byIcon(Icons.location_on).first);
-    await tester.pump();
+      await tester.tap(find.byIcon(Icons.location_on).first);
+      await tester.pump();
 
-    await tester.tap(find.text('Directions'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      // No photoUrl -> the crop placeholder thumbnail renders; it must be
+      // tappable the same way the real network photo is.
+      await tester.tap(find.byType(CropImagePlaceholder));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Turn-by-turn directions coming soon'), findsOneWidget,
-        reason: 'Directions is not built yet; it must surface a clear notice');
-    expect(find.byType(FarmProfileScreen), findsNothing,
-        reason: 'Directions must NO LONGER open the Farm Profile screen');
-  });
+      expect(
+        find.byType(FarmProfileScreen),
+        findsOneWidget,
+        reason: 'the photo thumbnail on the bottom card must open the profile',
+      );
+      expect(
+        tester.widget<FarmProfileScreen>(find.byType(FarmProfileScreen)).farmId,
+        'F1',
+      );
+    },
+  );
 
-  testWidgets('default loaders fall back gracefully when GPS and farms fail',
-      (tester) async {
+  testWidgets(
+    'Directions hands the selected farm to the real turn-by-turn flow',
+    (tester) async {
+      FarmPin? captured;
+      await _pump(
+        tester,
+        farms: [_pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742, count: 3)],
+        onDirectionsRequested: (_, farm) => captured = farm,
+      );
+
+      await tester.tap(find.byIcon(Icons.location_on).first);
+      await tester.pump();
+
+      await tester.tap(find.text('Directions'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        captured?.id,
+        'F1',
+        reason: 'Directions must forward the selected farm to navigation',
+      );
+      expect(captured?.latitude, 10.3178);
+      expect(
+        find.text('Turn-by-turn directions coming soon'),
+        findsNothing,
+        reason: 'the coming-soon placeholder is gone',
+      );
+      expect(
+        find.byType(FarmProfileScreen),
+        findsNothing,
+        reason: 'Directions must NO LONGER open the Farm Profile screen',
+      );
+    },
+  );
+
+  testWidgets('default loaders fall back gracefully when GPS and farms fail', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final original = GeolocatorPlatform.instance;
     GeolocatorPlatform.instance = _FakeGeolocator();
@@ -236,13 +323,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(tester.takeException(), isNull,
-        reason: 'GPS + network failures must never crash the map screen');
-    expect(find.byType(FlutterMap), findsOneWidget,
-        reason: 'the real map must still render');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'GPS + network failures must never crash the map screen',
+    );
+    expect(
+      find.byType(FlutterMap),
+      findsOneWidget,
+      reason: 'the real map must still render',
+    );
     expect(find.byType(TileLayer), findsOneWidget);
-    expect(find.byIcon(Icons.navigation), findsOneWidget,
-        reason: 'the fallback Cebu City buyer marker must show');
+    expect(
+      find.byIcon(Icons.navigation),
+      findsOneWidget,
+      reason: 'the fallback Cebu City buyer marker must show',
+    );
 
     // Empty feed -> listing view degrades to a friendly empty message.
     await tester.tap(find.text('Listing'));
@@ -251,11 +347,13 @@ void main() {
     expect(find.text('No farms available right now.'), findsOneWidget);
   });
 
-  testWidgets('farm pins survive a toggle back from Listing to Map',
-      (tester) async {
-    await _pump(tester, farms: [
-      _pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742),
-    ]);
+  testWidgets('farm pins survive a toggle back from Listing to Map', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      farms: [_pin('F1', 'Sitio Maraag Farm', 10.3178, 123.8742)],
+    );
 
     await tester.tap(find.text('Listing'));
     await tester.pump();
@@ -268,8 +366,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(FlutterMap), findsOneWidget);
-    expect(find.byIcon(Icons.location_on), findsOneWidget,
-        reason: 'the pin must plot again after switching back to Map');
+    expect(
+      find.byIcon(Icons.location_on),
+      findsOneWidget,
+      reason: 'the pin must plot again after switching back to Map',
+    );
   });
 }
 
@@ -289,6 +390,7 @@ class _FakeGeolocator extends GeolocatorPlatform {
       throw MissingPluginException();
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
-      throw MissingPluginException();
+  Future<Position> getCurrentPosition({
+    LocationSettings? locationSettings,
+  }) async => throw MissingPluginException();
 }

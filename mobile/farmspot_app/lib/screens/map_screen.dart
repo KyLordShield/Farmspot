@@ -9,6 +9,7 @@ import '../services/farm_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import 'farm_directions_screen.dart';
 import 'farm_profile_screen.dart';
 import 'home_screen.dart';
 import 'insights_screen.dart';
@@ -42,10 +43,18 @@ class MapScreen extends StatefulWidget {
   /// the Cebu City fallback; never throws.
   final Future<LatLng> Function() loadPosition;
 
+  /// Injectable hook for "Directions": tests substitute this to capture the
+  /// farm instead of pushing the real turn-by-turn screen (whose default
+  /// loaders hit geolocator + the OSRM routers). When null the real
+  /// [FarmDirectionsScreen] opens for the selected farm.
+  final void Function(BuildContext context, FarmPin farm)?
+  onDirectionsRequested;
+
   const MapScreen({
     super.key,
     this.loadFarms = FarmService.fetchPublicFarms,
     this.loadPosition = _defaultPosition,
+    this.onDirectionsRequested,
   });
 
   @override
@@ -151,16 +160,23 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  void _showDirectionsComingSoon() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Turn-by-turn directions coming soon'),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 3),
+  void _openDirections() {
+    final farm = _selectedFarm;
+    if (farm == null) return;
+    final onDirectionsRequested = widget.onDirectionsRequested;
+    if (onDirectionsRequested != null) {
+      onDirectionsRequested(context, farm);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FarmDirectionsScreen(
+          farmId: farm.id,
+          farmName: farm.name,
+          farmPosition: LatLng(farm.latitude, farm.longitude),
         ),
-      );
+      ),
+    );
   }
 
   String _distanceLabel(FarmPin farm) {
@@ -183,9 +199,7 @@ class _MapScreenState extends State<MapScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: _viewToggle == 1
-                  ? _buildMapView()
-                  : _buildListingView(),
+              child: _viewToggle == 1 ? _buildMapView() : _buildListingView(),
             ),
           ],
         ),
@@ -237,10 +251,7 @@ class _MapScreenState extends State<MapScreen> {
                 userAgentPackageName: 'com.example.farmspot_app',
               ),
               MarkerLayer(
-                markers: [
-                  _buildUserMarker(),
-                  ..._farms.map(_buildFarmMarker),
-                ],
+                markers: [_buildUserMarker(), ..._farms.map(_buildFarmMarker)],
               ),
             ],
           ),
@@ -274,7 +285,7 @@ class _MapScreenState extends State<MapScreen> {
               farm: _selectedFarm!,
               distanceLabel: _distanceLabel(_selectedFarm!),
               onOpenProfile: () => _openFarmProfile(_selectedFarm!),
-              onDirections: _showDirectionsComingSoon,
+              onDirections: _openDirections,
             ),
           ),
       ],
@@ -362,10 +373,7 @@ class _ToggleGroup extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          _segment('Listing', 0),
-          _segment('Map', 1),
-        ],
+        children: [_segment('Listing', 0), _segment('Map', 1)],
       ),
     );
   }
@@ -404,8 +412,8 @@ class _FarmCard extends StatelessWidget {
   /// button, which is turn-by-turn navigation).
   final VoidCallback onOpenProfile;
 
-  /// Directions is not built yet; shows the "coming soon" notice until the
-  /// turn-by-turn stage replaces the stale FarmDirectionsScreen.
+  /// Turns on the real turn-by-turn flow for the selected farm (a distinct
+  /// action from opening the profile tap target above).
   final VoidCallback onDirections;
 
   const _FarmCard({
@@ -423,7 +431,11 @@ class _FarmCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -431,10 +443,7 @@ class _FarmCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              GestureDetector(
-                onTap: onOpenProfile,
-                child: _buildThumbnail(),
-              ),
+              GestureDetector(onTap: onOpenProfile, child: _buildThumbnail()),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -511,8 +520,10 @@ class _FarmCard extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
-    final placeholder =
-        const CropImagePlaceholder(size: 52, icon: Icons.agriculture);
+    final placeholder = const CropImagePlaceholder(
+      size: 52,
+      icon: Icons.agriculture,
+    );
     final url = farm.photoUrl;
     if (url == null || url.trim().isEmpty) return placeholder;
     return ClipRRect(
@@ -603,10 +614,7 @@ class _FarmListTile extends StatelessWidget {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black54,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 ],
               ),
@@ -620,8 +628,10 @@ class _FarmListTile extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
-    final placeholder =
-        const CropImagePlaceholder(size: 44, icon: Icons.agriculture);
+    final placeholder = const CropImagePlaceholder(
+      size: 44,
+      icon: Icons.agriculture,
+    );
     final url = farm.photoUrl;
     if (url == null || url.trim().isEmpty) return placeholder;
     return ClipRRect(
