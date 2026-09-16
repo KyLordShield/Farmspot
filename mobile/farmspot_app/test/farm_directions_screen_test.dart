@@ -33,7 +33,7 @@ String _fmtDistance(double meters) {
 /// Minimal OSRM v5 body. The geometry drives the journey math while the totals
 /// stay small, fixed numbers (foot: 2400 m / 2000 s, car: 2100 m / 1020 s) so
 /// the two pills always read "33 min" vs "17 min".
-String _osrmBody({required bool foot}) {
+String _osrmBody({required bool foot, bool ferry = false}) {
   return jsonEncode({
     'code': 'Ok',
     'routes': [
@@ -69,6 +69,17 @@ String _osrmBody({required bool foot}) {
                   'location': [_mid.longitude, _mid.latitude],
                 },
               },
+              if (ferry)
+                {
+                  'distance': 4882.4,
+                  'name': 'Cebu City to Lapu-Lapu City (Opon)',
+                  'mode': 'ferry',
+                  'maneuver': {
+                    'type': 'notification',
+                    'modifier': 'uturn',
+                    'location': [_farm.longitude, _farm.latitude],
+                  },
+                },
               {
                 'distance': _leg2,
                 'name': 'Sitio Maraag',
@@ -86,13 +97,13 @@ String _osrmBody({required bool foot}) {
   });
 }
 
-RoutingService _routing({bool fail = false}) {
+RoutingService _routing({bool fail = false, bool ferry = false}) {
   return RoutingService(
     client: MockClient((request) async {
       if (fail) return http.Response('oops', 500);
       final path = request.url.path;
       if (path.contains('routed-foot')) {
-        return http.Response(_osrmBody(foot: true), 200);
+        return http.Response(_osrmBody(foot: true, ferry: ferry), 200);
       }
       if (path.contains('routed-car')) {
         return http.Response(_osrmBody(foot: false), 200);
@@ -128,6 +139,8 @@ Future<void> _pump(
   LatLng? farmPosition,
   bool passFarmPosition = true,
   Future<LatLng> Function()? loadPosition,
+  bool ferry = false,
+  bool simulate = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -140,9 +153,10 @@ Future<void> _pump(
         loadFarmProfile: loadFarmProfile ?? (_) async => _profile(),
         loadListing: loadListing ?? (_) async => throw Exception('unused'),
         positionStream: () => stream.stream,
-        routing: routing ?? _routing(),
+        routing: routing ?? _routing(ferry: ferry),
         contactLogger: contactLogger,
         contactAction: contactAction,
+        simulate: simulate,
       ),
     ),
   );
@@ -194,6 +208,37 @@ void main() {
     expect(find.textContaining('riding'), findsOneWidget);
     expect(find.text('Start Navigation'), findsOneWidget);
   });
+
+  testWidgets(
+    'a ferry plan warns and offers the road/bridge riding route instead',
+    (tester) async {
+      final stream = StreamController<LatLng>();
+      await _pump(tester, stream: stream, ferry: true);
+
+      expect(
+        find.text('Includes a ferry/boat crossing'),
+        findsOneWidget,
+        reason: 'the walking (foot) plan has a ferry leg, so Step 1 must warn',
+      );
+      expect(find.textContaining('boards a boat'), findsOneWidget);
+      expect(
+        find.textContaining('Use the riding route'),
+        findsOneWidget,
+        reason: 'the car plan crosses by bridge, so offer it as the alternative',
+      );
+
+      await tester.tap(find.textContaining('Use the riding route'));
+      await tester.pump();
+
+      expect(
+        find.textContaining('Includes a ferry'),
+        findsNothing,
+        reason: 'after switching to riding the selected plan has no ferry',
+      );
+      expect(find.text('17 min'), findsOneWidget,
+          reason: 'riding ETA is still shown');
+    },
+  );
 
   testWidgets(
     'mode toggle selects riding and the journey shows the real mode',
@@ -271,6 +316,56 @@ void main() {
         findsOneWidget,
         reason: 'the arrival banner reports the farm is close',
       );
+    },
+  );
+
+  testWidgets(
+    'simulate glides the route without GPS and advances the turn banner',
+    (tester) async {
+      final stream = StreamController<LatLng>();
+      await _pump(tester, stream: stream, simulate: true);
+
+      expect(find.text('Start Navigation'), findsOneWidget);
+      await tester.tap(find.text('Start Navigation'));
+      await tester.pump();
+
+      expect(
+        find.textContaining('SIMULATED DEMO'),
+        findsOneWidget,
+        reason: 'the journey must state it is replaying fake positions',
+      );
+      expect(find.text(_fmtDistance(_footTotal)), findsOneWidget,
+          reason: 'remaining distance starts at the full walking route');
+      expect(
+        find.text('Turn left onto Sudlon Road'),
+        findsOneWidget,
+        reason: 'the first real maneuver shows as the current instruction',
+      );
+      expect(find.textContaining('Turn in'), findsOneWidget,
+          reason: 'the banner says how far the turn is');
+
+      // ~150 interpolated 8m hops (~12s fake time) reaches past the mid turn
+      // point (~700m into the ~2800m path), which must advance the banner.
+      for (var i = 0; i < 150; i++) {
+        await tester.pump(const Duration(milliseconds: 84));
+      }
+      expect(
+        find.text('Arrive at Sitio Maraag'),
+        findsOneWidget,
+        reason: 'the turn instruction must advance once crossed (was stuck '
+            'before, because the old simulation jumped over it)',
+      );
+
+      // Finish the ~25s replay; the marker parks on the farm.
+      for (var i = 0; i < 160; i++) {
+        await tester.pump(const Duration(milliseconds: 84));
+      }
+      expect(
+        find.text('0 m'),
+        findsWidgets,
+        reason: 'after the replay the remaining distance reaches the farm',
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 

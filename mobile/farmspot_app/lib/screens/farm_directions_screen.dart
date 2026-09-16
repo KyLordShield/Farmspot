@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -83,6 +85,11 @@ class FarmDirectionsScreen extends StatefulWidget {
   final Future<void> Function({required String number, required String method})?
   contactAction;
 
+  /// When true, "Start Navigation" feeds fake positions along the route
+  /// geometry instead of real GPS — useful for quick visual demos on the
+  /// phone without walking around. Only shown in debug builds.
+  final bool simulate;
+
   const FarmDirectionsScreen({
     super.key,
     required this.farmId,
@@ -96,6 +103,7 @@ class FarmDirectionsScreen extends StatefulWidget {
     this.routing,
     this.contactLogger,
     this.contactAction,
+    this.simulate = false,
   });
 
   @override
@@ -131,6 +139,11 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
   List<double>? _cumulative;
   double? _cachedRemaining;
 
+  /// Current travel bearing in degrees (0 = north, 90 = east, clockwise).
+  /// Updates as the journey advances so the map can swing to a Google-Maps
+  /// style heading-up view (the direction you're traveling points "up").
+  double _heading = 0;
+
   late final RoutingService _routing;
   late final Future<void> Function({
     required String listingId,
@@ -143,18 +156,25 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
   })
   _contactAction;
 
+  /// Debug-only: when true, the position stream is replaced by a fake
+  /// replay of the route geometry so you can demo the journey at your desk
+  /// without holding a phone outside.
+  bool _simulateOn = false;
+
   @override
   void initState() {
     super.initState();
     _routing = widget.routing ?? RoutingService();
     _contactLogger = widget.contactLogger ?? ListingService.logContact;
     _contactAction = widget.contactAction ?? _defaultContactAction;
+    _simulateOn = widget.simulate;
     _initialize();
   }
 
   @override
   void dispose() {
     _positionSub?.cancel();
+    _simTimer?.cancel();
     if (widget.routing == null) _routing.close();
     super.dispose();
   }
@@ -240,12 +260,18 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
 
   void _startJourney() {
     _live = _current;
+    _heading = 0;
     _liveAvailable = true;
     _cachedRemaining = null;
     final plan = _plan;
     _nextStepIndex = _firstUpcomingStep(plan);
     _cumulative = _buildCumulative(plan);
     setState(() => _step = _Step.journey);
+
+    if (_simulateOn) {
+      _startSimulation(plan);
+      return;
+    }
     _positionSub = widget.positionStream().listen(
       _onLiveFix,
       onError: (Object _) {
@@ -259,9 +285,96 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
     );
   }
 
+  Timer? _simTimer;
+  List<LatLng> _simPath = const [];
+  int _simIndex = 0;
+
+  /// Replays the route as a smooth fake-journey. The stream version jumped
+  /// vertex-to-vertex, which looked like blinking and skipped past the narrow
+  /// 25m turn-advancement window — so the banner never changed. This walks the
+  /// path in ~8-meter interpolated hops (well inside the turn threshold) with
+  /// a short timer, landing on the farm when done.
+  void _startSimulation(RoutePlan? plan) {
+    final geometry = plan?.geometry ?? const <LatLng>[];
+    _simPath = _buildSimulationPath(geometry);
+    if (_simPath.length < 2) {
+      if (!mounted) return;
+      setState(() => _liveAvailable = false);
+      return;
+    }
+    _simIndex = 0;
+    const totalMs = 25000; // entire demo finishes in ~25s
+    final tickMs = (totalMs / (_simPath.length - 1)).round().clamp(50, 400);
+    _simTimer = Timer.periodic(Duration(milliseconds: tickMs), (_) {
+      if (!mounted) {
+        _simTimer?.cancel();
+        return;
+      }
+      if (_simIndex >= _simPath.length) {
+        _simTimer?.cancel();
+        return;
+      }
+      final pos = _simPath[_simIndex];
+      _simIndex++;
+      _onLiveFix(pos);
+    });
+  }
+
+  /// Builds a dense sequence of positions spaced ~8m apart along the route
+  /// geometry so the marker glides and each turn point is crossed inside the
+  /// foot (25m) / car (45m) arrival threshold, advancing the banner.
+  List<LatLng> _buildSimulationPath(List<LatLng> geometry) {
+    if (geometry.length < 2) return List.of(geometry);
+    final cumulative = _buildCumulative(
+      RoutePlan(
+        distanceMeters: 0,
+        durationSeconds: 0,
+        geometry: geometry,
+        steps: const [],
+      ),
+    );
+    final total = cumulative.isEmpty ? 0.0 : cumulative.last;
+    if (total <= 0) return List.of(geometry);
+    const hop = 8.0; // meters between simulated fixes
+    final samples = (total / hop).ceil().clamp(4, 600);
+    final path = <LatLng>[];
+    for (var i = 0; i <= samples; i++) {
+      path.add(_pointAlong(geometry, cumulative, total * i / samples));
+    }
+    return path;
+  }
+
+  /// Returns the point exactly [targetMeters] along a polyline.
+  LatLng _pointAlong(
+    List<LatLng> geometry,
+    List<double> cumulative,
+    double targetMeters,
+  ) {
+    if (geometry.length == 1) return geometry.first;
+    final length = cumulative.isEmpty ? 0.0 : cumulative.last;
+    if (length <= 0) return geometry.first;
+    final target = targetMeters.clamp(0.0, length);
+    for (var i = 1; i < geometry.length; i++) {
+      if (cumulative[i] >= target) {
+        final seg = cumulative[i] - cumulative[i - 1];
+        if (seg <= 0) return geometry[i - 1];
+        final frac = (target - cumulative[i - 1]) / seg;
+        final a = geometry[i - 1];
+        final b = geometry[i];
+        return LatLng(
+          a.latitude + (b.latitude - a.latitude) * frac,
+          a.longitude + (b.longitude - a.longitude) * frac,
+        );
+      }
+    }
+    return geometry.last;
+  }
+
   void _endJourney() {
     _positionSub?.cancel();
     _positionSub = null;
+    _simTimer?.cancel();
+    _simTimer = null;
   }
 
   int _firstUpcomingStep(RoutePlan? plan) {
@@ -296,15 +409,36 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
 
   void _onLiveFix(LatLng pos) {
     if (!mounted) return;
+    final from = _live;
     setState(() {
       _live = pos;
       _liveAvailable = true;
       _cachedRemaining = null;
     });
+    // Only swing the camera when we actually moved (~2m+), so GPS jitter
+    // doesn't make the map spin while standing still.
+    if (_simulateOn || _distance(from, pos) > 2) {
+      _heading = _bearingFrom(from, pos);
+    }
     _advanceInstructions(pos);
     try {
-      _mapController.move(pos, 16);
+      // Rotate the map so the direction we're traveling points "up" — the
+      // same heading-up feel as Google Maps navigation. The marker arrow is
+      // drawn pointing up, so it stays "facing" where the journey goes.
+      _mapController.moveAndRotate(pos, 16, -_heading);
     } catch (_) {}
+  }
+
+  /// Clockwise bearing (0..360) traveling from [a] to [b] in degrees.
+  double _bearingFrom(LatLng a, LatLng b) {
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLon = (b.longitude - a.longitude) * math.pi / 180;
+    final y = math.sin(dLon) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+    final bearing = math.atan2(y, x) * 180 / math.pi;
+    return (bearing + 360) % 360;
   }
 
   void _advanceInstructions(LatLng pos) {
@@ -464,6 +598,18 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
                     'Direction',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
+                  const Spacer(),
+                  if (kDebugMode)
+                    Switch(
+                      value: _simulateOn,
+                      onChanged: (v) => setState(() => _simulateOn = v),
+                      activeThumbColor: AppColors.primaryGreen,
+                    ),
+                  if (kDebugMode)
+                    Text(
+                      _simulateOn ? 'SIM ON' : 'SIM OFF',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                 ],
               ),
             ),
@@ -526,6 +672,10 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      if (_plan?.hasFerry == true) ...[
+                        _ferryWarning(),
+                        const SizedBox(height: 16),
+                      ],
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -566,6 +716,71 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
       ? modeLabel
       : '${_formatDistance(plan.distanceMeters)} · $modeLabel';
 
+  /// Warns when the selected plan crosses water by boat, and offers the other
+  /// mode when it stays on roads/bridges. Walking still navigates as-is; the
+  /// buyer just knows to expect a ferry and can switch if they prefer.
+  Widget _ferryWarning() {
+    final modeLabel = _mode == 'foot' ? 'walking' : 'riding';
+    final otherPlan = _mode == 'foot' ? _carPlan : _footPlan;
+    final otherModeLabel = _mode == 'foot' ? 'riding' : 'walking';
+    final canSwitch = otherPlan != null && otherPlan.hasFerry == false;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF9A825)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.directions_boat, color: Color(0xFFF57F17), size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Includes a ferry/boat crossing',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Color(0xFF795548),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'This $modeLabel route boards a boat mid-route. Check schedules '
+            'and fares before you leave.',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF795548)),
+          ),
+          if (canSwitch) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  _mode = _mode == 'foot' ? 'car' : 'foot';
+                }),
+                icon: const Icon(Icons.signpost, size: 18),
+                label: Text(
+                  'Use the $otherModeLabel route (roads/bridge) instead',
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFF57F17),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildMap() {
     final plan = _plan;
     return Stack(
@@ -590,6 +805,9 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
                   ],
                 ),
               MarkerLayer(
+                // Counter-rotate markers so the arrow always faces "up" — the
+                // travel direction, since the camera is rotated heading-up.
+                rotate: true,
                 markers: [
                   if (_step == _Step.journey)
                     _userMarker(_live)
@@ -734,6 +952,19 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
                       'the farm.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                    ),
+                  ],
+                  if (_simulateOn) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'SIMULATED DEMO — positions are replaying the route '
+                      'geometry, not live GPS.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 18),

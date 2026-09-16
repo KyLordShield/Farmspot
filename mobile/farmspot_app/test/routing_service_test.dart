@@ -151,6 +151,42 @@ void main() {
       expect(plan.steps.last.instruction, 'Arrive at your destination');
     });
 
+    test('marks a plan as having a ferry and clarifies the ferry instruction',
+        () async {
+      final body = _osrmBody();
+      ((body['routes'] as List).first['legs'] as List).first['steps'] = [
+        {
+          'maneuver': {'type': 'depart'},
+          'name': 'Mactan-Mandaue Bridge',
+          'distance': 100.0,
+        },
+        {
+          'maneuver': {'type': 'notification'},
+          'name': 'Cebu City to Lapu-Lapu City (Opon)',
+          'mode': 'ferry',
+          'distance': 4882.4,
+        },
+        {
+          'maneuver': {'type': 'arrive'},
+          'name': '',
+          'distance': 0.0,
+        },
+      ];
+      final service = RoutingService(
+        client: MockClient((_) async => http.Response(jsonEncode(body), 200)),
+      );
+      final plan = await service.getRoute(
+        from: const LatLng(10.3157, 123.8854),
+        to: const LatLng(10.3796, 123.7847),
+        profile: 'foot',
+      );
+
+      expect(plan!.hasFerry, isTrue,
+          reason: 'a leg with mode==ferry must flag the whole plan');
+      expect(plan.steps[1].instruction,
+          'Take the ferry (Cebu City to Lapu-Lapu City (Opon))');
+    });
+
     test('prefers a server-provided instruction string when present', () async {
       final body = _osrmBody();
       (body['routes'] as List).first['instruction'] = 'IGNORED (route level)';

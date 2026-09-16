@@ -39,11 +39,17 @@ class RoutePlan {
 
   final List<RouteStep> steps;
 
+  /// True when any leg boards a boat/ferry (OSRM marks those legs
+  /// `"mode": "ferry"`), so walking directions can warn instead of pretending
+  /// the crossing is a normal road.
+  final bool hasFerry;
+
   const RoutePlan({
     required this.distanceMeters,
     required this.durationSeconds,
     required this.geometry,
     required this.steps,
+    this.hasFerry = false,
   });
 }
 
@@ -165,6 +171,7 @@ class RoutingService {
     }
 
     final steps = <RouteStep>[];
+    var hasFerry = false;
     final legs = route['legs'];
     if (legs is List) {
       for (final leg in legs) {
@@ -173,6 +180,8 @@ class RoutingService {
         if (legSteps is! List) continue;
         for (final step in legSteps) {
           if (step is! Map<String, dynamic>) continue;
+          final isFerry = step['mode'] == 'ferry';
+          if (isFerry) hasFerry = true;
           final stepDistance = (step['distance'] as num?)?.toDouble() ?? 0;
           final maneuver = step['maneuver'];
           LatLng? location;
@@ -188,7 +197,7 @@ class RoutingService {
           }
           steps.add(
             RouteStep(
-              instruction: _instructionFor(step),
+              instruction: _instructionFor(step, isFerry: isFerry),
               distanceMeters: stepDistance,
               position: location,
             ),
@@ -202,12 +211,16 @@ class RoutingService {
       durationSeconds: duration,
       geometry: geometry,
       steps: steps,
+      hasFerry: hasFerry,
     );
   }
 
   /// Synthesizes a human-readable instruction from an OSRM step, preferring a
   /// server-provided `instruction` string when one is present.
-  static String _instructionFor(Map<String, dynamic> step) {
+  static String _instructionFor(
+    Map<String, dynamic> step, {
+    bool isFerry = false,
+  }) {
     final serverText = step['instruction']?.toString();
     if (serverText != null && serverText.trim().isNotEmpty) {
       return serverText.trim();
@@ -221,6 +234,10 @@ class RoutingService {
     final modifier = maneuver is Map
         ? (maneuver['modifier'] as String?) ?? ''
         : '';
+
+    if (isFerry) {
+      return name.isEmpty ? 'Take the ferry' : 'Take the ferry ($name)';
+    }
 
     switch (type) {
       case 'depart':
