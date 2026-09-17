@@ -8,7 +8,7 @@ import 'package:farmspot_app/services/farm_service.dart';
 // on: full farm + ALL listings (any status) ordered by status priority, flat
 // listings mapping into CropListing with live farm identity, client-side
 // filtering, and the fire-and-forget visit log.
-const _fixtureFarmId = 'QUAOMR'; // libando's approved 31-listing farm
+const _fixtureFarmId = 'FMWHEF'; // libando's single approved farm (all listings live here)
 
 void main() {
   test('fetchFarmProfile returns farm details, photos, and all listings', () async {

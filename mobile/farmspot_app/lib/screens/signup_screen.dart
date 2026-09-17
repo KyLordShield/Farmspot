@@ -74,86 +74,98 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const FarmSpotHeader(),
-            const SizedBox(height: 8),
-            const FarmSpotLogo(size: 190),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FarmSpotTextField(
-                          hint: 'Lastname',
-                          controller: _lastNameController,
+      body: SafeArea(
+        // Keep the bottom-most content (the "Log In" switch link) reachable:
+        // on gesture/button nav phones the home bar overlaps the last row, so
+        // the SafeArea reserves that inset and the extra bottom padding lets
+        // the form scroll fully above it. Top inset is left alone — the
+        // FarmSpotHeader already reserves the status bar with its own padding.
+        top: false,
+        bottom: true,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewPadding.bottom + 32,
+          ),
+          child: Column(
+            children: [
+              const FarmSpotHeader(),
+              const SizedBox(height: 8),
+              const FarmSpotLogo(size: 190),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FarmSpotTextField(
+                            hint: 'Lastname',
+                            controller: _lastNameController,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FarmSpotTextField(
-                          hint: 'FirstName',
-                          controller: _firstNameController,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FarmSpotTextField(
+                            hint: 'FirstName',
+                            controller: _firstNameController,
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'email',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'mobile number',
+                      controller: _mobileController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'address',
+                      controller: _addressController,
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'password',
+                      controller: _passwordController,
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'confirm password',
+                      controller: _confirmPasswordController,
+                      obscureText: true,
+                    ),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                        textAlign: TextAlign.center,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'email',
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'mobile number',
-                    controller: _mobileController,
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'address',
-                    controller: _addressController,
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'password',
-                    controller: _passwordController,
-                    obscureText: true,
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'confirm password',
-                    controller: _confirmPasswordController,
-                    obscureText: true,
-                  ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red, fontSize: 13),
-                      textAlign: TextAlign.center,
+                    const SizedBox(height: 26),
+                    FarmSpotButton(
+                      label: _isLoading ? 'Creating Account...' : 'Create Account',
+                      trailingIcon: Icons.arrow_forward,
+                      onPressed: _isLoading ? () {} : () => _handleCreateAccount(),
+                    ),
+                    const SizedBox(height: 20),
+                    FarmSpotSwitchLink(
+                      question: '----- Already have an Account?-----',
+                      actionLabel: 'Log In',
+                      onTap: _goToLogin,
                     ),
                   ],
-                  const SizedBox(height: 26),
-                  FarmSpotButton(
-                    label: _isLoading ? 'Creating Account...' : 'Create Account',
-                    trailingIcon: Icons.arrow_forward,
-                    onPressed: _isLoading ? () {} : () => _handleCreateAccount(),
-                  ),
-                  const SizedBox(height: 20),
-                  FarmSpotSwitchLink(
-                    question: '----- Already have an Account?-----',
-                    actionLabel: 'Log In',
-                    onTap: _goToLogin,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

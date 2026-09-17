@@ -39,6 +39,19 @@ class FarmController extends Controller
             ], 403);
         }
 
+        // One farm per farmer: an existing APPROVED or PENDING_REVIEW farm
+        // blocks a new submission. Only when every prior farm is REJECTED
+        // (e.g. after admin review) may the farmer submit again.
+        $hasActiveFarm = $farmer->farms()
+            ->whereIn('FRM_STATUS', ['APPROVED', 'PENDING_REVIEW'])
+            ->exists();
+
+        if ($hasActiveFarm) {
+            return response()->json([
+                'message' => 'You already have a farm. Each farmer can only have one farm at a time.',
+            ], 409);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],
@@ -391,15 +404,29 @@ class FarmController extends Controller
     }
 
     /**
-     * List the authenticated seller's own farms.
+     * List the authenticated seller's own operational farms.
      * Returns an empty list for users who have no farm yet
      * (e.g. seller mode active but wizard never completed).
+     *
+     * REJECTED farms are historical/inert and deliberately omitted — the app
+     * treats this list as "my farm(s)" and shows it selectable when creating
+     * listings, so only APPROVED / PENDING_REVIEW belong here. A farmer whose
+     * only farm was rejected therefore sees an empty list and may re-submit.
+     *
+     * Ordered deterministically so clients can rely on the first entry being
+     * "the" farm: APPROVED first, then PENDING_REVIEW, newest-created within
+     * each status. APPROVED on top matches the client's "one active farm"
+     * convention (APPROVED is the only operational one).
      */
     public function index(Request $request)
     {
         $user = $request->user();
 
-        $farms = $user->buyer?->farmer?->farms ?? collect();
+        $farms = $user->buyer?->farmer?->farms()
+            ->whereIn('FRM_STATUS', ['APPROVED', 'PENDING_REVIEW'])
+            ->orderByRaw("FIELD(FRM_STATUS, 'APPROVED', 'PENDING_REVIEW')")
+            ->orderByDesc('FRM_CREATED_AT')
+            ->get() ?? collect();
 
         return response()->json([
             'farms' => $farms,

@@ -112,7 +112,8 @@ class FarmDirectionsScreen extends StatefulWidget {
 
 enum _Step { direction, journey, arrived }
 
-class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
+class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
+    with SingleTickerProviderStateMixin {
   static const LatLng _fallback = LatLng(10.3178, 123.8742);
   static final Distance _distance = const Distance();
 
@@ -142,7 +143,64 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
   /// Current travel bearing in degrees (0 = north, 90 = east, clockwise).
   /// Updates as the journey advances so the map can swing to a Google-Maps
   /// style heading-up view (the direction you're traveling points "up").
+  ///
+  /// The value eases toward [_headingTarget] via [_headingController] so real
+  /// GPS turns sweep instead of snapping.
   double _heading = 0;
+  double _headingTarget = 0;
+  double _headingFrom = 0;
+  double _headingDelta = 0;
+
+  /// Animates the camera swing between the current heading and the target.
+  /// Duration is scaled by turn size so small jitters turn gently and big
+  /// road turns still feel prompt.
+  late final AnimationController _headingController;
+
+  double get _headingTurnSize => _headingDelta.abs();
+
+  /// Twists the map so the direction of travel points up. Runs even while
+  /// standing still: the camera stays facing the road the user is on instead
+  /// of whatever direction the last GPS dance happened to point.
+  void _turnToward(double target) {
+    if (target == _headingTarget && _headingController.isAnimating) return;
+    _headingTarget = target;
+    _headingFrom = _heading;
+    _headingDelta = _shortestWay(_headingTarget - _headingFrom);
+    final turn = _headingTurnSize;
+    // Sub-degree tweaks are noise; snap instead of replaying an animation.
+    if (turn.abs() < 1) {
+      _heading = _headingTarget;
+      _applyHeading();
+      return;
+    }
+    // Quick-start ease: the camera moves right away and settles as it arrives
+    // at the new heading, so it tracks the turn instead of trailing it.
+    final ms = (240 + turn * 1.2).clamp(320, 550).toInt();
+    _headingController.duration = Duration(milliseconds: ms);
+    _headingController.forward(from: 0);
+  }
+
+  /// Wraps an angular difference into (-180, 180] so east->west interpolates
+  /// the short way across 0° instead of spinning 350° the long way around.
+  double _shortestWay(double delta) {
+    while (delta > 180) {
+      delta -= 360;
+    }
+    while (delta < -180) {
+      delta += 360;
+    }
+    return delta;
+  }
+
+  void _applyHeading() {
+    if (!mounted) return;
+    final t = _headingController.value;
+    final curve = Curves.easeOutCubic.transform(t);
+    _heading = _headingFrom + _headingDelta * curve;
+    try {
+      _mapController.moveAndRotate(_live, 16, -_heading);
+    } catch (_) {}
+  }
 
   late final RoutingService _routing;
   late final Future<void> Function({
@@ -168,6 +226,10 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
     _contactLogger = widget.contactLogger ?? ListingService.logContact;
     _contactAction = widget.contactAction ?? _defaultContactAction;
     _simulateOn = widget.simulate;
+    _headingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..addListener(_applyHeading);
     _initialize();
   }
 
@@ -175,6 +237,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
   void dispose() {
     _positionSub?.cancel();
     _simTimer?.cancel();
+    _headingController.dispose();
     if (widget.routing == null) _routing.close();
     super.dispose();
   }
@@ -415,18 +478,15 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen> {
       _liveAvailable = true;
       _cachedRemaining = null;
     });
-    // Only swing the camera when we actually moved (~2m+), so GPS jitter
-    // doesn't make the map spin while standing still.
-    if (_simulateOn || _distance(from, pos) > 2) {
-      _heading = _bearingFrom(from, pos);
-    }
     _advanceInstructions(pos);
-    try {
-      // Rotate the map so the direction we're traveling points "up" — the
-      // same heading-up feel as Google Maps navigation. The marker arrow is
-      // drawn pointing up, so it stays "facing" where the journey goes.
-      _mapController.moveAndRotate(pos, 16, -_heading);
-    } catch (_) {}
+    // Steer by actual movement direction (this fix -> last fix), so the
+    // camera turns exactly when the user turns — no route look-ahead (which
+    // rotated early) and no long trailing ease (which lagged the turn). The
+    // distance gate keeps standing-still GPS jitter from spinning the map,
+    // even though the rotation itself eases smoothly.
+    if (_simulateOn || _distance(from, pos) > 2) {
+      _turnToward(_bearingFrom(from, pos));
+    }
   }
 
   /// Clockwise bearing (0..360) traveling from [a] to [b] in degrees.

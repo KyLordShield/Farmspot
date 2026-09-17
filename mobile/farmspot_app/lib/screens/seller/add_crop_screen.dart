@@ -124,8 +124,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
     setState(() {
       _farmsLoading = false;
       _farms = farms;
-      // Auto-select the first farm (covers the common single-farm case) but
-      // keep every farm visible/selectable in the UI.
+      // Auto-select the first farm (getFarms() sorts APPROVED first, so this
+      // is the operational farm under the one-farm rule) but keep every farm
+      // visible/selectable in the UI.
       _selectedFarmId ??=
           farms.isNotEmpty ? farms.first['FRM_ID']?.toString() : null;
     });

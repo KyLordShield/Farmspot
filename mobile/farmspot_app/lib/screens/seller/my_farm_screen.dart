@@ -50,7 +50,8 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     if (!mounted) return;
     setState(() {
       _farmsLoading = false;
-      // "One active farm" convention — the first farm returned is the farm.
+      // "One active farm" convention — getFarms() sorts APPROVED farms first,
+      // so the first farm returned is the operational one.
       _farm = farms.isNotEmpty ? farms.first : null;
     });
     // Stats depend on this farm's id; only fetch once the farm is known.

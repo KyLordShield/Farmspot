@@ -255,7 +255,17 @@ class FarmService {
       return farms
           .whereType<Map>()
           .map((farm) => Map<String, dynamic>.from(farm))
-          .toList();
+          .toList()
+        // Defensive order: even if the server changes its ordering, the
+        // client-side single-farm convention always prefers an APPROVED farm,
+        // then PENDING_REVIEW, then REJECTED — newest first within each step.
+        ..sort((a, b) {
+          final byStatus = _farmStatusRank(b).compareTo(_farmStatusRank(a));
+          if (byStatus != 0) return byStatus;
+          return _createdEpochSeconds(b['FRM_CREATED_AT'] as String? ?? '')
+              .compareTo(
+                  _createdEpochSeconds(a['FRM_CREATED_AT'] as String? ?? ''));
+        });
     } catch (_) {
       return const [];
     }
@@ -378,6 +388,21 @@ class FarmService {
     }
 
     throw Exception(message ?? fallback);
+  }
+
+  /// Sort rank for [getFarms]: APPROVED first (the only operational state
+  /// under the one-farm rule), then PENDING_REVIEW, then REJECTED/unknown.
+  static int _farmStatusRank(Map<String, dynamic> farm) {
+    return switch (farm['FRM_STATUS'] as String? ?? '') {
+      'APPROVED' => 2,
+      'PENDING_REVIEW' => 1,
+      _ => 0, // REJECTED or unknown
+    };
+  }
+
+  static int _createdEpochSeconds(String created) {
+    final parsed = DateTime.tryParse(created);
+    return (parsed?.millisecondsSinceEpoch ?? 0) ~/ 1000;
   }
 
   static String _uploadFileName(String name, String path) {

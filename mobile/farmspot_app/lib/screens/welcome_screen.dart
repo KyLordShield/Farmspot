@@ -1,41 +1,49 @@
 import 'package:flutter/material.dart';
-import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'login_screen.dart';
 
-class WelcomeScreen extends StatelessWidget {
+class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fadeController;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _opacity = CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
+    _fadeController.forward().whenComplete(() {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(flex: 3),
-              const FarmSpotLogo(size: 240),
-              const SizedBox(height: 20),
-              const Text(
-                'FarmSpot 5',
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkGreen,
-                ),
-              ),
-              const Spacer(flex: 4),
-              FarmSpotButton(
-                label: 'Get connected',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 40),
-            ],
+        child: Center(
+          child: FadeTransition(
+            opacity: _opacity,
+            child: const FarmSpotLogo(size: 240),
           ),
         ),
       ),
