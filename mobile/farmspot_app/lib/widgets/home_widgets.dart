@@ -16,6 +16,8 @@ class CropListing {
   final String expiresLabel;
   final String contactNumber;
   final String? imageUrl;
+  final String? description;
+  final List<String> photoUrls;
   final String? listingId;
   final String? farmId;
   final IconData placeholderIcon;
@@ -32,6 +34,8 @@ class CropListing {
     this.expiresLabel = '3 days',
     this.contactNumber = '0900-000-0000',
     this.imageUrl,
+    this.description,
+    this.photoUrls = const [],
     this.listingId,
     this.farmId,
     this.placeholderIcon = Icons.eco,

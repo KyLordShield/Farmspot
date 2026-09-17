@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\ListingCreateController;
+use App\Http\Controllers\Api\ListingPhotoController;
 use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
@@ -34,6 +35,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/listings', [ListingCreateController::class, 'store']);
     Route::patch('/listings/{id}', [FarmerListingController::class, 'update']);
     Route::post('/listings/{id}/photo', [FarmerListingController::class, 'uploadPhoto']);
+    Route::post('/listings/{id}/photos', [ListingPhotoController::class, 'store']);
+    Route::patch('/listings/{id}/photos/{photoId}/primary', [ListingPhotoController::class, 'setPrimary']);
+    Route::delete('/listings/{id}/photos/{photoId}', [ListingPhotoController::class, 'destroy']);
     Route::delete('/listings/{id}', [FarmerListingController::class, 'destroy']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);

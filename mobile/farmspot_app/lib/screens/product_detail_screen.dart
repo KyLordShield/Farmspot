@@ -129,6 +129,18 @@ class ProductDetailScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (listing.description != null &&
+                        listing.description!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        listing.description!,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     GestureDetector(
                       onTap: () => _openFarmProfile(context),
@@ -246,7 +258,19 @@ class ProductDetailScreen extends StatelessWidget {
   }
 
   Widget _buildImage() {
-    final url = listing.imageUrl;
+    // The authoritative gallery is the listing's `photos` array; `image` is
+    // just the primary photo's URL. Legacy rows only have `image`, so it's
+    // folded in as a single slide when the photos array lacks it — that keeps
+    // every listing showing something while avoiding a duplicate primary slide.
+    final single = listing.imageUrl;
+    final photos =
+        listing.photoUrls.where((u) => u.trim().isNotEmpty).toList();
+    final galleryUrls = <String>[
+      if (single != null && single.trim().isNotEmpty && !photos.contains(single))
+        single,
+      ...photos,
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Stack(
@@ -260,23 +284,25 @@ class ProductDetailScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: AppColors.fieldBorder),
             ),
-            child: (url == null || url.trim().isEmpty)
+            child: galleryUrls.isEmpty
                 ? Icon(
                     listing.placeholderIcon,
                     size: 90,
                     color: AppColors.primaryGreen,
                   )
-                : Image.network(
-                    url,
-                    width: double.infinity,
-                    height: 220,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      listing.placeholderIcon,
-                      size: 90,
-                      color: AppColors.primaryGreen,
-                    ),
-                  ),
+                : galleryUrls.length == 1
+                    ? Image.network(
+                        galleryUrls.first,
+                        width: double.infinity,
+                        height: 220,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          listing.placeholderIcon,
+                          size: 90,
+                          color: AppColors.primaryGreen,
+                        ),
+                      )
+                    : _PhotoGallery(urls: galleryUrls),
           ),
           Positioned(
             right: 14,
@@ -295,6 +321,89 @@ class ProductDetailScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Swipeable photo gallery used when a listing has more than one photo. Shows
+/// a "n / N" counter in the top-right corner and dot indicators centered along
+/// the bottom that track the current page.
+class _PhotoGallery extends StatefulWidget {
+  final List<String> urls;
+
+  const _PhotoGallery({required this.urls});
+
+  @override
+  State<_PhotoGallery> createState() => _PhotoGalleryState();
+}
+
+class _PhotoGalleryState extends State<_PhotoGallery> {
+  late final PageController _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.urls.length;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: count,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) => Image.network(
+            widget.urls[i],
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.broken_image_outlined,
+              size: 48,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${_index + 1} / $count',
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 12,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < count; i++)
+                Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color:
+                        i == _index ? Colors.white : Colors.white.withValues(alpha: 0.45),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

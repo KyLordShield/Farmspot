@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\ContactLog;
 use App\Models\Farm;
@@ -16,6 +17,8 @@ use Illuminate\Support\Str;
 
 class FarmController extends Controller
 {
+    use FormatsListings;
+
     /**
      * Create a new farm for the authenticated seller candidate.
      *
@@ -205,7 +208,7 @@ class FarmController extends Controller
             ], 404);
         }
 
-        $listings = Listing::with(['category', 'farm'])
+        $listings = Listing::with(['category', 'farm', 'photos'])
             ->where('FRM_ID', $farm->FRM_ID)
             ->orderByRaw("FIELD(LST_STATUS, 'AVAILABLE_NOW', 'SOON_TO_HARVEST', 'NOT_AVAILABLE')")
             ->orderByDesc('LST_CREATED_AT')
@@ -449,36 +452,6 @@ class FarmController extends Controller
             'longitude' => $farm->FRM_LONGITUDE,
             'status' => $farm->FRM_STATUS,
             'photos' => $farm->photos->pluck('FPHOTO_FILE_PATH'),
-        ];
-    }
-
-    /**
-     * Shape a Listing model into the same flat JSON structure the seller
-     * listing endpoints use (id, crop_icon, status, availability,
-     * harvest_date, expiry_date, image, category, farm), so the Farm Profile
-     * screen shares a consistent contract with the rest of the app.
-     */
-    private function formatListing(Listing $listing): array
-    {
-        return [
-            'id' => $listing->LST_ID,
-            'crop_icon' => $listing->LST_CROP_ICON,
-            'status' => $listing->LST_STATUS,
-            'availability' => $listing->LST_AVAILABILITY,
-            'harvest_date' => $listing->LST_HARVEST_DATE,
-            'expiry_date' => $listing->LST_EXPIRY_DATE,
-            'image' => $listing->LST_IMAGE,
-            'created_at' => $listing->LST_CREATED_AT,
-            'category' => [
-                'id' => $listing->category->CAT_ID ?? null,
-                'name' => $listing->category->CAT_NAME ?? null,
-                'icon' => $listing->category->CAT_ICON ?? null,
-            ],
-            'farm' => [
-                'id' => $listing->farm->FRM_ID ?? null,
-                'name' => $listing->farm->FRM_NAME ?? null,
-                'barangay' => $listing->farm->FRM_BARANGAY ?? null,
-            ],
         ];
     }
 

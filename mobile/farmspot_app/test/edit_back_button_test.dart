@@ -47,7 +47,7 @@ void main() {
       (tester) async {
     await _pushScreen(tester, const AddCropScreen(isFirstCrop: true));
 
-    await tester.enterText(find.byType(TextField), 'Tomatoes');
+    await tester.enterText(find.byType(TextField).first, 'Tomatoes');
     await tester.pump();
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
@@ -66,7 +66,7 @@ void main() {
       (tester) async {
     await _pushScreen(tester, const AddCropScreen(isFirstCrop: true));
 
-    await tester.enterText(find.byType(TextField), 'Tomatoes');
+    await tester.enterText(find.byType(TextField).first, 'Tomatoes');
     await tester.pump();
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
@@ -75,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Discard changes?'), findsNothing);
-    expect(find.byType(TextField), findsOneWidget,
+    expect(find.byType(TextField), findsNWidgets(2),
         reason: 'cancelling keeps the form where it was');
   });
 

@@ -56,6 +56,7 @@ class AddCropScreen extends StatefulWidget {
 class _AddCropScreenState extends State<AddCropScreen> {
   final _picker = ImagePicker();
   final _cropLabelCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
 
   bool _farmsLoading = true;
   List<Map<String, dynamic>> _farms = [];
@@ -73,7 +74,25 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   AvailabilityStatus _status = AvailabilityStatus.availableNow;
   DateTime? _harvestDate;
-  XFile? _photo;
+
+  /// Photos picked for the listing, in pick order, plus which one is marked as
+  /// the primary (thumbnail) photo. The marked index is:
+  ///  * create mode — 0 by default (the first photo), and tapping any picked
+  ///    thumb re-marks it;
+  ///  * edit mode — null until the farmer taps a *newly picked* photo, because
+  ///    the listing's existing primary stays primary unless explicitly moved.
+  /// Net: a new-upload always auto-promotes one to primary on the backend, so
+  /// create-with-photos needs no explicit setPrimaryPhoto call for index 0.
+  final List<XFile> _newPhotos = [];
+  int? _markedNewIndex;
+
+  /// Edit mode only: the generated photo id (LPHOTO_ID) currently starred as
+  /// primary. Tapping an *existing* photo calls setPrimaryPhoto immediately
+  /// (optimistic badge move, reverted on failure), while new photos are applied
+  /// after their upload on save. Only one of [_editPrimaryId] / [_markedNewIndex]
+  /// is non-null at a time.
+  String? _editPrimaryId;
+  bool _primaryBusy = false;
 
   bool _isSubmitting = false;
   String? _submitError;
@@ -81,6 +100,36 @@ class _AddCropScreenState extends State<AddCropScreen> {
   /// True when an existing listing is being edited rather than a new one
   /// created. Hides the farm picker and switches submit to the update path.
   bool get _isEditing => widget.existingListing != null;
+
+  /// Edit mode: the listing's currently primary photo id, so the badge starts
+  /// on the right thumbnail. The backend keeps `image` in sync with the
+  /// primary photo, so falling back to the image URL match costs nothing.
+  String? get _baselinePrimaryId {
+    final existing = widget.existingListing;
+    if (existing == null) return null;
+    for (final photo in existing.photos) {
+      if (photo.isPrimary) return photo.id;
+    }
+    final image = existing.image;
+    if (image == null || image.isEmpty) return null;
+    for (final photo in existing.photos) {
+      if (photo.url == image) return photo.id;
+    }
+    return null;
+  }
+
+  /// Helper caption under the photo row describing how primary marking works
+  /// for the current mode/picking state.
+  String get _photoCaption {
+    if (_newPhotos.isNotEmpty) {
+      return 'Starred photo is the thumbnail buyers see. '
+          '${_isEditing ? 'New photos upload on save.' : ''}';
+    }
+    if (_isEditing) {
+      return 'Tap a photo to change the primary thumbnail. Tap + to add more.';
+    }
+    return 'Add one or more photos of your crop.';
+  }
 
   AvailabilityStatus _statusFromBackend(String value) {
     switch (value) {
@@ -102,8 +151,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
       // form starts pre-filled from the listing's current values.
       _farmsLoading = false;
       _cropLabelCtrl.text = existing.cropIcon ?? '';
+      _descCtrl.text = existing.description ?? '';
       _status = _statusFromBackend(existing.status);
       _harvestDate = DateTime.tryParse(existing.harvestDate ?? '');
+      _editPrimaryId = _baselinePrimaryId;
     } else if (!widget.isFirstCrop) {
       _loadFarms();
     } else {
@@ -115,6 +166,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
   @override
   void dispose() {
     _cropLabelCtrl.dispose();
+    _descCtrl.dispose();
     super.dispose();
   }
 
@@ -167,7 +219,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
     return index == -1 ? 0 : index;
   }
 
-  Future<void> _pickPhoto() async {
+  Future<void> _pickPhotos() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -177,6 +229,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
               title: const Text('Photo Library'),
+              subtitle: const Text('Pick one or more photos'),
               onTap: () => Navigator.pop(ctx, ImageSource.gallery),
             ),
             ListTile(
@@ -188,14 +241,79 @@ class _AddCropScreenState extends State<AddCropScreen> {
         ),
       ),
     );
-    if (source == null) return;
+    if (source == null || !mounted) return;
 
-    final picked = await _picker.pickImage(source: source);
-    if (picked != null && mounted) {
+    if (source == ImageSource.camera) {
+      final picked = await _picker.pickImage(source: source);
+      if (picked != null && mounted) {
+        setState(() {
+          _newPhotos.add(picked);
+          _markedNewIndex ??= 0;
+          _submitError = null;
+        });
+      }
+      return;
+    }
+
+    final picked = await _picker.pickMultiImage();
+    if (picked.isEmpty || !mounted) return;
+    setState(() {
+      _newPhotos.addAll(picked);
+      _markedNewIndex ??= 0;
+      _submitError = null;
+    });
+  }
+
+  /// Removes a newly picked photo (not yet on the server) and fixes up the
+  /// primary marker: removing a photo before the marked one shifts the index,
+  /// and removing the marked photo itself falls back to the first remaining
+  /// photo (create) or back to the existing primary (edit).
+  void _removeNewPhoto(int index) {
+    setState(() {
+      _newPhotos.removeAt(index);
+      final marked = _markedNewIndex;
+      if (marked != null) {
+        if (index < marked) {
+          _markedNewIndex = marked - 1;
+        } else if (index == marked) {
+          _markedNewIndex = _newPhotos.isEmpty ? null : 0;
+        }
+      }
+    });
+  }
+
+  /// Edit mode: tapping an existing thumbnail marks it primary *immediately*
+  /// (the backend keeps `image` + home-feed thumbnails in sync). Optimistic
+  /// badge move, reverted with a snackbar if the PATCH fails. Re-tapping the
+  /// current primary is a no-op.
+  Future<void> _setExistingPrimary(String photoId) async {
+    final existing = widget.existingListing;
+    if (existing == null || _primaryBusy || _editPrimaryId == photoId) return;
+
+    final previous = _editPrimaryId;
+    setState(() {
+      _editPrimaryId = photoId;
+      _markedNewIndex = null;
+      _primaryBusy = true;
+    });
+    try {
+      await ListingService.setPrimaryPhoto(
+        listingId: existing.id,
+        photoId: photoId,
+      );
+      if (!mounted) return;
+      setState(() => _primaryBusy = false);
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _photo = picked;
-        _submitError = null;
+        _editPrimaryId = previous;
+        _primaryBusy = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update primary photo. ${_friendlyError(e)}'),
+        ),
+      );
     }
   }
 
@@ -245,14 +363,36 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
     try {
       final label = _cropLabelCtrl.text.trim();
+      final desc = _descCtrl.text.trim();
       final created = await ListingService.createListing(
         farmId: farmId,
         categoryId: category.id,
         status: _status.backendValue,
         cropIcon: label.isEmpty ? null : label,
         harvestDate: _harvestDate,
-        photo: _photo,
+        description: desc.isEmpty ? null : desc,
+        photo: _newPhotos.isNotEmpty ? _newPhotos.first : null,
       );
+
+      // Upload any extra picked photos, then — only when the farmer explicitly
+      // marked a later photo as primary — promote it. The first photo is
+      // already the primary after create/upload, so index 0 needs no call.
+      // NOTE: photos uploaded inside a single batch can tie on the backend's
+      // upload-time ordering (same second, random id tiebreak), so when several
+      // are uploaded together the "marked" match is index-based and best-effort.
+      if (_newPhotos.length > 1) {
+        final updated = await ListingService.uploadListingPhotos(
+          listingId: created.id,
+          photos: _newPhotos.sublist(1),
+        );
+        final marked = _markedNewIndex;
+        if (marked != null && marked > 0 && marked < updated.photos.length) {
+          await ListingService.setPrimaryPhoto(
+            listingId: created.id,
+            photoId: updated.photos[marked].id,
+          );
+        }
+      }
 
       if (!mounted) return;
 
@@ -297,13 +437,15 @@ class _AddCropScreenState extends State<AddCropScreen> {
       return _cropLabelCtrl.text.trim() != (existing.cropIcon ?? '') ||
           _status != _statusFromBackend(existing.status) ||
           dateStr != baselineDateStr ||
-          _photo != null ||
+          _newPhotos.isNotEmpty ||
+          _descCtrl.text.trim() != (existing.description ?? '') ||
           _selectedCategoryIndex != _baselineCategoryIndex;
     }
     return _cropLabelCtrl.text.trim().isNotEmpty ||
         _status != AvailabilityStatus.availableNow ||
         _harvestDate != null ||
-        _photo != null ||
+        _newPhotos.isNotEmpty ||
+        _descCtrl.text.trim().isNotEmpty ||
         _selectedCategoryIndex != _baselineCategoryIndex;
   }
 
@@ -366,13 +508,29 @@ class _AddCropScreenState extends State<AddCropScreen> {
         harvestDate:
             _harvestDate != null ? _dateOnly(_harvestDate!) : null,
         status: _status.backendValue,
+        description: _descCtrl.text,
       );
 
-      if (_photo != null) {
-        await ListingService.updateListingPhoto(
+      // Existing-photo primary changes were already applied the moment the
+      // farmer tapped them. Newly picked photos still need uploading, and a
+      // newly marked one needs promotion (its LPHOTO_ID only exists after
+      // upload, so this part has to wait for save).
+      if (_newPhotos.isNotEmpty) {
+        final afterUpload = await ListingService.uploadListingPhotos(
           listingId: existing.id,
-          photo: _photo!,
+          photos: _newPhotos,
         );
+        final marked = _markedNewIndex;
+        if (marked != null) {
+          final existingCount = afterUpload.photos.length - _newPhotos.length;
+          final targetIndex = existingCount + marked;
+          if (targetIndex >= 0 && targetIndex < afterUpload.photos.length) {
+            await ListingService.setPrimaryPhoto(
+              listingId: existing.id,
+              photoId: afterUpload.photos[targetIndex].id,
+            );
+          }
+        }
       }
 
       if (!mounted) return;
@@ -544,6 +702,22 @@ class _AddCropScreenState extends State<AddCropScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
+                  const FieldLabel(
+                    'DESCRIPTION',
+                    badge: '(optional)',
+                    badgeColor: Colors.black38,
+                  ),
+                  TextField(
+                    controller: _descCtrl,
+                    maxLines: 4,
+                    minLines: 2,
+                    textInputAction: TextInputAction.newline,
+                    decoration: _inputDecoration(
+                      hint:
+                          'e.g. Freshly harvested, farm-direct, passes quality checks',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   const FieldLabel('SET AVAILABILITY STATUS'),
                   SelectableOptionTile(
                     icon: Icons.check_circle_outline,
@@ -605,43 +779,50 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   ),
                   SizedBox(
                     height: 96,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
                       children: [
-                        if (_photo != null) ...[
-                          _SinglePhotoTile(
-                            key: ObjectKey(_photo),
-                            file: _photo!,
-                            onRemove: () => setState(() => _photo = null),
-                          ),
-                          const SizedBox(width: 12),
-                        ] else if (_isEditing &&
-                            (widget.existingListing?.image?.isEmpty ?? true) ==
-                                false) ...[
-                          // Edit mode: show the listing's CURRENT photo until a
-                          // replacement is picked (PhotoPlaceholder's add tile
-                          // swaps it out via _pickPhoto).
-                          _ExistingPhotoTile(
-                            url: widget.existingListing!.image!,
+                        // Edit mode shows the listing's existing gallery first,
+                        // then any newly picked photos — matching how the
+                        // backend orders photos (oldest first) so the "marked"
+                        // index maths on save line up.
+                        if (_isEditing)
+                          for (final photo in widget.existingListing!.photos) ...[
+                            _ExistingPhotoTile(
+                              key: ObjectKey(photo.id),
+                              url: photo.url,
+                              primary: _editPrimaryId == photo.id,
+                              busy: _primaryBusy && _editPrimaryId == photo.id,
+                              onPrimaryTap: () =>
+                                  _setExistingPrimary(photo.id),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                        for (var i = 0; i < _newPhotos.length; i++) ...[
+                          _NewPhotoTile(
+                            key: ObjectKey(_newPhotos[i]),
+                            file: _newPhotos[i],
+                            primary: _markedNewIndex == i,
+                            onPrimaryTap: () => setState(() {
+                              _markedNewIndex = i;
+                              _editPrimaryId = null;
+                            }),
+                            onRemove: () => _removeNewPhoto(i),
                           ),
                           const SizedBox(width: 12),
                         ],
-                        PhotoPlaceholder(isAddButton: true, onTap: _pickPhoto),
+                        PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
                       ],
                     ),
                   ),
-                  if (_isEditing) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      _photo != null
-                          ? 'Current photo will be replaced on save.'
-                          : 'Tap + to replace the current photo.',
-                      style: const TextStyle(
-                        color: Colors.black45,
-                        fontSize: 11,
-                      ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _photoCaption,
+                    style: const TextStyle(
+                      color: Colors.black45,
+                      fontSize: 11,
                     ),
-                  ],
+                  ),
                   const SizedBox(height: 6),
                   if (_submitError != null) ...[
                     const SizedBox(height: 12),
@@ -692,125 +873,219 @@ class _AddCropScreenState extends State<AddCropScreen> {
   }
 }
 
-/// Static thumbnail of a listing's CURRENT photo (edit mode, before a
-/// replacement is picked). Rendered directly from the stored Cloudinary URL —
-/// no remove affordance, because deleting a photo isn't part of editing.
+/// Thumbnail of an already-uploaded gallery photo (edit mode). Tapping it
+/// marks it as the primary photo right away; a starred badge appears at the
+/// top-left and an amber border highlights it. While the PATCH is in flight a
+/// small spinner overlays the tapped tile and further taps are deferred.
 class _ExistingPhotoTile extends StatelessWidget {
   final String url;
+  final bool primary;
+  final bool busy;
+  final VoidCallback onPrimaryTap;
 
-  const _ExistingPhotoTile({required this.url});
+  const _ExistingPhotoTile({
+    super.key,
+    required this.url,
+    required this.primary,
+    required this.busy,
+    required this.onPrimaryTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 96,
-        height: 96,
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stack) => Container(
-            color: Colors.grey.shade200,
-            child: const Icon(Icons.broken_image_outlined,
-                color: Colors.grey, size: 24),
-          ),
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Container(
-              color: Colors.grey.shade200,
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+    return GestureDetector(
+      onTap: primary || busy ? null : onPrimaryTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => Container(
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.broken_image_outlined,
+                      color: Colors.grey, size: 24),
                 ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: Colors.grey.shade200,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+              _photoBorder(primary: primary),
+              if (primary)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  child: _PrimaryBadge(),
+                ),
+              if (busy)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black26,
+                    child: Center(
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Single-photo preview with a remove ("X") affordance. Reads the picker's
-/// XFile as bytes (web-safe) and renders via Image.memory.
-class _SinglePhotoTile extends StatefulWidget {
+/// Thumbnail of a freshly picked photo (not yet uploaded). Tapping it marks it
+/// as the primary photo; the X removes it from the pending list. Renders the
+/// picker's XFile as bytes (web-safe).
+class _NewPhotoTile extends StatefulWidget {
   final XFile file;
+  final bool primary;
+  final VoidCallback onPrimaryTap;
   final VoidCallback onRemove;
 
-  const _SinglePhotoTile({
+  const _NewPhotoTile({
     super.key,
     required this.file,
+    required this.primary,
+    required this.onPrimaryTap,
     required this.onRemove,
   });
 
   @override
-  State<_SinglePhotoTile> createState() => _SinglePhotoTileState();
+  State<_NewPhotoTile> createState() => _NewPhotoTileState();
 }
 
-class _SinglePhotoTileState extends State<_SinglePhotoTile> {
+class _NewPhotoTileState extends State<_NewPhotoTile> {
   late final Future<Uint8List> _bytes = widget.file.readAsBytes();
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 96,
-        height: 96,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            FutureBuilder<Uint8List>(
-              future: _bytes,
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  return Image.memory(snapshot.data!, fit: BoxFit.cover);
-                }
-                if (snapshot.hasError) {
+    return GestureDetector(
+      onTap: widget.primary ? null : widget.onPrimaryTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              FutureBuilder<Uint8List>(
+                future: _bytes,
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                  }
+                  if (snapshot.hasError) {
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.grey,
+                        size: 24,
+                      ),
+                    );
+                  }
                   return Container(
                     color: Colors.grey.shade200,
-                    child: const Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.grey,
-                      size: 24,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
                   );
-                }
-                return Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                },
+              ),
+              _photoBorder(primary: widget.primary),
+              if (widget.primary)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  child: _PrimaryBadge(),
+                ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: widget.onRemove,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(10),
+                      ),
                     ),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(Icons.close, size: 16, color: Colors.white),
                   ),
-                );
-              },
-            ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: widget.onRemove,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(10),
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: const Icon(Icons.close, size: 16, color: Colors.white),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// Amber border + star badge on the photo currently marked as primary.
+class _PrimaryBadge extends StatelessWidget {
+  const _PrimaryBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFB300),
+        borderRadius: BorderRadius.only(bottomRight: Radius.circular(10)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      child: const Icon(Icons.star, size: 14, color: Colors.white),
+    );
+  }
+}
+
+Widget _photoBorder({required bool primary}) {
+  return IgnorePointer(
+    child: Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: primary ? const Color(0xFFFFB300) : Colors.transparent,
+          width: 2,
+        ),
+      ),
+    ),
+  );
 }

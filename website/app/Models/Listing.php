@@ -32,4 +32,22 @@ class Listing extends Model
     {
         return $this->belongsTo(CropCategory::class, 'CAT_ID', 'CAT_ID');
     }
+
+    /**
+     * Full photo gallery, oldest-first so "the oldest remaining photo" is a
+     * deterministic fallback when the primary is deleted. LST_IMAGE remains a
+     * denormalized cache of whichever row has LPHOTO_IS_PRIMARY = 1.
+     */
+    public function photos()
+    {
+        return $this->hasMany(ListingPhoto::class, 'LST_ID', 'LST_ID')
+            ->orderBy('LPHOTO_UPLOADED_AT')
+            ->orderBy('LPHOTO_ID');
+    }
+
+    public function primaryPhoto()
+    {
+        return $this->hasOne(ListingPhoto::class, 'LST_ID', 'LST_ID')
+            ->where('LPHOTO_IS_PRIMARY', 1);
+    }
 }

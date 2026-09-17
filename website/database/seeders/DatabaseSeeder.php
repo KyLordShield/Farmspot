@@ -11,6 +11,8 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->call(CropCategorySeeder::class);
+
         User::create([
             'USR_ID' => strtoupper(Str::random(6)),
             'USR_NAME' => 'FarmSpot Admin',

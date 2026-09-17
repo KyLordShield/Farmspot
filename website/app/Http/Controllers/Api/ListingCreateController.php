@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Farm;
 use App\Models\Listing;
+use App\Models\ListingPhoto;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +15,8 @@ use Illuminate\Support\Str;
 
 class ListingCreateController extends Controller
 {
+    use FormatsListings;
+
     /**
      * Create a new crop listing for the authenticated seller.
      * Gated on seller mode being active and the chosen farm belonging
@@ -35,6 +39,7 @@ class ListingCreateController extends Controller
             'farm_id' => ['required', 'string'],
             'category_id' => ['required', 'string', 'exists:crop_category,CAT_ID'],
             'crop_icon' => ['nullable', 'string'],
+            'description' => ['nullable', 'string'],
             'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
             'harvest_date' => ['nullable', 'date'],
             'photo' => ['nullable', 'image', 'max:5120'],
@@ -73,6 +78,7 @@ class ListingCreateController extends Controller
                 Listing::create([
                     'LST_ID' => $listingId,
                     'LST_CROP_ICON' => $validated['crop_icon'] ?? null,
+                    'LST_DESCRIPTION' => $validated['description'] ?? null,
                     'LST_STATUS' => $validated['status'],
                     'LST_AVAILABILITY' => 'ACTIVE',
                     'LST_HARVEST_DATE' => $validated['harvest_date'] ?? null,
@@ -85,7 +91,19 @@ class ListingCreateController extends Controller
                     'CAT_ID' => $validated['category_id'],
                 ]);
 
-                return Listing::with(['farm', 'category'])->find($listingId);
+                // The optional initial photo also becomes the FIRST gallery row,
+                // so listing_photo is the source of truth from creation onward.
+                if ($imageUrl !== null) {
+                    ListingPhoto::create([
+                        'LPHOTO_ID' => $this->uniqueId('listing_photo', 'LPHOTO_ID'),
+                        'LPHOTO_FILE_PATH' => $imageUrl,
+                        'LPHOTO_UPLOADED_AT' => now(),
+                        'LPHOTO_IS_PRIMARY' => 1,
+                        'LST_ID' => $listingId,
+                    ]);
+                }
+
+                return Listing::with(['farm', 'category', 'photos'])->find($listingId);
             });
         } catch (HttpResponseException $e) {
             throw $e;
@@ -105,30 +123,6 @@ class ListingCreateController extends Controller
      * Shape a Listing model into the flat JSON structure shared by the
      * farmer-facing listing endpoints.
      */
-    private function formatListing(Listing $listing): array
-    {
-        return [
-            'id' => $listing->LST_ID,
-            'crop_icon' => $listing->LST_CROP_ICON,
-            'status' => $listing->LST_STATUS,
-            'availability' => $listing->LST_AVAILABILITY,
-            'harvest_date' => $listing->LST_HARVEST_DATE,
-            'expiry_date' => $listing->LST_EXPIRY_DATE,
-            'image' => $listing->LST_IMAGE,
-            'created_at' => $listing->LST_CREATED_AT,
-            'category' => [
-                'id' => $listing->category->CAT_ID ?? null,
-                'name' => $listing->category->CAT_NAME ?? null,
-                'icon' => $listing->category->CAT_ICON ?? null,
-            ],
-            'farm' => [
-                'id' => $listing->farm->FRM_ID ?? null,
-                'name' => $listing->farm->FRM_NAME ?? null,
-                'barangay' => $listing->farm->FRM_BARANGAY ?? null,
-            ],
-        ];
-    }
-
     private function uniqueId($table, $column): string
     {
         do {

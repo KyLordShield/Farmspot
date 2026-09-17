@@ -122,6 +122,7 @@ class ListingService {
     required String status,
     String? cropIcon,
     DateTime? harvestDate,
+    String? description,
     XFile? photo,
   }) async {
     final token = await AuthService.getToken();
@@ -142,6 +143,9 @@ class ListingService {
         request.fields['status'] = status;
         if (cropIcon != null && cropIcon.trim().isNotEmpty) {
           request.fields['crop_icon'] = cropIcon.trim();
+        }
+        if (description != null && description.trim().isNotEmpty) {
+          request.fields['description'] = description.trim();
         }
         if (harvestDate != null) {
           request.fields['harvest_date'] = _dateOnly(harvestDate);
@@ -173,6 +177,8 @@ class ListingService {
             'status': status,
             if (cropIcon != null && cropIcon.trim().isNotEmpty)
               'crop_icon': cropIcon.trim(),
+            if (description != null && description.trim().isNotEmpty)
+              'description': description.trim(),
             if (harvestDate != null) 'harvest_date': _dateOnly(harvestDate),
           },
         );
@@ -221,6 +227,7 @@ class ListingService {
     String? cropIcon,
     String? harvestDate,
     String? status,
+    String? description,
   }) async {
     final token = await AuthService.getToken();
     if (token == null) throw Exception('Not logged in.');
@@ -242,6 +249,8 @@ class ListingService {
             'harvest_date': harvestDate.trim(),
           if (status != null && status.trim().isNotEmpty)
             'status': status.trim(),
+          if (description != null)
+            'description': description.trim(),
         },
       );
     } catch (e) {
@@ -291,6 +300,110 @@ class ListingService {
     }
 
     return _listingResult(response, 'Update listing photo failed.');
+  }
+
+  /// Adds one or more photos to a listing's gallery
+  /// (POST /api/listings/{id}/photos). Each file is sent under the `photos[]`
+  /// field name as byte-based multipart, mirroring createListing(). Returns the
+  /// updated Listing (with the new photos in its `photos` array) on success, or
+  /// throws an Exception with a user-friendly message.
+  static Future<Listing> uploadListingPhotos({
+    required String listingId,
+    required List<XFile> photos,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+    if (photos.isEmpty) {
+      throw Exception('No photos were provided to upload.');
+    }
+
+    http.Response response;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/listings/$listingId/photos'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      for (var i = 0; i < photos.length; i++) {
+        final photo = photos[i];
+        final bytes = await photo.readAsBytes();
+        final uploadName = _uploadFileName(photo.name, photo.path);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'photos[]',
+            bytes,
+            filename: uploadName,
+            contentType: _contentTypeFor(uploadName),
+          ),
+        );
+      }
+
+      final streamed = await request.send();
+      response = await http.Response.fromStream(streamed);
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Upload listing photos failed.');
+  }
+
+  /// Marks one of a listing's photos as the primary gallery photo
+  /// (PATCH /api/listings/{id}/photos/{photoId}/primary). The backend keeps
+  /// `image` in sync with the primary photo, so the picker thumbnails on the
+  /// home feed update to match. Returns the updated Listing on success, or
+  /// throws an Exception with a user-friendly message.
+  static Future<Listing> setPrimaryPhoto({
+    required String listingId,
+    required String photoId,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.patch(
+        Uri.parse('$baseUrl/listings/$listingId/photos/$photoId/primary'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Set primary photo failed.');
+  }
+
+  /// Removes one photo from a listing's gallery
+  /// (DELETE /api/listings/{id}/photos/{photoId}). The backend destroys the
+  /// Cloudinary image, auto-promotes another photo to primary when the deleted
+  /// one was primary (keeping `image` in sync), and leaves `image` cleared when
+  /// the last photo is removed. Returns the updated Listing on success, or
+  /// throws an Exception with a user-friendly message.
+  static Future<Listing> deleteListingPhoto({
+    required String listingId,
+    required String photoId,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.delete(
+        Uri.parse('$baseUrl/listings/$listingId/photos/$photoId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Delete listing photo failed.');
   }
 
   /// Hard-deletes one of the farmer's own listings

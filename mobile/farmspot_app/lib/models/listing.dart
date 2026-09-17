@@ -1,5 +1,27 @@
 import '../widgets/home_widgets.dart';
 
+/// A single photo in a listing's gallery, as returned by the backend's
+/// `photos` array: [{id, url, is_primary}].
+class ListingPhoto {
+  final String id;
+  final String url;
+  final bool isPrimary;
+
+  const ListingPhoto({
+    required this.id,
+    required this.url,
+    required this.isPrimary,
+  });
+
+  factory ListingPhoto.fromJson(Map<String, dynamic> json) {
+    return ListingPhoto(
+      id: json['id'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      isPrimary: json['is_primary'] as bool? ?? false,
+    );
+  }
+}
+
 /// Raw listing data as returned by GET /api/listings and /api/listings/{id}.
 class Listing {
   final String id;
@@ -9,6 +31,8 @@ class Listing {
   final String? harvestDate;
   final String? expiryDate;
   final String? image;
+  final String? description;
+  final List<ListingPhoto> photos;
   final String? createdAt;
   final String? categoryId;
   final String? categoryName;
@@ -26,6 +50,8 @@ class Listing {
     this.harvestDate,
     this.expiryDate,
     this.image,
+    this.description,
+    this.photos = const [],
     this.createdAt,
     this.categoryId,
     this.categoryName,
@@ -37,6 +63,7 @@ class Listing {
   });
 
   factory Listing.fromJson(Map<String, dynamic> json) {
+    final photosRaw = json['photos'] as List? ?? const [];
     return Listing(
       id: json['id'] as String,
       cropIcon: json['crop_icon'] as String?,
@@ -45,6 +72,10 @@ class Listing {
       harvestDate: json['harvest_date'] as String?,
       expiryDate: json['expiry_date'] as String?,
       image: json['image'] as String?,
+      description: json['description'] as String?,
+      photos: photosRaw
+          .map((p) => ListingPhoto.fromJson(p as Map<String, dynamic>))
+          .toList(),
       createdAt: json['created_at'] as String?,
       categoryId: (json['category'] as Map?)?['id'] as String?,
       categoryName: (json['category'] as Map?)?['name'] as String?,
@@ -77,6 +108,8 @@ class Listing {
       cropType: categoryName ?? 'Vegetable',
       status: status,
       imageUrl: image,
+      description: description,
+      photoUrls: photos.map((p) => p.url).toList(growable: false),
       barangay: barangay ?? 'Brgy. Sudlon',
       postedLabel: _relativeDate(createdAt),
       expiresLabel: _relativeExpiry(expiryDate),

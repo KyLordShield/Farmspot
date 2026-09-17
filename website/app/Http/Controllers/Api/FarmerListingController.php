@@ -2,14 +2,20 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Listing;
+use App\Models\ListingPhoto;
 use App\Support\CloudinaryImage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class FarmerListingController extends Controller
 {
+    use FormatsListings;
+
     /**
      * List ALL listings belonging to the authenticated farmer — any
      * LST_STATUS / LST_AVAILABILITY (unlike the buyer-facing feed which is
@@ -27,7 +33,7 @@ class FarmerListingController extends Controller
             ], 403);
         }
 
-        $listings = Listing::with(['farm', 'category'])
+        $listings = Listing::with(['farm', 'category', 'photos'])
             ->where('FMR_ID', $farmer->FMR_ID)
             ->orderByDesc('LST_CREATED_AT')
             ->get()
@@ -53,7 +59,7 @@ class FarmerListingController extends Controller
             ], 403);
         }
 
-        $listing = Listing::with(['farm', 'category'])
+        $listing = Listing::with(['farm', 'category', 'photos'])
             ->where('LST_ID', $listingId)
             ->where('FMR_ID', $farmer->FMR_ID)
             ->first();
@@ -91,11 +97,12 @@ class FarmerListingController extends Controller
      * NOTE: photo uploads CANNOT ride this PATCH — PHP only populates
      * $_FILES (and $_POST) for POST requests, so a multipart PATCH arrives
      * with empty input/files on this stack. Photo changes go through
-     * POST /api/listings/{id}/photo instead.
+     * POST /api/listings/{id}/photos (gallery) or the legacy
+     * POST /api/listings/{id}/photo (single replace) instead.
      */
     public function update(Request $request, $listingId)
     {
-        $listing = Listing::with(['farm', 'category'])->find($listingId);
+        $listing = Listing::with(['farm', 'category', 'photos'])->find($listingId);
 
         if (! $listing) {
             return response()->json([
@@ -114,6 +121,7 @@ class FarmerListingController extends Controller
         $validated = $request->validate([
             'category_id' => ['nullable', 'string', 'exists:crop_category,CAT_ID'],
             'crop_icon' => ['nullable', 'string'],
+            'description' => ['nullable', 'string'],
             'harvest_date' => ['nullable', 'date'],
             'status' => ['nullable', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
         ]);
@@ -124,6 +132,10 @@ class FarmerListingController extends Controller
 
         if (array_key_exists('crop_icon', $validated)) {
             $listing->LST_CROP_ICON = $validated['crop_icon'];
+        }
+
+        if (array_key_exists('description', $validated)) {
+            $listing->LST_DESCRIPTION = $validated['description'];
         }
 
         if (array_key_exists('harvest_date', $validated)) {
@@ -139,7 +151,7 @@ class FarmerListingController extends Controller
         $listing->LST_UPDATED_AT = now();
         $listing->save();
 
-        $fresh = Listing::with(['farm', 'category'])->find($listing->LST_ID);
+        $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
 
         return response()->json([
             'message' => 'Listing updated successfully.',
@@ -148,14 +160,16 @@ class FarmerListingController extends Controller
     }
 
     /**
-     * Replace the photo of one of the farmer's own listings. POST makes the
-     * multipart upload actually land (PHP only parses multipart for POST).
-     * The new image is uploaded to Cloudinary exactly like POST /api/listings
-     * does; once the row points at it, the old cloud asset is destroyed.
+     * LEGACY single-photo replace, kept working for the Flutter build that
+     * still calls POST /api/listings/{id}/photo. Now gallery-aware: the new
+     * image is appended as the listing's primary listing_photo row, every
+     * other row is demoted, and the previous primary row + cloud asset are
+     * removed. Non-primary gallery photos are left untouched. New clients
+     * should use POST /api/listings/{id}/photos instead.
      */
     public function uploadPhoto(Request $request, $listingId)
     {
-        $listing = Listing::with(['farm', 'category'])->find($listingId);
+        $listing = Listing::with(['farm', 'category', 'photos'])->find($listingId);
 
         if (! $listing) {
             return response()->json([
@@ -180,17 +194,41 @@ class FarmerListingController extends Controller
         $path = "listing-photos/{$listing->LST_ID}/" . uniqid() . ".{$extension}";
 
         Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+        $newUrl = Storage::disk('cloudinary')->url($path);
 
-        $oldImage = $listing->LST_IMAGE;
-        $listing->LST_IMAGE = Storage::disk('cloudinary')->url($path);
-        $listing->LST_UPDATED_AT = now();
-        $listing->save();
+        // Capture the outgoing primary (or the plain LST_IMAGE for an
+        // un-backfilled legacy row) before it is replaced.
+        $previousPrimary = ListingPhoto::where('LST_ID', $listing->LST_ID)
+            ->where('LPHOTO_IS_PRIMARY', 1)
+            ->first();
+        $oldImage = $previousPrimary?->LPHOTO_FILE_PATH ?? $listing->LST_IMAGE;
+
+        DB::transaction(function () use ($listing, $newUrl, $previousPrimary) {
+            ListingPhoto::where('LST_ID', $listing->LST_ID)
+                ->update(['LPHOTO_IS_PRIMARY' => 0]);
+
+            ListingPhoto::create([
+                'LPHOTO_ID' => $this->uniqueId('listing_photo', 'LPHOTO_ID'),
+                'LPHOTO_FILE_PATH' => $newUrl,
+                'LPHOTO_UPLOADED_AT' => now(),
+                'LPHOTO_IS_PRIMARY' => 1,
+                'LST_ID' => $listing->LST_ID,
+            ]);
+
+            $listing->LST_IMAGE = $newUrl;
+            $listing->LST_UPDATED_AT = now();
+            $listing->save();
+
+            $previousPrimary?->delete();
+        });
 
         // Destroy the old asset only AFTER the new one was uploaded and the row
         // has switched over, so a failed upload never loses the listing photo.
-        CloudinaryImage::deleteByUrl($oldImage);
+        if ($oldImage !== $newUrl) {
+            CloudinaryImage::deleteByUrl($oldImage);
+        }
 
-        $fresh = Listing::with(['farm', 'category'])->find($listing->LST_ID);
+        $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
 
         return response()->json([
             'message' => 'Listing photo updated successfully.',
@@ -200,12 +238,14 @@ class FarmerListingController extends Controller
 
     /**
      * Hard-delete one of the farmer's own listings (auth + ownership required).
-     * Also destroys the listing's Cloudinary image if one exists, so no cloud
-     * asset is orphaned by the DB row going away.
+     * Also destroys every Cloudinary gallery asset (primary and any additional
+     * listing_photo rows) before the DB row goes away, so no cloud asset is
+     * orphaned. The listing_photo rows themselves cascade-delete with the
+     * listing FK.
      */
     public function destroy(Request $request, $listingId)
     {
-        $listing = Listing::find($listingId);
+        $listing = Listing::with('photos')->find($listingId);
 
         if (! $listing) {
             return response()->json([
@@ -223,7 +263,13 @@ class FarmerListingController extends Controller
             ], 403);
         }
 
-        CloudinaryImage::deleteByUrl($listing->LST_IMAGE);
+        if ($listing->photos->isNotEmpty()) {
+            foreach ($listing->photos as $photo) {
+                CloudinaryImage::deleteByUrl($photo->LPHOTO_FILE_PATH);
+            }
+        } else {
+            CloudinaryImage::deleteByUrl($listing->LST_IMAGE);
+        }
 
         $listing->delete();
 
@@ -233,31 +279,12 @@ class FarmerListingController extends Controller
         ]);
     }
 
-    /**
-     * Shape a Listing model into the same flat JSON structure the buyer feed
-     * uses, so the farmer-facing screens share a consistent contract.
-     */
-    private function formatListing(Listing $listing): array
+    private function uniqueId($table, $column): string
     {
-        return [
-            'id' => $listing->LST_ID,
-            'crop_icon' => $listing->LST_CROP_ICON,
-            'status' => $listing->LST_STATUS,
-            'availability' => $listing->LST_AVAILABILITY,
-            'harvest_date' => $listing->LST_HARVEST_DATE,
-            'expiry_date' => $listing->LST_EXPIRY_DATE,
-            'image' => $listing->LST_IMAGE,
-            'created_at' => $listing->LST_CREATED_AT,
-            'category' => [
-                'id' => $listing->category->CAT_ID ?? null,
-                'name' => $listing->category->CAT_NAME ?? null,
-                'icon' => $listing->category->CAT_ICON ?? null,
-            ],
-            'farm' => [
-                'id' => $listing->farm->FRM_ID ?? null,
-                'name' => $listing->farm->FRM_NAME ?? null,
-                'barangay' => $listing->farm->FRM_BARANGAY ?? null,
-            ],
-        ];
+        do {
+            $id = strtoupper(Str::random(6));
+        } while (DB::table($table)->where($column, $id)->exists());
+
+        return $id;
     }
 }
