@@ -183,7 +183,7 @@ new Chart(document.getElementById('cropChart'), {
         labels: cropLabels,
         datasets: [{
             data: cropValues,
-            backgroundColor: ['#2b6d3c', '#4f8a60', '#87ad93', '#a9c3b3', '#c8d9cf', '#e2ebe5'],
+            backgroundColor: ['#1b6b2c', '#3d9347', '#6fcf6f', '#a9d8b4', '#c8e6d0', '#e2efe6'],
             borderRadius: 6
         }]
     },
@@ -211,7 +211,7 @@ new Chart(document.getElementById('growthChart'), {
         labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
         datasets: [{
             data: [0, 0, 0, 0],
-            backgroundColor: ['#e2ebe5', '#c8d9cf', '#87ad93', '#2b6d3c'],
+            backgroundColor: ['#e2efe6', '#c8e6d0', '#6fcf6f', '#1b6b2c'],
             borderRadius: 6
         }]
     },

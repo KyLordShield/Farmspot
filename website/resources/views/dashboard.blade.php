@@ -216,7 +216,7 @@ new Chart(document.getElementById('cropChart'), {
         datasets: [{
             label: 'Listings',
             data: values,
-            backgroundColor: '#2b6d3c',
+            backgroundColor: '#1b6b2c',
             borderRadius: 6
         }]
     },
@@ -247,7 +247,7 @@ if (document.getElementById('userChart')) {
             labels: ['Farmers', 'Buyers'],
             datasets: [{
                 data: [@json($farmers), @json(max($users - $farmers, 0))],
-                backgroundColor: ['#2b6d3c', '#d3dad6'],
+                backgroundColor: ['#1b6b2c', '#d3dad6'],
                 borderWidth: 0
             }]
         },

@@ -19,22 +19,22 @@
     --text-muted: #5d6a64;
     --text-faint: #8a948f;
 
-    /* Brand — forest green scale */
-    --brand-900: #0d2417;
-    --brand-800: #133221;
-    --brand-700: #1a4528;
-    --brand-600: #20572f;
-    --brand-500: #2b6d3c;
-    --brand-400: #4f8a60;
-    --brand-300: #87ad93;
-    --brand-100: #deebe2;
-    --brand-50: #f1f7f3;
+    /* Brand — forest green scale (derived from mobile app AppColors) */
+    --brand-900: #0a3414;
+    --brand-800: #0f4a1c;  /* app darkGreen */
+    --brand-700: #1b6b2c;  /* app primaryGreen — primary buttons */
+    --brand-600: #1f6e30;
+    --brand-500: #2c853f;
+    --brand-400: #3d9347;
+    --brand-300: #6fcf6f;  /* app lightGreen */
+    --brand-100: #dbf3db;
+    --brand-50: #f0faf0;
 
     /* Semantic — restrained, tint-on-tint status colors */
-    --green:  #1e7d46;  --green-bg:  #e5f2ea;  --green-bd:  #c3e3d1;
-    --amber:  #8a6214;  --amber-bg:  #fbf3dc;  --amber-bd:  #ecdcA6;
+    --green:  #1b6b2c;  --green-bg:  #e5f2ea;  --green-bd:  #c3e3d1;
+    --amber:  #ff9800;  --amber-bg:  #fbf3dc;  --amber-bd:  #ecdcA6;
     --red:    #b23a33;  --red-bg:    #fbeae9;  --red-bd:    #efc8c5;
-    --slate:  #475569;  --slate-bg:  #eef1f4;  --slate-bd:  #d9e0e6;
+    --slate:  #9e9e9e;  --slate-bg:  #eef1f4;  --slate-bd:  #d9e0e6;
 }
 
 * {
@@ -296,7 +296,7 @@ a {
 
 .btn:focus,
 .btn:focus-visible {
-    box-shadow: 0 0 0 0.2rem rgba(43, 109, 60, 0.18);
+    box-shadow: 0 0 0 0.2rem rgba(27, 107, 44, 0.18);
 }
 
 /* Primary action */
@@ -522,7 +522,7 @@ a {
 .form-control:focus,
 .form-select:focus {
     border-color: var(--brand-400);
-    box-shadow: 0 0 0 0.18rem rgba(43, 109, 60, 0.12);
+    box-shadow: 0 0 0 0.18rem rgba(27, 107, 44, 0.12);
 }
 
 .form-label {

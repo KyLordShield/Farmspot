@@ -4,13 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:farmspot_app/screens/product_detail_screen.dart';
 import 'package:farmspot_app/widgets/home_widgets.dart';
 
-// Offline widget checks for the swipeable photo gallery + description added to
-// ProductDetailScreen: a multi-photo listing renders a PageView with a
-// "n / N" counter and dot indicators that track swipes, plus the description;
-// single-photo listings fall back to plain Image.network (no gallery, no
-// counter) and photo-less listings keep the placeholder icon.
+// Offline widget checks for the redesigned product-detail screen: a single
+// cover/header photo up top, a swipeable thumbnail strip ("Photos" section)
+// below the header when >1 photos, and a full-screen viewer that opens on
+// any tap.  Description text continues to display when non-empty, single-photo
+// listings skip the strip entirely, and photo-less listings fall back to the
+// placeholder icon.
 void main() {
-  CropListing baseListing({List<String> photos = const []}) {
+  CropListing makeListing({
+    List<String> photos = const [],
+    String? description,
+  }) {
+    final single = photos.isNotEmpty ? photos.first : null;
     return CropListing(
       cropName: 'Cabbage',
       farmName: 'Test Farm',
@@ -21,92 +26,94 @@ void main() {
       expiresLabel: '3 days',
       distance: '0.4 km away',
       contactNumber: '09870000000',
-      imageUrl: photos.isNotEmpty ? photos.first : null,
+      imageUrl: single,
       photoUrls: photos,
-      description: null,
+      description: description,
     );
   }
 
-  testWidgets('multi-photo listing shows swipeable gallery with counter+dots+description',
+  // -----------------------------------------------------------
+  // Multi-photo listing with description
+  // -----------------------------------------------------------
+  testWidgets(
+      'multi-photo listing: header + strip + tap-to-view full-screen',
       (tester) async {
-    final listing = baseListing(photos: [
-      'https://example.invalid/1.jpg',
-      'https://example.invalid/2.jpg',
-      'https://example.invalid/3.jpg',
-    ]);
-    // Descriptions are set on the mutable copy because CropListing is const-friendly.
-    final withDesc = CropListing(
-      cropName: listing.cropName,
-      farmName: listing.farmName,
-      cropType: listing.cropType,
-      status: listing.status,
-      barangay: listing.barangay,
-      postedLabel: listing.postedLabel,
-      expiresLabel: listing.expiresLabel,
-      distance: listing.distance,
-      contactNumber: listing.contactNumber,
-      imageUrl: listing.imageUrl,
-      photoUrls: listing.photoUrls,
+    final listing = makeListing(
+      photos: [
+        'https://example.invalid/1.jpg',
+        'https://example.invalid/2.jpg',
+        'https://example.invalid/3.jpg',
+      ],
       description: 'Fresh from the farm, quality checked.',
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: ProductDetailScreen(listing: withDesc)),
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
     );
     await tester.pump();
 
-    // Gallery + counter start on photo 1 of 3; description is rendered.
-    expect(find.byType(PageView), findsOneWidget);
-    expect(find.text('1 / 3'), findsOneWidget);
+    // No in-place gallery (old _PhotoGallery PageView) on the initial screen.
+    expect(find.byType(PageView), findsNothing);
+    expect(find.byType(FullScreenPhotoViewer), findsNothing);
+
+    // Hero/header shows a single cover photo.
+    expect(find.byKey(const Key('detail_hero_photo')), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+
+    // "Photos" strip with three thumbnails + description rendered.
+    expect(find.byKey(const Key('detail_photo_strip')), findsOneWidget);
+    expect(find.text('3 photos • tap to view'), findsOneWidget);
     expect(find.text('Fresh from the farm, quality checked.'), findsOneWidget);
 
-    // Swiping right-to-left advances to photo 2 of 3.
-    await tester.drag(find.byType(PageView), const Offset(-600, 0));
+    // Tapping the hero opens the full-screen viewer at photo 1.
+    await tester.tap(find.byKey(const Key('detail_hero_photo')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPhotoViewer), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    // Swipe left to photo 2.
+    await tester.fling(
+      find.byType(PageView),
+      const Offset(-400, 0),
+      1200,
+    );
     await tester.pumpAndSettle();
     expect(find.text('2 / 3'), findsOneWidget);
 
-    // Swipe back to photo 1.
-    await tester.drag(find.byType(PageView), const Offset(600, 0));
+    // Close the viewer.
+    await tester.tap(find.byKey(const Key('viewer_close')));
     await tester.pumpAndSettle();
-    expect(find.text('1 / 3'), findsOneWidget);
+    expect(find.byType(FullScreenPhotoViewer), findsNothing);
 
-    // Contact/status chrome unchanged.
-    expect(find.textContaining('Call Seller'), findsOneWidget);
-    expect(find.text('Send SMS to Seller'), findsOneWidget);
+    // Tapping thumbnail 2 opens the viewer at photo 3.
+    await tester.tap(find.byKey(const Key('detail_photo_thumb_2')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPhotoViewer), findsOneWidget);
+    expect(find.text('3 / 3'), findsOneWidget);
+
+    // Verify swipe right (backward) from 3 → 2 of 3.
+    await tester.fling(
+      find.byType(PageView),
+      const Offset(400, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('viewer_close')));
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('single-photo listing stays a plain image (no gallery, no counter) '
-      'but still shows the description', (tester) async {
-    final listing = baseListing(photos: ['https://example.invalid/1.jpg']);
-    final withDesc = CropListing(
-      cropName: listing.cropName,
-      farmName: listing.farmName,
-      cropType: listing.cropType,
-      status: listing.status,
-      barangay: listing.barangay,
-      postedLabel: listing.postedLabel,
-      expiresLabel: listing.expiresLabel,
-      distance: listing.distance,
-      contactNumber: listing.contactNumber,
-      imageUrl: listing.imageUrl,
-      photoUrls: listing.photoUrls,
+  // -----------------------------------------------------------
+  // Single-photo listing with description
+  // -----------------------------------------------------------
+  testWidgets(
+      'single-photo listing: header only, no strip, description visible',
+      (tester) async {
+    final listing = makeListing(
+      photos: ['https://example.invalid/1.jpg'],
       description: 'Small batch, farm-direct.',
     );
-
-    await tester.pumpWidget(
-      MaterialApp(home: ProductDetailScreen(listing: withDesc)),
-    );
-    await tester.pump();
-
-    expect(find.byType(PageView), findsNothing);
-    expect(find.textContaining('/ 1'), findsNothing);
-    expect(find.byType(Image), findsWidgets);
-    expect(find.text('Small batch, farm-direct.'), findsOneWidget);
-  });
-
-  testWidgets('photo-less listing keeps placeholder icon and no gallery/counter',
-      (tester) async {
-    final listing = baseListing(); // photos.isEmpty, description null
 
     await tester.pumpWidget(
       MaterialApp(home: ProductDetailScreen(listing: listing)),
@@ -114,7 +121,32 @@ void main() {
     await tester.pump();
 
     expect(find.byType(PageView), findsNothing);
-    expect(find.textContaining('/ '), findsNothing);
+    expect(find.byType(FullScreenPhotoViewer), findsNothing);
+
+    // Hero present, photo strip absent.
+    expect(find.byKey(const Key('detail_hero_photo')), findsOneWidget);
+    expect(find.byKey(const Key('detail_photo_strip')), findsNothing);
+
+    expect(find.text('Small batch, farm-direct.'), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+  });
+
+  // -----------------------------------------------------------
+  // Photo-less listing
+  // -----------------------------------------------------------
+  testWidgets(
+      'photo-less listing: placeholder icon, no strip, no viewer',
+      (tester) async {
+    final listing = makeListing(); // empty photoUrls, no imageUrl
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
+    );
+    await tester.pump();
+
     expect(find.byIcon(Icons.eco), findsOneWidget);
+    expect(find.byKey(const Key('detail_photo_strip')), findsNothing);
+    expect(find.byType(FullScreenPhotoViewer), findsNothing);
+    expect(find.textContaining('Call Seller'), findsOneWidget);
   });
 }
