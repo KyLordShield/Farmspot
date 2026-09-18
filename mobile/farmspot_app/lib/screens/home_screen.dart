@@ -333,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return CropCardGrid(
+    return CropLadderGrid(
       listings: _filteredListings,
       onTap: _openDetail,
     );

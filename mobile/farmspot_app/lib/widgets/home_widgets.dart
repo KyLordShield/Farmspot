@@ -296,6 +296,95 @@ class CropCard extends StatelessWidget {
   }
 }
 
+/// Ladder layout for the Home feed: the first two cards sit side by side,
+/// then every following card steps diagonally to the right like ladder rungs
+/// before wrapping back to the left margin. Capped at a phone-like max width
+/// so the cascade stays bounded on wide (Chrome) screens.
+class CropLadderGrid extends StatelessWidget {
+  final List<CropListing> listings;
+  final ValueChanged<CropListing> onTap;
+
+  const CropLadderGrid({
+    super.key,
+    required this.listings,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 430),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final topCardWidth = (width - 8) / 2;
+            final stepCardWidth = width * 0.62;
+            const step = 16.0;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (listings.isNotEmpty)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: topCardWidth,
+                        child: CropCard(
+                          listing: listings[0],
+                          onTap: () => onTap(listings[0]),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (listings.length > 1)
+                        SizedBox(
+                          width: topCardWidth,
+                          child: CropCard(
+                            listing: listings[1],
+                            onTap: () => onTap(listings[1]),
+                          ),
+                        ),
+                    ],
+                  ),
+                for (var i = 2; i < listings.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: _wrapStep(i - 2, step, width, stepCardWidth),
+                      top: 8,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: stepCardWidth,
+                        child: CropCard(
+                          listing: listings[i],
+                          onTap: () => onTap(listings[i]),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Returns the staircase indent for the [stepIndex]-th ladder card (0-based
+  /// below the first row): the first rung is already one step right of the
+  /// left column, every next rung steps further right, and the whole cascade
+  /// wraps back to the left margin before a card would run off the right edge.
+  double _wrapStep(int stepIndex, double step, double width, double cardWidth) {
+    var indent = (stepIndex + 1) * step;
+    if (indent + cardWidth > width) {
+      indent = 0;
+    }
+    return indent;
+  }
+}
+
 /// Two-column responsive grid of [CropCard]s. Capped at a phone-like max width
 /// so the same 2-column layout stays clean on wide (Chrome) screens.
 class CropCardGrid extends StatelessWidget {

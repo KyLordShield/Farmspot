@@ -49,11 +49,12 @@ class ListingController extends Controller
             ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
-                    $q->whereHas('farm', function ($fq) use ($search) {
-                        $fq->where('FRM_NAME', 'LIKE', "%{$search}%");
-                    })->orWhereHas('category', function ($cq) use ($search) {
-                        $cq->where('CAT_NAME', 'LIKE', "%{$search}%");
-                    });
+                    $q->where('LST_CROP_ICON', 'LIKE', "%{$search}%")
+                        ->orWhereHas('farm', function ($fq) use ($search) {
+                            $fq->where('FRM_NAME', 'LIKE', "%{$search}%");
+                        })->orWhereHas('category', function ($cq) use ($search) {
+                            $cq->where('CAT_NAME', 'LIKE', "%{$search}%");
+                        })->orWhere('LST_DESCRIPTION', 'LIKE', "%{$search}%");
                 });
             })
             ->orderByDesc('LST_CREATED_AT')
