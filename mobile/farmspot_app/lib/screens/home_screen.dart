@@ -84,11 +84,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _loadListings({String? search}) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _loadListings({String? search, bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final listings = await ListingService.fetchListings(search: search);
@@ -104,6 +106,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  /// Pull-to-refresh: reload the feed while keeping current content on screen.
+  Future<void> _refresh() async {
+    await _loadListings(showLoading: false);
+    await _loadSellerStatus();
   }
 
   void _handleNavTap(int i) {
@@ -164,21 +172,25 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildHeader(),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildCategoryRow(),
-                        if (_isSeller) ...[
-                          const SizedBox(height: 14),
-                          _buildSellerBanner(),
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCategoryRow(),
+                          if (_isSeller) ...[
+                            const SizedBox(height: 14),
+                            _buildSellerBanner(),
+                          ],
+                          const SizedBox(height: 20),
+                          _buildSectionTitle(),
+                          const SizedBox(height: 12),
+                          _buildListingsSection(),
                         ],
-                        const SizedBox(height: 20),
-                        _buildSectionTitle(),
-                        const SizedBox(height: 12),
-                        _buildListingsSection(),
-                      ],
+                      ),
                     ),
                   ),
                 ),

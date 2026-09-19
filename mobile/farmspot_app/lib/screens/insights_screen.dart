@@ -21,12 +21,26 @@ class _InsightsScreenState extends State<InsightsScreen> {
   bool _isSeller = false;
 
   late Future<InsightsPayload> _payloadFuture;
+  InsightsPayload? _payload;
 
   @override
   void initState() {
     super.initState();
     _loadSellerStatus();
     _payloadFuture = InsightsService.fetchInsights();
+  }
+
+  /// Pull-to-refresh: fetch fresh insights while keeping current data on screen.
+  Future<void> _refresh() async {
+    final next = InsightsService.fetchInsights();
+    setState(() => _payloadFuture = next);
+    try {
+      final payload = await next;
+      if (!mounted) return;
+      setState(() => _payload = payload);
+    } catch (_) {
+      // Keep last good data if a pull fails; the retry button still works.
+    }
   }
 
   Future<void> _loadSellerStatus() async {
@@ -76,32 +90,40 @@ class _InsightsScreenState extends State<InsightsScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: FutureBuilder<InsightsPayload>(
-                future: _payloadFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primaryGreen,
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: FutureBuilder<InsightsPayload>(
+                  future: _payloadFuture,
+                  builder: (context, snapshot) {
+                    final payload = snapshot.data ?? _payload;
+                    if (payload != null) {
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          ..._buildSections(payload),
+                        ],
+                      );
+                    }
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return _fillScrollable(
+                        const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      );
+                    }
+                    return _fillScrollable(
+                      _ErrorRetry(
+                        message: snapshot.error.toString(),
+                        onRetry: () => setState(() {
+                          _payloadFuture = InsightsService.fetchInsights();
+                        }),
                       ),
                     );
-                  }
-                  if (snapshot.hasError) {
-                    return _ErrorRetry(
-                      message: snapshot.error.toString(),
-                      onRetry: () => setState(() {
-                        _payloadFuture = InsightsService.fetchInsights();
-                      }),
-                    );
-                  }
-                  final payload = snapshot.data!;
-                  return ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      ..._buildSections(payload),
-                    ],
-                  );
-                },
+                  },
+                ),
               ),
             ),
           ],
@@ -110,6 +132,21 @@ class _InsightsScreenState extends State<InsightsScreen> {
       bottomNavigationBar: _isSeller
           ? SellerBottomNav(currentIndex: 2, onTap: _handleNavTap)
           : FarmSpotBottomNav(currentIndex: 2, onTap: _handleNavTap),
+    );
+  }
+
+  /// Wraps a centered child in a full-height scrollable so the RefreshIndicator
+  /// can receive the pull gesture even while loading or showing an error.
+  Widget _fillScrollable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: SizedBox(
+          height: constraints.maxHeight,
+          width: constraints.maxWidth,
+          child: child,
+        ),
+      ),
     );
   }
 
