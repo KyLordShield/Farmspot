@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,6 +54,7 @@ class AuthService {
     required String password,
     required String passwordConfirmation,
     required String mobileNumber,
+    String? address,
   }) async {
     try {
       final response = await http.post(
@@ -64,6 +66,8 @@ class AuthService {
           'USR_PASSWORD': password,
           'USR_PASSWORD_confirmation': passwordConfirmation,
           'USR_MOBILE_NUMBER': mobileNumber,
+          // Optional on signup: only sent when the buyer typed one.
+          if (address != null) 'address': address.trim(),
         },
       );
 
@@ -84,19 +88,124 @@ class AuthService {
 
       // 422 validation failure: { message, errors: { field: [messages] } }.
       // Return the first field error we find, e.g. duplicate email/mobile.
-      final errors = data['errors'];
-      if (errors is Map) {
-        for (final fieldErrors in errors.values) {
-          if (fieldErrors is List && fieldErrors.isNotEmpty) {
-            return fieldErrors.first.toString();
-          }
-        }
-      }
-
-      return data['message'] ?? 'Sign up failed. Please try again.';
+      return _firstFieldError(data) ??
+          (data['message'] as String? ?? 'Sign up failed. Please try again.');
     } catch (e) {
       return 'Could not reach the server. Check your connection.';
     }
+  }
+
+  /// Edits the buyer's own profile (PATCH /api/user). Only the fields that are
+  /// explicitly provided (non-null) are sent — an absent one is left untouched
+  /// on the server, so callers can send exactly what changed. Matching this
+  /// file's conventions it never throws; `error` is null on success and the
+  /// fresh user object is returned (and re-cached so next launch is current).
+  static Future<({String? error, Map<String, dynamic>? user})> updateProfile({
+    String? name,
+    String? mobileNumber,
+    String? address,
+  }) async {
+    final token = await getToken();
+    if (token == null) {
+      return (error: 'Not logged in.', user: null);
+    }
+
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/user'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: {
+          // An empty string is still sent so a caller can deliberately clear
+          // the field back to blank; absent fields are simply not sent.
+          if (name != null) 'name': name.trim(),
+          if (mobileNumber != null) 'mobile_number': mobileNumber.trim(),
+          if (address != null) 'address': address.trim(),
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final user = data['user'];
+        if (user is Map<String, dynamic>) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_data', jsonEncode(user));
+          return (error: null, user: user);
+        }
+        return (error: null, user: null);
+      }
+
+      return (
+        error: _firstFieldError(data) ??
+            (data['message'] as String? ?? 'Could not update profile.'),
+        user: null,
+      );
+    } catch (e) {
+      return (
+        error: 'Could not reach the server. Check your connection.',
+        user: null,
+      );
+    }
+  }
+
+  /// Replaces the buyer's profile photo (POST /api/user/photo). Uses the same
+  /// bytes-based multipart pattern as the farm/listing photo uploads — the
+  /// backend's `photo` field expects a real file part, not JSON. Returns the
+  /// fresh user object (and re-caches it) on success, or an error message.
+  static Future<({String? error, Map<String, dynamic>? user})>
+      uploadProfilePhoto(XFile photo) async {
+    final token = await getToken();
+    if (token == null) {
+      return (error: 'Not logged in.', user: null);
+    }
+
+    dynamic data;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/user/photo'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      final bytes = await photo.readAsBytes();
+      final uploadName = _uploadFileName(photo.name, photo.path);
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          bytes,
+          filename: uploadName,
+          contentType: _contentTypeFor(uploadName),
+        ),
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final user = data['user'];
+        if (user is Map<String, dynamic>) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_data', jsonEncode(user));
+          return (error: null, user: user);
+        }
+        return (error: null, user: null);
+      }
+    } catch (e) {
+      // Falls through to the generic network error below.
+    }
+
+    return (
+      error: _firstFieldError(data) ??
+          (data is Map && data['message'] is String
+              ? data['message'] as String
+              : 'Could not reach the server. Check your connection.'),
+      user: null,
+    );
   }
 
   static Future<String?> getToken() async {
@@ -233,5 +342,50 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove('user_data');
+  }
+
+  /// Extracts the first field error from a Laravel 422 body
+  /// ( { errors: { field: [messages] } } ), or null when not present.
+  static String? _firstFieldError(dynamic data) {
+    if (data is Map && data['errors'] is Map) {
+      for (final fieldErrors in data['errors'].values) {
+        if (fieldErrors is List && fieldErrors.isNotEmpty) {
+          return fieldErrors.first.toString();
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Same fallback used by the farm uploads: some pickers yield an empty name
+  /// and an empty path, so without a real filename Laravel would not treat the
+  /// part as a file upload at all.
+  static String _uploadFileName(String name, String path) {
+    if (name.isNotEmpty) return name;
+    final normalized = path.replaceAll('\\', '/');
+    if (normalized.isNotEmpty) {
+      final fromPath = normalized.substring(normalized.lastIndexOf('/') + 1);
+      if (fromPath.isNotEmpty) return fromPath;
+    }
+    return 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  }
+
+  static http.MediaType _contentTypeFor(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return http.MediaType('image', 'jpeg');
+      case 'png':
+        return http.MediaType('image', 'png');
+      case 'webp':
+        return http.MediaType('image', 'webp');
+      case 'gif':
+        return http.MediaType('image', 'gif');
+      case 'heic':
+        return http.MediaType('image', 'heic');
+      default:
+        return http.MediaType('image', 'jpeg');
+    }
   }
 }

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\UserStatsController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
@@ -48,6 +49,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+    Route::patch('/user', [UserController::class, 'update']);
+    Route::post('/user/photo', [UserController::class, 'uploadPhoto']);
     Route::get('/user/stats', [UserStatsController::class, 'show']);
 });
 

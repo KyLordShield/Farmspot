@@ -42,6 +42,8 @@ class User extends Authenticatable
         'USR_EMAIL',
         'USR_PASSWORD',
         'USR_MOBILE_NUMBER',
+        'USR_ADDRESS',
+        'USR_PHOTO_PATH',
         'USR_ROLE',
         'USR_IS_SELLER',
         'USR_STATUS',

@@ -48,6 +48,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       password: _passwordController.text,
       passwordConfirmation: _confirmPasswordController.text,
       mobileNumber: _mobileController.text.trim(),
+      address: _addressController.text.trim(),
     );
 
     if (!mounted) return;

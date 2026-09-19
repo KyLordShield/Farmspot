@@ -22,6 +22,8 @@ class AuthController extends Controller
             'USR_EMAIL' => ['required', 'email', 'max:200', 'unique:user,USR_EMAIL'],
             'USR_PASSWORD' => ['required', 'confirmed', Password::defaults()],
             'USR_MOBILE_NUMBER' => ['required', 'string', 'max:20', 'unique:user,USR_MOBILE_NUMBER'],
+            // Optional — the buyer can skip it, and existing test flows don't send it.
+            'address' => ['nullable', 'string', 'max:255'],
         ]);
 
         do {
@@ -34,6 +36,7 @@ class AuthController extends Controller
             'USR_EMAIL' => $validated['USR_EMAIL'],
             'USR_PASSWORD' => Hash::make($validated['USR_PASSWORD']),
             'USR_MOBILE_NUMBER' => $validated['USR_MOBILE_NUMBER'],
+            'USR_ADDRESS' => $validated['address'] ?? null,
             'USR_ROLE' => 'GENERAL_USER',
             'USR_IS_SELLER' => 0,
             'USR_STATUS' => 'ACTIVE',

@@ -12,6 +12,7 @@ import '../services/auth_service.dart';
 import '../services/farm_service.dart';
 import '../models/farm_setup_data.dart';
 import 'login_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -25,6 +26,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _lastName = '';
   String _address = 'Address';
   String _phone = '';
+  String _photoUrl = '';
+  bool _photoBusy = false;
   bool _isSeller = false;
   bool _hasPendingReview = false;
   bool _sellerBusy = false;
@@ -57,6 +60,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final firstName = parts.isNotEmpty ? parts.first : '';
     final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
     final phone = user['USR_MOBILE_NUMBER'] as String? ?? '';
+    // Real server values — an empty USR_ADDRESS/USR_PHOTO_PATH means the buyer
+    // simply hasn't set one yet (this replaces the old hardcoded 'Address').
+    final address = user['USR_ADDRESS'] as String? ?? '';
+    final photoUrl = user['USR_PHOTO_PATH'] as String? ?? '';
     final isSeller = _parseSellerFlag(user);
 
     final farms = await FarmService.getFarms();
@@ -73,6 +80,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _firstName = firstName;
       _lastName = lastName;
       _phone = phone;
+      _address = address;
+      _photoUrl = photoUrl;
       _isSeller = isSeller;
       _hasPendingReview = hasPending && !hasApproved;
     });
@@ -160,24 +169,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _openEditProfile() async {
-    final result = await Navigator.of(context).push<Map<String, String>>(
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => EditProfileScreen(
           firstName: _firstName,
           lastName: _lastName,
           address: _address,
           phone: _phone,
+          photoUrl: _photoUrl,
         ),
       ),
     );
-    if (result != null) {
-      setState(() {
-        _firstName = result['firstName'] ?? _firstName;
-        _lastName = result['lastName'] ?? _lastName;
-        _address = result['address'] ?? _address;
-        _phone = result['phone'] ?? _phone;
-      });
+    // Re-pull the authoritative user no matter how the editor closed (saved or
+    // not) — the server is the single source of truth for every profile field.
+    await _syncStateFromServer();
+  }
+
+  /// Picks a photo (gallery or camera, same sheet the seller screens use) and
+  /// immediately uploads it as the new profile photo. The upload result is the
+  /// fresh user object, so the avatar can update in place without refetching.
+  Future<void> _changePhoto() async {
+    if (_photoBusy) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo Library'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Camera'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    final picked =
+        await ImagePicker().pickImage(source: source, imageQuality: 85);
+    if (picked == null || !mounted) return;
+
+    setState(() => _photoBusy = true);
+
+    final result = await AuthService.uploadProfilePhoto(picked);
+    if (!mounted) return;
+
+    setState(() => _photoBusy = false);
+
+    if (result.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.error!)),
+      );
+      return;
     }
+
+    final newUrl = result.user?['USR_PHOTO_PATH'] as String? ?? '';
+    setState(() => _photoUrl = newUrl);
   }
 
   void _logout() {
@@ -214,56 +269,118 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            _buildHeaderCard(fullName),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildBecomeSellerCard(),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'ACCOUNT',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
-                      color: Colors.black45,
+        child: RefreshIndicator(
+          // Pull-to-refresh: re-pull user + farm state from the server (same
+          // pattern as MyFarmScreen) so changes made elsewhere show up here.
+          onRefresh: _syncStateFromServer,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              _buildHeaderCard(fullName),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildBecomeSellerCard(),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'ACCOUNT',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                        color: Colors.black45,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  _accountTile(
-                    icon: Icons.person_outline,
-                    label: 'Personal Info',
-                    value: fullName,
-                    onTap: _openEditProfile,
-                  ),
-                  _accountTile(
-                    icon: Icons.phone_outlined,
-                    label: 'Contact Number',
-                    value: _phone,
-                    onTap: _openEditProfile,
-                  ),
-                  _accountTile(
-                    icon: Icons.logout,
-                    label: 'log out',
-                    value: '',
-                    iconColor: Colors.red,
-                    labelColor: Colors.red,
-                    onTap: _logout,
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    _accountTile(
+                      icon: Icons.person_outline,
+                      label: 'Personal Info',
+                      value: fullName,
+                      onTap: _openEditProfile,
+                    ),
+                    _accountTile(
+                      icon: Icons.phone_outlined,
+                      label: 'Contact Number',
+                      value: _phone,
+                      onTap: _openEditProfile,
+                    ),
+                    _accountTile(
+                      icon: Icons.logout,
+                      label: 'log out',
+                      value: '',
+                      iconColor: Colors.red,
+                      labelColor: Colors.red,
+                      onTap: _logout,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _isSeller
           ? SellerBottomNav(currentIndex: 4, onTap: _handleNavTap)
           : FarmSpotBottomNav(currentIndex: 3, onTap: _handleNavTap),
+    );
+  }
+
+  /// Header avatar: the real profile photo when one is set (Image.network),
+  /// falling back to the initials disc otherwise — the same fallback used for
+  /// farm/crop cards. The small camera badge lets the buyer pick & upload a
+  /// new photo right from Profile.
+  Widget _buildAvatar() {
+    final hasPhoto = _photoUrl.isNotEmpty;
+
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: Colors.white,
+          backgroundImage: hasPhoto ? NetworkImage(_photoUrl) : null,
+          child: hasPhoto
+              ? null
+              : Text(
+                  _firstName.isNotEmpty ? _firstName[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: AppColors.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+        ),
+        Positioned(
+          right: -6,
+          bottom: -6,
+          child: GestureDetector(
+            onTap: _photoBusy ? null : _changePhoto,
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black26, blurRadius: 4),
+                ],
+              ),
+              child: _photoBusy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.camera_alt,
+                      size: 14,
+                      color: AppColors.primaryGreen,
+                    ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -299,18 +416,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.white,
-                child: Text(
-                  _firstName.isNotEmpty ? _firstName[0].toUpperCase() : '?',
-                  style: const TextStyle(
-                    color: AppColors.primaryGreen,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-              ),
+              _buildAvatar(),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -373,7 +479,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFEAF6EC),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primaryGreen.withOpacity(0.2)),
+            border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
@@ -387,7 +493,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               Switch(
                 value: _isSeller,
-                activeColor: AppColors.primaryGreen,
+                activeThumbColor: AppColors.primaryGreen,
                 onChanged: _sellerBusy ? null : _toggleSeller,
               ),
             ],
