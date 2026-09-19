@@ -3,9 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:farmspot_app/widgets/home_widgets.dart';
 
-// The Home feed "ladder" layout: the first two cards sit side-by-side on one
-// row, then every following card steps right like a ladder rung, wrapping back
-// to the left edge before it would run off the right side.
+// The Home feed "ladder" layout: rows of TWO cards. Inside each row the two
+// cards are perfectly aligned (a real rung). The ladder movement happens
+// BETWEEN rows: every row after the first one sits one step lower and one step
+// right of the row above it — like stairs going down, but two-wide.
 
 CropListing _sample(String name, {String farm = 'Farm'}) {
   return CropListing(
@@ -62,26 +63,20 @@ void main() {
     expect(find.byType(CropLadderGrid), findsOneWidget);
   });
 
-  testWidgets('first two cards sit side by side on the same row',
+  testWidgets('first row: the two cards are perfectly aligned (tops level)',
       (tester) async {
     await _pumpLadder(tester, 360);
 
     final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
     final card1 = tester.getTopLeft(find.byType(CropCard).at(1));
 
-    // Same vertical position = same row.
+    // Same row, tops exactly level (no stagger inside a rung).
     expect(card1.dy, card0.dy);
-
-    // Card 1 is to the right of card 0.
-    expect(card1.dx, greaterThan(card0.dx));
-
-    // Both are inside the padded layout bounds.
     expect(card0.dx, greaterThanOrEqualTo(16));
-    final right1 = tester.getTopRight(find.byType(CropCard).at(1)).dx;
-    expect(right1, lessThanOrEqualTo(360 - 16));
+    expect(card1.dx, greaterThan(card0.dx));
   });
 
-  testWidgets('ladder rungs step right then wrap back to the left',
+  testWidgets('next rows shift right and drop lower (the ladder descent)',
       (tester) async {
     await _pumpLadder(tester, 360);
 
@@ -89,31 +84,31 @@ void main() {
     final card1 = tester.getTopLeft(find.byType(CropCard).at(1));
     final card2 = tester.getTopLeft(find.byType(CropCard).at(2));
     final card3 = tester.getTopLeft(find.byType(CropCard).at(3));
+
+    // Row 2 sits BELOW row 1's level...
+    expect(card2.dy, greaterThan(card0.dy));
+
+    // ...and is indented to the right of the first row's left edge.
+    expect(card2.dx, greaterThan(card0.dx));
+
+    // Inside row 2 the pair stays aligned with each other (a single rung).
+    expect(card3.dy, card2.dy);
+
+    // The whole grid stays within the padded bounds.
+    final right3 = tester.getTopRight(find.byType(CropCard).at(3)).dx;
+    expect(right3, lessThanOrEqualTo(360 - 16));
+  });
+
+  testWidgets('odd total: cards still descend row by row top to bottom',
+      (tester) async {
+    await _pumpLadder(tester, 360);
+
+    final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
+    final card2 = tester.getTopLeft(find.byType(CropCard).at(2));
     final card4 = tester.getTopLeft(find.byType(CropCard).at(4));
 
-    // Rung 1 (card 2): below the top row AND indented one step past the left
-    // column, but still left of the top-right card.
-    expect(card2.dy, greaterThan(card1.dy));
-    expect(card2.dx, greaterThan(card0.dx));
-    expect(card2.dx, lessThan(card1.dx));
-
-    // Each next rung steps further right than the one before it.
-    expect(card3.dx, greaterThan(card2.dx));
-    expect(card3.dy, greaterThan(card2.dy));
-    expect(card4.dx, greaterThan(card3.dx));
-
-    // The step never pushes a card off the right edge.
-    for (final card in [card0, card1, card2, card3, card4]) {
-      expect(card.dx, greaterThanOrEqualTo(16));
-      expect(card.dx, lessThanOrEqualTo(360 - 16));
-    }
-
-    // Cards descend: each consecutive card's top is lower than the one before.
-    for (var i = 1; i <= 4; i++) {
-      final prev = tester.getTopLeft(find.byType(CropCard).at(i - 1));
-      final cur = tester.getTopLeft(find.byType(CropCard).at(i));
-      expect(cur.dy, greaterThanOrEqualTo(prev.dy));
-    }
+    expect(card2.dy, greaterThan(card0.dy));
+    expect(card4.dy, greaterThan(card2.dy));
   });
 
   testWidgets('ladder grid handles a single card', (tester) async {
@@ -130,7 +125,7 @@ void main() {
     expect(find.byType(CropCard), findsNothing);
   });
 
-  testWidgets('many rungs stay on screen (wraps back to the left)',
+  testWidgets('many cards stay on screen in descending rungs (20 cards)',
       (tester) async {
     await _pumpLadder(
       tester,

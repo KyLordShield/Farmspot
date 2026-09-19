@@ -318,70 +318,65 @@ class CropLadderGrid extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final topCardWidth = (width - 8) / 2;
-            final stepCardWidth = width * 0.62;
-            const step = 16.0;
+            const gap = 8.0;
+            const rowShift = 4.0;
+            const rowGap = 10.0;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (listings.isNotEmpty)
-                  Row(
+            final rows = <Widget>[];
+            for (var i = 0; i < listings.length; i += 2) {
+              final left = listings[i];
+              final hasRight = i + 1 < listings.length;
+              final right = hasRight ? listings[i + 1] : null;
+              final isFirstRow = i == 0;
+
+              // Each card gets a fixed fraction of the *indent-adjusted* width.
+              // Fixed (not Expanded) so a lone leftover card can never stretch
+              // across the whole row.
+              final cardWidth = (width - (isFirstRow ? 0 : rowShift) - gap) / 2;
+
+              rows.add(
+                // Each pair is a "rung". Rows after the first sit one step
+                // further right and one step lower — the ladder descent.
+                // Inside each rung the two cards stay perfectly aligned.
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: isFirstRow ? 0 : rowShift,
+                    top: isFirstRow ? 0 : rowGap,
+                  ),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        width: topCardWidth,
+                        width: cardWidth,
                         child: CropCard(
-                          listing: listings[0],
-                          onTap: () => onTap(listings[0]),
+                          listing: left,
+                          onTap: () => onTap(left),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (listings.length > 1)
+                      if (right != null)
                         SizedBox(
-                          width: topCardWidth,
+                          width: cardWidth,
                           child: CropCard(
-                            listing: listings[1],
-                            onTap: () => onTap(listings[1]),
+                            listing: right,
+                            onTap: () => onTap(right),
                           ),
                         ),
                     ],
                   ),
-                for (var i = 2; i < listings.length; i++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: _wrapStep(i - 2, step, width, stepCardWidth),
-                      top: 8,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: SizedBox(
-                        width: stepCardWidth,
-                        child: CropCard(
-                          listing: listings[i],
-                          onTap: () => onTap(listings[i]),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                ),
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: rows,
             );
           },
         ),
       ),
     );
-  }
-
-  /// Returns the staircase indent for the [stepIndex]-th ladder card (0-based
-  /// below the first row): the first rung is already one step right of the
-  /// left column, every next rung steps further right, and the whole cascade
-  /// wraps back to the left margin before a card would run off the right edge.
-  double _wrapStep(int stepIndex, double step, double width, double cardWidth) {
-    var indent = (stepIndex + 1) * step;
-    if (indent + cardWidth > width) {
-      indent = 0;
-    }
-    return indent;
   }
 }
 

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import '../models/insights.dart';
 import '../services/auth_service.dart';
+import '../services/insights_service.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
@@ -18,18 +20,13 @@ class InsightsScreen extends StatefulWidget {
 class _InsightsScreenState extends State<InsightsScreen> {
   bool _isSeller = false;
 
-  static const _topSearched = ['Crop Name', 'Crop Name', 'Crop Name', 'Crop Name'];
-
-  static const _seasonalTrends = [
-    ('March', 'Sili, cabbage'),
-    ('June', 'Sili, cabbage'),
-    ('December', 'Sili, cabbage'),
-  ];
+  late Future<InsightsPayload> _payloadFuture;
 
   @override
   void initState() {
     super.initState();
     _loadSellerStatus();
+    _payloadFuture = InsightsService.fetchInsights();
   }
 
   Future<void> _loadSellerStatus() async {
@@ -79,87 +76,32 @@ class _InsightsScreenState extends State<InsightsScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _SectionCard(
-                    icon: Icons.search,
-                    title: 'TOP SEARCHED THIS WEEK',
-                    child: Column(
-                      children: List.generate(_topSearched.length, (i) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 28,
-                                child: Text(
-                                  '#${i + 1}',
-                                  style: const TextStyle(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              Text(_topSearched[i]),
-                            ],
-                          ),
-                        );
+              child: FutureBuilder<InsightsPayload>(
+                future: _payloadFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryGreen,
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return _ErrorRetry(
+                      message: snapshot.error.toString(),
+                      onRetry: () => setState(() {
+                        _payloadFuture = InsightsService.fetchInsights();
                       }),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _SectionCard(
-                    icon: Icons.show_chart,
-                    title: 'SEASONAL TRENDS',
-                    child: Column(
-                      children: [
-                        Row(
-                          children: const [
-                            Expanded(
-                              child: Text(
-                                'MONTH',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black45,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                'TRENDING CROPS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black45,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 18),
-                        ..._seasonalTrends.map(
-                          (row) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    row.$1,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                                Expanded(flex: 2, child: Text(row.$2)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                    );
+                  }
+                  final payload = snapshot.data!;
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      ..._buildSections(payload),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -169,6 +111,29 @@ class _InsightsScreenState extends State<InsightsScreen> {
           ? SellerBottomNav(currentIndex: 2, onTap: _handleNavTap)
           : FarmSpotBottomNav(currentIndex: 2, onTap: _handleNavTap),
     );
+  }
+
+  List<Widget> _buildSections(InsightsPayload payload) {
+    final sections = <Widget>[];
+
+    for (final section in payload.sections) {
+      sections.add(
+        _InsightListCard(
+          icon: section.type == 'top_searched'
+              ? Icons.search
+              : Icons.category,
+          title: section.title,
+          entries: section.entries,
+        ),
+      );
+      sections.add(const SizedBox(height: 16));
+    }
+
+    sections.add(
+      _SeasonalTrendCard(trends: payload.seasonalTrends),
+    );
+
+    return sections;
   }
 
   Widget _buildHeader() {
@@ -198,12 +163,170 @@ class _InsightsScreenState extends State<InsightsScreen> {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class _InsightListCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<RankEntry> entries;
+
+  const _InsightListCard({
+    required this.icon,
+    required this.title,
+    required this.entries,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      icon: icon,
+      title: title,
+      child: entries.isEmpty
+          ? const Text(
+              'No data yet.',
+              style: TextStyle(color: Colors.black45),
+            )
+          : Column(
+              children: List.generate(entries.length, (i) {
+                final entry = entries[i];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text(
+                          '#${entry.rank}',
+                          style: const TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(entry.label),
+                      ),
+                      Text(
+                        '${entry.value}',
+                        style: const TextStyle(
+                          color: Colors.black45,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+    );
+  }
+}
+
+class _SeasonalTrendCard extends StatelessWidget {
+  final List<SeasonalTrend> trends;
+
+  const _SeasonalTrendCard({required this.trends});
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      icon: Icons.show_chart,
+      title: 'SEASONAL TRENDS',
+      child: trends.isEmpty
+          ? const Text(
+              'No seasonal data yet.',
+              style: TextStyle(color: Colors.black45),
+            )
+          : Column(
+              children: [
+                Row(
+                  children: const [
+                    Expanded(
+                      child: Text(
+                        'MONTH',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black45,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        'TRENDING CROPS',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black45,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 18),
+                ...trends.map(
+                  (trend) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            trend.title,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(trend.crops.join(', ')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _ErrorRetry extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorRetry({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off, size: 40, color: Colors.black26),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
   final IconData icon;
   final String title;
   final Widget child;
 
-  const _SectionCard({
+  const _Card({
     required this.icon,
     required this.title,
     required this.child,

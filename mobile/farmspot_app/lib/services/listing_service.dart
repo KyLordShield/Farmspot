@@ -12,8 +12,13 @@ class ListingService {
 
   /// Fetches the browse feed. Returns the list on success, or throws
   /// an Exception with a user-friendly message on failure.
+  ///
+  /// When the user is logged in, the Bearer token is attached so the backend
+  /// can log their searches into search_log (feeding the Crop Insights
+  /// analytics). Guests still browse fine — their searches just don't count.
   static Future<List<Listing>> fetchListings({String? search}) async {
     try {
+      final token = await AuthService.getToken();
       final uri = Uri.parse('$baseUrl/listings').replace(
         queryParameters: (search != null && search.trim().isNotEmpty)
             ? {'search': search.trim()}
@@ -21,7 +26,10 @@ class ListingService {
       );
       final response = await http.get(
         uri,
-        headers: {'Accept': 'application/json'},
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {

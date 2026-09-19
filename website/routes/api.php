@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\UserStatsController;
+use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
 Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
+Route::get('/insights', [InsightsController::class, 'show']);
 Route::get('/farms/public', [FarmController::class, 'mapPins']);
 Route::get('/farms/{farmId}/profile', [FarmController::class, 'profile']);
 
