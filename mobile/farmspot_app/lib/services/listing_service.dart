@@ -4,6 +4,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/crop_category.dart';
+import '../models/crop_suggestion.dart';
 import '../models/listing.dart';
 import 'auth_service.dart';
 
@@ -16,13 +17,28 @@ class ListingService {
   /// When the user is logged in, the Bearer token is attached so the backend
   /// can log their searches into search_log (feeding the Crop Insights
   /// analytics). Guests still browse fine — their searches just don't count.
-  static Future<List<Listing>> fetchListings({String? search}) async {
+  static Future<List<Listing>> fetchListings({String? search}) {
+    return _fetchRawListings(search: search);
+  }
+
+  /// Backs every /listings call. [suggest] is ONLY set by the live "as you
+  /// type" suggestion feature: it adds ?suggest=1, which makes the backend
+  /// skip the search_log insert for that one request. Every other caller
+  /// (this app's search results, the web feed, etc.) never sends it, so
+  /// real submitted searches keep logging exactly as before.
+  static Future<List<Listing>> _fetchRawListings({
+    String? search,
+    bool suggest = false,
+  }) async {
     try {
       final token = await AuthService.getToken();
+      final params = <String, String>{};
+      if (search != null && search.trim().isNotEmpty) {
+        params['search'] = search.trim();
+        if (suggest) params['suggest'] = '1';
+      }
       final uri = Uri.parse('$baseUrl/listings').replace(
-        queryParameters: (search != null && search.trim().isNotEmpty)
-            ? {'search': search.trim()}
-            : null,
+        queryParameters: params.isEmpty ? null : params,
       );
       final response = await http.get(
         uri,
@@ -44,6 +60,33 @@ class ListingService {
     } catch (e) {
       throw Exception('Could not reach the server. Check your connection.');
     }
+  }
+
+  /// Keystroke-safe live suggestions for the Search screen.
+  ///
+  /// Calls the SAME /listings search endpoint but with &suggest=1, the backend
+  /// opt-out that skips the search_log insert — typing "tom", "toma", "tomat"
+  /// one keystroke at a time must never inflate Top Searched. Returns the real
+  /// crop names from the matched set (deduped, most listings first), each with
+  /// a real count of nearby listings carrying that crop.
+  static Future<List<CropSuggestion>> fetchSuggestions(String term) async {
+    final listings = await _fetchRawListings(search: term, suggest: true);
+    final lower = term.trim().toLowerCase();
+    final counts = <String, int>{};
+    for (final listing in listings) {
+      final name = listing.toCropListing().cropName.trim();
+      if (name.isEmpty || !name.toLowerCase().contains(lower)) continue;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final crops = counts.entries
+        .map((e) => CropSuggestion(name: e.key, count: e.value))
+        .toList()
+      ..sort((a, b) {
+        final byCount = b.count.compareTo(a.count);
+        if (byCount != 0) return byCount;
+        return a.name.compareTo(b.name);
+      });
+    return crops;
   }
 
   /// Fetches a single listing's detail by ID.

@@ -67,7 +67,15 @@ class ListingController extends Controller
         // the request gets resolved, guests stay null and skip logging.
         $user = $request->user('sanctum');
 
-        if ($search && $user) {
+        // Pure opt-out for ONE extra caller: the app's live "as you type"
+        // suggestion requests send ?suggest=1, and those must NOT pollute the
+        // Top Searched analytics the way keystrokes would. When the param is
+        // absent — every existing caller, and every real submitted search from
+        // the new Search screen — this branch is byte-for-byte identical to the
+        // original: same insert, same fields, same counting.
+        $isSuggestion = $request->query('suggest') === '1';
+
+        if ($search && $user && !$isSuggestion) {
             do {
                 $searchId = strtoupper(Str::random(6));
             } while (SearchLog::where('SRCH_ID', $searchId)->exists());

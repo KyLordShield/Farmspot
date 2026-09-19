@@ -9,6 +9,8 @@ import 'map_screen.dart';
 import 'insights_screen.dart';
 import 'profile_screen.dart';
 import 'seller/my_farm_screen.dart';
+import 'search_screen.dart';
+import 'image_search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,7 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<CropListing> _listings = [];
   bool _isLoading = true;
   String? _errorMessage;
-  final _searchController = TextEditingController();
   int? _activeListingCount;
 
   @override
@@ -61,12 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Fall back to the generic seller text if the count can't be fetched.
     }
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   List<CropListing> get _filteredListings {
@@ -216,9 +211,17 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       color: AppColors.primaryGreen,
       child: HomeSearchField(
-        controller: _searchController,
-        onSubmitted: (value) => _loadListings(search: value),
-        onSearchTap: () => _loadListings(search: _searchController.text),
+        tapToOpen: true,
+        onSearchTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SearchScreen()),
+          );
+        },
+        onCameraTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
+          );
+        },
       ),
     );
   }
@@ -229,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, i) => CategoryChip(
           label: _categories[i],
           selected: _selectedCategory == i,

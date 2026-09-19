@@ -81,11 +81,16 @@ class CropImagePlaceholder extends StatelessWidget {
 }
 
 /// Search bar + camera icon shown inside the green home header.
+///
+/// When [tapToOpen] is true the bar acts as a single tappable button that
+/// fires [onSearchTap] (no inline typing), so the whole bar routes to the
+/// dedicated SearchScreen instead of submitting a query in place.
 class HomeSearchField extends StatelessWidget {
   final VoidCallback? onCameraTap;
   final TextEditingController? controller;
   final ValueChanged<String>? onSubmitted;
   final VoidCallback? onSearchTap;
+  final bool tapToOpen;
 
   const HomeSearchField({
     super.key,
@@ -93,10 +98,64 @@ class HomeSearchField extends StatelessWidget {
     this.controller,
     this.onSubmitted,
     this.onSearchTap,
+    this.tapToOpen = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final searchIcon = Icon(
+      Icons.search,
+      color: Colors.black45,
+    );
+
+    // In tap-to-open mode the whole bar (icon + hint area) is a single button.
+    // We don't render a TextField at all: a TextField consumes the tap to place
+    // a cursor even when readOnly, so the GestureDetector behind it would never
+    // fire. A plain hint text has no gesture of its own.
+    final leftSide = tapToOpen
+        ? Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onSearchTap,
+              child: Row(
+                children: [
+                  searchIcon,
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Search Crops or farms',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.black45, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : Expanded(
+            child: Row(
+              children: [
+                searchIcon,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    onSubmitted: onSubmitted,
+                    textInputAction: TextInputAction.search,
+                    decoration: const InputDecoration(
+                      hintText: 'Search Crops or farms',
+                      hintStyle:
+                          TextStyle(color: Colors.black45, fontSize: 14),
+                      border: InputBorder.none,
+                      isCollapsed: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -106,24 +165,7 @@ class HomeSearchField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onSearchTap,
-            child: const Icon(Icons.search, color: Colors.black45),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onSubmitted: onSubmitted,
-              textInputAction: TextInputAction.search,
-              decoration: const InputDecoration(
-                hintText: 'Search Crops or farms',
-                hintStyle: TextStyle(color: Colors.black45, fontSize: 14),
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-            ),
-          ),
+          leftSide,
           GestureDetector(
             onTap: onCameraTap,
             child: const Icon(Icons.camera_alt_outlined, color: Colors.black45),

@@ -81,7 +81,6 @@ void main() {
     await _pumpLadder(tester, 360);
 
     final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
-    final card1 = tester.getTopLeft(find.byType(CropCard).at(1));
     final card2 = tester.getTopLeft(find.byType(CropCard).at(2));
     final card3 = tester.getTopLeft(find.byType(CropCard).at(3));
 
