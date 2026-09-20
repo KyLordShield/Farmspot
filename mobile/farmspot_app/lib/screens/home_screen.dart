@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../models/crop_category.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
@@ -21,10 +22,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// 0 = "All"; 1..n index into [_categories] (the real API categories).
   int _selectedCategory = 0;
   bool _isSeller = false;
 
-  final _categories = const ['All', 'Leafy Vegetables', 'Fruit Vegetables'];
+  List<CropCategory> _categories = [];
 
   List<CropListing> _listings = [];
   bool _isLoading = true;
@@ -36,6 +38,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadListings();
     _loadSellerStatus();
+    _loadCategories();
+  }
+
+  /// Real crop categories for the filter chips. Failure-tolerant: on error the
+  /// row simply shows "All" so the feed still works.
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await ListingService.fetchCropCategories();
+      if (!mounted) return;
+      setState(() => _categories = categories);
+    } catch (_) {
+      // Chips fall back to just "All".
+    }
   }
 
   /// Fetch fresh seller status so the bottom nav (seller vs buyer) is correct
@@ -67,14 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<CropListing> get _filteredListings {
     if (_selectedCategory == 0) return _listings;
-    final categoryLabel = _categories[_selectedCategory].toLowerCase();
-    return _listings
-        .where(
-          (l) =>
-              categoryLabel.contains(l.cropType.toLowerCase()) ||
-              l.cropType.toLowerCase().contains(categoryLabel),
-        )
-        .toList();
+    final categoryId = _categories[_selectedCategory - 1].id;
+    return _listings.where((l) => l.categoryId == categoryId).toList();
   }
 
   void _openDetail(CropListing listing) {
@@ -113,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refresh() async {
     await _loadListings(showLoading: false);
     await _loadSellerStatus();
+    await _loadCategories();
   }
 
   void _handleNavTap(int i) {
@@ -240,17 +250,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCategoryRow() {
+    // Index 0 is always "All"; each real category from the API follows it.
+    final chipCount = _categories.length + 1;
     return SizedBox(
       height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _categories.length,
+        itemCount: chipCount,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => CategoryChip(
-          label: _categories[i],
-          selected: _selectedCategory == i,
-          onTap: () => setState(() => _selectedCategory = i),
-        ),
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return CategoryChip(
+              label: 'All',
+              selected: _selectedCategory == 0,
+              onTap: () => setState(() => _selectedCategory = 0),
+            );
+          }
+          final category = _categories[i - 1];
+          return CategoryChip(
+            label: category.name,
+            selected: _selectedCategory == i,
+            onTap: () => setState(() => _selectedCategory = i),
+          );
+        },
       ),
     );
   }

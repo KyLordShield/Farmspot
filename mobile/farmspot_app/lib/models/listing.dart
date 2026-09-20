@@ -106,6 +106,7 @@ class Listing {
       farmId: farmId,
       // Category filtering keys off the real category, not the crop name.
       cropType: categoryName ?? 'Vegetable',
+      categoryId: categoryId,
       status: status,
       imageUrl: image,
       description: description,

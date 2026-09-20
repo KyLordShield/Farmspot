@@ -22,6 +22,10 @@ class CropListing {
   final String? farmId;
   final IconData placeholderIcon;
 
+  /// Real crop_category id (e.g. "LEAFVG"). Null for listings with no
+  /// category; used by Home/Search category filters.
+  final String? categoryId;
+
   const CropListing({
     required this.cropName,
     required this.farmName,
@@ -38,6 +42,7 @@ class CropListing {
     this.photoUrls = const [],
     this.listingId,
     this.farmId,
+    this.categoryId,
     this.placeholderIcon = Icons.eco,
   });
 }

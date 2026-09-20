@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/crop_category.dart';
 import '../models/farm_pin.dart';
 import '../models/listing.dart';
 import '../services/farm_service.dart';
@@ -77,6 +78,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   bool _loading = true;
   String? _error;
 
+  /// Real crop categories for the Filters sheet (empty if they couldn't load).
+  List<CropCategory> _categories = [];
+
+  /// Selected category id, or null for "All".
+  String? _activeCategoryId;
+
   /// Farm id -> distance in km from the buyer's position (null when unknown,
   /// e.g. the farm has no coordinates or wasn't resolvable).
   Map<String, double> _distances = const {};
@@ -99,6 +106,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     });
 
     try {
+      // Category list for the Filters sheet. Failure-tolerant: an empty list
+      // just leaves the sheet with "All" only, results still render fine.
+      var categories = <CropCategory>[];
+      try {
+        categories = await ListingService.fetchCropCategories();
+      } catch (_) {}
+
       final listings = await widget.loadResults(widget.query);
 
       // Distance data behind the "Nearest" sort: buyer position + public farm
@@ -139,6 +153,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       setState(() {
         _rows = rows;
         _distances = distances;
+        _categories = categories;
+        if (_activeCategoryId != null &&
+            !_categories.any((c) => c.id == _activeCategoryId)) {
+          _activeCategoryId = null;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -150,10 +169,26 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     }
   }
 
+  /// Rows narrowed by the active category filter (null id = All). The raw
+  /// [_rows] keeps every fetched result; only the visible subset is sorted.
+  List<_ResultRow> get _visibleRows {
+    if (_activeCategoryId == null) return _rows;
+    return _rows
+        .where((r) => r.listing.categoryId == _activeCategoryId)
+        .toList();
+  }
+
+  String? get _activeCategoryName {
+    for (final c in _categories) {
+      if (c.id == _activeCategoryId) return c.name;
+    }
+    return null;
+  }
+
   /// Nearest: ascending straight-line distance (unknowns sink to the end).
   /// Available: AVAILABLE_NOW first, then SOON_TO_HARVEST, then everything else.
   List<_ResultRow> get _sortedRows {
-    final sorted = List<_ResultRow>.of(_rows);
+    final sorted = List<_ResultRow>.of(_visibleRows);
     switch (_sort) {
       case SearchSortMode.nearest:
         sorted.sort((a, b) =>
@@ -197,6 +232,77 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       const SnackBar(
         content: Text('Listing detail is unavailable.'),
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Opens the category picker; a chosen category narrows the results
+  /// client-side (no extra backend call). Empty selection means "All".
+  Future<void> _openCategoryFilters() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CategoryFilterSheet(
+        categories: _categories,
+        selectedId: _activeCategoryId,
+      ),
+    );
+
+    if (picked == null || !mounted) return;
+    setState(() => _activeCategoryId = picked.isEmpty ? null : picked);
+  }
+
+  /// The Filters chip: shows "Filters" normally, or the active category name
+  /// with a green dot when a filter is applied.
+  Widget _buildFilterChip() {
+    final name = _activeCategoryName;
+    return GestureDetector(
+      onTap: _openCategoryFilters,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE3EEDD),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune,
+                size: 16,
+                color: name == null
+                    ? AppColors.primaryGreen
+                    : AppColors.warningAmber),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                name ?? 'Filters',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: name == null
+                      ? AppColors.primaryGreen
+                      : AppColors.warningAmber,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (name != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: AppColors.warningAmber,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -252,14 +358,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       SearchResultsToolbar(
         sort: _sort,
         onSortChanged: (mode) => setState(() => _sort = mode),
-        onFiltersTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Filters coming soon.'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
+        trailing: _buildFilterChip(),
       ),
       const SizedBox(height: 14),
     ];
@@ -267,12 +366,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     if (rows.isEmpty) {
       children.add(_buildCountLine(rows.length));
       children.add(const SizedBox(height: 14));
-      children.add(const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
+      children.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: Text(
-            'No farms selling this crop yet.',
-            style: TextStyle(color: Colors.black54, fontSize: 14),
+            _activeCategoryId != null && _rows.isNotEmpty
+                ? 'No ${(_activeCategoryName ?? 'crop').toLowerCase()} '
+                    'crops listed right now.'
+                : 'No farms selling this crop yet.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54, fontSize: 14),
           ),
         ),
       ));
@@ -406,6 +509,106 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet category picker for the Search results. Returns '' for "All"
+/// or a category id; `null` when dismissed.
+class _CategoryFilterSheet extends StatelessWidget {
+  final List<CropCategory> categories;
+  final String? selectedId;
+
+  const _CategoryFilterSheet({
+    required this.categories,
+    this.selectedId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Filter by category',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.darkGreen,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Show only crops from one category.',
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  _option(context, '', 'All'),
+                  for (final category in categories)
+                    _option(context, category.id, category.name),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _option(BuildContext context, String id, String label) {
+    final isSelected = selectedId == id || (id.isEmpty && selectedId == null);
+    return InkWell(
+      onTap: () => Navigator.of(context).pop(id),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: Colors.black87, fontSize: 15),
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                color: AppColors.primaryGreen,
+                size: 20,
+              )
+            else
+              const Icon(Icons.circle_outlined,
+                  color: Colors.black26, size: 20),
+          ],
+        ),
       ),
     );
   }

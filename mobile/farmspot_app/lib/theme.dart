@@ -14,6 +14,16 @@ class AppColors {
 
   /// Muted sage green for search subtitles / secondary labels.
   static const Color mutedGreen = Color(0xFF5A8A5C);
+
+  // Feedback palette (earth tones). The solid colors double as icon/badge and
+  // button colors; the ...Soft tints are the soft banner fills behind them.
+  static const Color successSoft = Color(0xFFE7F2E8);
+  static const Color warningAmber = Color(0xFFB7791F);
+  static const Color warningSoft = Color(0xFFFDF3E0);
+  static const Color errorTerracotta = Color(0xFF9B3B27);
+  static const Color errorSoft = Color(0xFFFBE9E4);
+  static const Color infoSage = Color(0xFF4E6E58);
+  static const Color infoSoft = Color(0xFFEAF0EA);
 }
 
 final ThemeData appTheme = ThemeData(

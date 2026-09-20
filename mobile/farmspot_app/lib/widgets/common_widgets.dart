@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme.dart';
 
 /// Temporary logo placeholder — swap this out with your real logo image
@@ -63,6 +64,10 @@ class FarmSpotTextField extends StatelessWidget {
   final TextEditingController? controller;
   final TextInputType keyboardType;
   final Widget? prefixIcon;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? inputFormatters;
+  final Widget? suffixIcon;
 
   const FarmSpotTextField({
     super.key,
@@ -71,6 +76,10 @@ class FarmSpotTextField extends StatelessWidget {
     this.controller,
     this.keyboardType = TextInputType.text,
     this.prefixIcon,
+    this.errorText,
+    this.onChanged,
+    this.inputFormatters,
+    this.suffixIcon,
   });
 
   @override
@@ -79,12 +88,16 @@ class FarmSpotTextField extends StatelessWidget {
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      onChanged: onChanged,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.black45, fontSize: 14),
         prefixIcon: prefixIcon,
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.fieldBackground,
+        errorText: errorText,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
@@ -98,6 +111,15 @@ class FarmSpotTextField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.errorTerracotta),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              const BorderSide(color: AppColors.errorTerracotta, width: 1.5),
         ),
       ),
     );
@@ -189,4 +211,102 @@ class FarmSpotSwitchLink extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Alert tone used by [showFarmAlert] to pick the icon, colors and button.
+enum FarmAlertType { error, warning, success, info }
+
+/// Polished, branded FarmSpot alert dialog for login/signup feedback. Shows a
+/// circular icon badge on a soft earth-tone tint, a bold title and a friendly
+/// one-sentence message, closed by a single rounded button. Resolves `true`
+/// when the button is tapped.
+Future<bool?> showFarmAlert(
+  BuildContext context, {
+  required FarmAlertType type,
+  required String title,
+  required String message,
+  String buttonLabel = 'Okay',
+  IconData? icon,
+}) {
+  final (Color solid, Color soft, IconData defaultIcon) = switch (type) {
+    FarmAlertType.error => (
+        AppColors.errorTerracotta,
+        AppColors.errorSoft,
+        Icons.error_outline_rounded,
+      ),
+    FarmAlertType.warning => (
+        AppColors.warningAmber,
+        AppColors.warningSoft,
+        Icons.warning_amber_rounded,
+      ),
+    FarmAlertType.success => (
+        AppColors.primaryGreen,
+        AppColors.successSoft,
+        Icons.check_circle_outline_rounded,
+      ),
+    FarmAlertType.info => (
+        AppColors.infoSage,
+        AppColors.infoSoft,
+        Icons.info_outline_rounded,
+      ),
+  };
+
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(color: soft, shape: BoxShape.circle),
+              child: Icon(icon ?? defaultIcon, color: solid, size: 34),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.darkGreen,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black87, fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: solid,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(23),
+                  ),
+                ),
+                child: Text(
+                  buttonLabel,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

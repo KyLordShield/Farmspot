@@ -1,7 +1,46 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:cross_file/cross_file.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Structured login outcome so screens can distinguish network failures from
+/// auth failures (401/403) and show the right friendly message.
+class AuthLoginResult {
+  final bool success;
+  final int? statusCode;
+  final String? message;
+  final bool isNetworkError;
+
+  const AuthLoginResult({
+    required this.success,
+    this.statusCode,
+    this.message,
+    this.isNetworkError = false,
+  });
+}
+
+/// Structured registration outcome: same shape as [AuthLoginResult], plus the
+/// Laravel 422 `errors` map (backend field name -> message list) so the sign-up
+/// screen can show friendly text inline under the right field instead of
+/// printing raw "The USR_EMAIL ..." messages.
+class AuthRegisterResult {
+  final bool success;
+  final int? statusCode;
+  final String? message;
+  final bool isNetworkError;
+  final Map<String, List<String>> fieldErrors;
+
+  const AuthRegisterResult({
+    required this.success,
+    this.statusCode,
+    this.message,
+    this.isNetworkError = false,
+    this.fieldErrors = const {},
+  });
+}
 
 class AuthService {
   // Chrome + Laravel on the same machine -> localhost works fine.
@@ -43,6 +82,141 @@ class AuthService {
       return data['message'] ?? 'Login failed. Please try again.';
     } catch (e) {
       return 'Could not reach the server. Check your connection.';
+    }
+  }
+
+  /// Login variant that keeps the raw server response so the UI can map 401 vs
+  /// 403 vs network failure to friendly messages. Sends the exact same payload
+  /// as [login]. On success it stores the token and refreshes the cached user
+  /// exactly like [login] does.
+  static Future<AuthLoginResult> attemptLogin(
+    String email,
+    String password,
+  ) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/login'),
+            headers: {'Accept': 'application/json'},
+            body: {
+              'email': email,
+              'password': password,
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final token = data['token'] as String;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        await prefs.setString('user_data', jsonEncode(data['user']));
+
+        // Same authoritative user refresh as login() — see its comment.
+        await fetchUser();
+
+        return const AuthLoginResult(success: true);
+      }
+
+      return AuthLoginResult(
+        success: false,
+        statusCode: response.statusCode,
+        message: data['message'] as String?,
+      );
+    } on TimeoutException {
+      debugPrint('AuthService.attemptLogin: request timed out.');
+      return const AuthLoginResult(
+        success: false,
+        isNetworkError: true,
+      );
+    } on SocketException {
+      debugPrint('AuthService.attemptLogin: socket error (no connection).');
+      return const AuthLoginResult(
+        success: false,
+        isNetworkError: true,
+      );
+    } on http.ClientException {
+      debugPrint('AuthService.attemptLogin: client error (no connection).');
+      return const AuthLoginResult(
+        success: false,
+        isNetworkError: true,
+      );
+    } catch (e) {
+      debugPrint('AuthService.attemptLogin: unexpected error: $e');
+      return AuthLoginResult(success: false);
+    }
+  }
+
+  /// Registration variant that keeps the backend `errors` map (see
+  /// [AuthRegisterResult]) so the screen can map 422 validation failures to
+  /// friendly inline messages. Sends the exact same payload as [register] and
+  /// stores the token + refreshed cached user on success exactly like it does.
+  static Future<AuthRegisterResult> attemptRegister({
+    required String name,
+    required String email,
+    required String password,
+    required String passwordConfirmation,
+    required String mobileNumber,
+    String? address,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/register'),
+            headers: {'Accept': 'application/json'},
+            body: {
+              'USR_NAME': name,
+              'USR_EMAIL': email,
+              'USR_PASSWORD': password,
+              'USR_PASSWORD_confirmation': passwordConfirmation,
+              'USR_MOBILE_NUMBER': mobileNumber,
+              if (address != null) 'address': address.trim(),
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        final token = data['token'] as String;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        await prefs.setString('user_data', jsonEncode(data['user']));
+
+        await fetchUser();
+
+        return const AuthRegisterResult(success: true);
+      }
+
+      var fieldErrors = const <String, List<String>>{};
+      if (data is Map && data['errors'] is Map) {
+        fieldErrors = <String, List<String>>{
+          for (final entry in (data['errors'] as Map).entries)
+            entry.key.toString(): entry.value is List
+                ? entry.value.map((e) => e.toString()).toList()
+                : [entry.value.toString()],
+        };
+      }
+
+      return AuthRegisterResult(
+        success: false,
+        statusCode: response.statusCode,
+        message: data['message'] as String?,
+        fieldErrors: fieldErrors,
+      );
+    } on TimeoutException {
+      debugPrint('AuthService.attemptRegister: request timed out.');
+      return const AuthRegisterResult(success: false, isNetworkError: true);
+    } on SocketException {
+      debugPrint('AuthService.attemptRegister: socket error (no connection).');
+      return const AuthRegisterResult(success: false, isNetworkError: true);
+    } on http.ClientException {
+      debugPrint('AuthService.attemptRegister: client error (no connection).');
+      return const AuthRegisterResult(success: false, isNetworkError: true);
+    } catch (e) {
+      debugPrint('AuthService.attemptRegister: unexpected error: $e');
+      return AuthRegisterResult(success: false);
     }
   }
 
