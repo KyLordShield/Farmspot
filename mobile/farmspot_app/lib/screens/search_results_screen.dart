@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../utils/crop_icons.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/search_widgets.dart';
+import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 
 /// Screen 2 of the search flow: real results for a submitted search term.
@@ -210,7 +211,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const FarmSpotLoader();
     }
 
     if (_error != null) {

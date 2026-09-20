@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/app_feedback.dart';
+import '../widgets/farmspot_loader.dart';
 import '../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
@@ -16,7 +18,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
@@ -26,10 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() => _isLoading = true);
+    showFarmSpotLoading(context, message: 'Signing in...');
 
     final error = await AuthService.login(
       _emailController.text.trim(),
@@ -37,17 +36,16 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-      _errorMessage = error;
-    });
+    Navigator.of(context, rootNavigator: true).pop();
+    setState(() => _isLoading = false);
 
     if (error == null) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
+      return;
     }
+    showFarmSpotSnackBar(context, error, isError: true);
   }
 
   void _goToSignUp() {
@@ -80,14 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: true,
                   ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red, fontSize: 13),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
                   const SizedBox(height: 26),
                   FarmSpotButton(
                     label: _isLoading ? 'Logging in...' : 'Log In',

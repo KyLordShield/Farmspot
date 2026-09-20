@@ -4,6 +4,7 @@ import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
@@ -323,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 120),
-        child: Center(child: CircularProgressIndicator()),
+        child: FarmSpotLoader(),
       );
     }
 

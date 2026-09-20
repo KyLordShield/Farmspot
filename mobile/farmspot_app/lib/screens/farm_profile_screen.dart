@@ -4,6 +4,7 @@ import '../models/farm_profile.dart';
 import '../services/farm_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 
 /// Buyer-facing Farm Profile: farm banner + quick stats, then a sticky tab bar
@@ -84,7 +85,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const FarmSpotLoader();
     }
 
     if (_error != null) {

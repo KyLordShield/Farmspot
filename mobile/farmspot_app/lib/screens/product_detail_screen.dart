@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/listing_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/farmspot_loader.dart';
 import 'farm_profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -529,13 +530,10 @@ class _BoxedNetworkImage extends StatelessWidget {
         return Container(
           color: Colors.grey.shade200,
           alignment: Alignment.center,
-          child: SizedBox(
+          child: const SizedBox(
             width: 24,
             height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.primaryGreen,
-            ),
+            child: FarmSpotLoader(size: 20),
           ),
         );
       },

@@ -5,6 +5,7 @@ import '../widgets/seller_widgets.dart';
 import '../models/insights.dart';
 import '../services/auth_service.dart';
 import '../services/insights_service.dart';
+import '../widgets/farmspot_loader.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
@@ -107,11 +108,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     }
                     if (snapshot.connectionState != ConnectionState.done) {
                       return _fillScrollable(
-                        const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryGreen,
-                          ),
-                        ),
+                        const FarmSpotLoader(),
                       );
                     }
                     return _fillScrollable(

@@ -9,6 +9,7 @@ import '../../services/farm_service.dart';
 import '../../services/listing_service.dart';
 import '../../theme.dart';
 import '../../widgets/seller_widgets.dart';
+import '../../widgets/farmspot_loader.dart';
 import 'farm_live_screen.dart';
 
 enum AvailabilityStatus {
@@ -632,7 +633,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                     if (_farmsLoading)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Center(child: FarmSpotLoader(size: 32)),
                       )
                     else if (_farms.isEmpty)
                       const Padding(
@@ -658,7 +659,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   if (_categoriesLoading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(child: FarmSpotLoader(size: 32)),
                     )
                   else if (_categoriesError != null)
                     Text(

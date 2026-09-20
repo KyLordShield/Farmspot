@@ -9,6 +9,7 @@ import '../services/farm_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import '../widgets/farmspot_loader.dart';
 import 'farm_directions_screen.dart';
 import 'farm_profile_screen.dart';
 import 'home_screen.dart';
@@ -326,7 +327,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Widget _buildListingView() {
     if (_loadingFarms) {
-      return const Center(child: CircularProgressIndicator());
+      return const FarmSpotLoader();
     }
     if (_farms.isEmpty) {
       return const Center(

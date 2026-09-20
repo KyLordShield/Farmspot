@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import '../widgets/app_feedback.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
@@ -225,9 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _photoBusy = false);
 
     if (result.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.error!)),
-      );
+      showFarmSpotSnackBar(context, result.error!, isError: true);
       return;
     }
 
@@ -235,31 +234,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _photoUrl = newUrl);
   }
 
-  void _logout() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log out'),
-        content: const Text('Are you sure you want to log out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop(); // close the dialog first
-              await AuthService.logout();
-              if (!mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (route) => false, // clears the whole nav stack
-              );
-            },
-            child: const Text('Log out', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+  Future<void> _logout() async {
+    final confirmed = await showFarmSpotDialog(
+      context,
+      title: 'Log out',
+      message: 'Are you sure you want to log out?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Log out',
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+
+    await AuthService.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false, // clears the whole nav stack
     );
   }
 
@@ -585,23 +575,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showContactSupport() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Contact Support'),
-        content: const Text(
-          'Need help with your seller application?\n\n'
+    showFarmSpotDialog(
+      context,
+      title: 'Contact Support',
+      message: 'Need help with your seller application?\n\n'
           'Contact the Association Secretary:\n'
-          '📞 [PHONE NUMBER HERE]\n'
-          '✉️ [EMAIL ADDRESS HERE]',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+          'PHONE: [PHONE NUMBER HERE]\n'
+          'EMAIL: [EMAIL ADDRESS HERE]',
+      confirmLabel: 'OK',
     );
   }
 

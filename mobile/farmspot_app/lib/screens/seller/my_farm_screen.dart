@@ -6,6 +6,7 @@ import '../../services/farm_service.dart';
 import '../../services/listing_service.dart';
 import '../../theme.dart';
 import '../../widgets/seller_widgets.dart';
+import '../../widgets/farmspot_loader.dart';
 import '../../widgets/stat_box.dart';
 import '../insights_screen.dart';
 import '../map_screen.dart';
@@ -433,7 +434,7 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     if (_listingsLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(child: CircularProgressIndicator()),
+        child: FarmSpotLoader(size: 64),
       );
     }
 

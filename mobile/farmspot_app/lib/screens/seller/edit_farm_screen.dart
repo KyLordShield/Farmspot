@@ -7,6 +7,7 @@ import '../../models/farm_profile.dart';
 import '../../services/farm_service.dart';
 import '../../theme.dart';
 import '../../widgets/seller_widgets.dart';
+import '../../widgets/farmspot_loader.dart';
 
 /// Edit screen for the seller's own farm.
 ///
@@ -190,7 +191,7 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const FarmSpotLoader();
     }
 
     if (_loadError != null) {
