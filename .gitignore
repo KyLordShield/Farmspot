@@ -1,0 +1,15 @@
+# Python virtual environment (recreate with `python -m venv .venv`)
+ml_service/.venv/
+
+# Python caches
+ml_service/__pycache__/
+*.pyc
+
+# Runtime uploads from the image-search service (test photos, diagnostics)
+ml_service/uploads/
+
+# YOLO training outputs -- weights, curves, predictions (big binaries)
+runs/
+
+# Curated training dataset (third-party images). Keep on disk, not in git.
+ml_service/dataset/

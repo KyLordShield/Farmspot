@@ -1,16 +1,18 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../services/image_detect_service.dart';
 import '../theme.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/search_widgets.dart';
 
-/// Screen 3 of the search mockup: image (visual) search, driven by a three
+/// Screen 3 of the search flow: image (visual) search, driven by a three
 /// step state machine following the same enum + switch pattern as
 /// FarmDirectionsScreen.
 ///
-/// UI-ONLY MOCKUP. The camera/gallery buttons don't open a real picker or a
-/// real camera preview, the "AI identifying" step is a fake delay, and the
-/// detected result is hardcoded to "Carrots". No real image recognition or
-/// backend is involved.
+/// The camera/gallery buttons open the real device picker, the captured
+/// photo is sent to the local YOLO service (ml_service/app.py) via
+/// ImageDetectService, and the detected crop name drives the results step.
+/// The results grid itself is still mock data until search wiring arrives.
 enum _ImageSearchStep { capture, identifying, results }
 
 class ImageSearchScreen extends StatefulWidget {
@@ -23,10 +25,10 @@ class ImageSearchScreen extends StatefulWidget {
 class _ImageSearchScreenState extends State<ImageSearchScreen> {
   _ImageSearchStep _step = _ImageSearchStep.capture;
 
-  /// True once the fake recognition delay in `identifying` has completed.
-  bool _detected = false;
-
-  static const String _detectedCrop = 'Carrots';
+  /// Detected crop name once the YOLO service replies; null while identifying
+  /// (drives whether the scanning or detected UI shows).
+  String? _detectedCrop;
+  double? _detectedConfidence;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +97,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                       backgroundColor: AppColors.primaryGreen,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    onPressed: _startIdentifying,
+                    onPressed: () => _identify(source: ImageSource.camera),
                     icon: const Icon(Icons.photo_camera),
                     label: const Text('Camera'),
                   ),
@@ -109,7 +111,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                       side: const BorderSide(color: AppColors.primaryGreen),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    onPressed: _startIdentifying,
+                    onPressed: () => _identify(source: ImageSource.gallery),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: const Text('Gallery'),
                   ),
@@ -138,7 +140,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-            child: _detected ? _buildDetected() : _buildScanning(),
+            child: _detectedCrop == null ? _buildScanning() : _buildDetected(),
           ),
         ),
       ],
@@ -218,20 +220,26 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$_detectedCrop detected',
+                      '${_detectedCrop!} detected',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(_detectedConfidence! * 100).round()}% sure this is ${_detectedCrop!}',
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 GestureDetector(
-                  onTap: () {
-                    // No-op correction link in this mockup stage.
-                  },
+                  onTap: _restart,
                   child: const Text(
                     'Not this?',
                     style: TextStyle(
@@ -277,10 +285,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                   // Visual-only toggle in this mockup.
                 },
                 trailing: GestureDetector(
-                  onTap: () {
-                    // Correction link: allows restarting recognition with a
-                    // different photo in later stages.
-                  },
+                  onTap: _restart,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -349,7 +354,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '${mockSearchResults.length} farms selling $_detectedCrop '
+            '${mockSearchResults.length} farms selling ${_detectedCrop!} '
             'near you',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
@@ -373,7 +378,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
             switch (_step) {
               _ImageSearchStep.capture => 'Identify crop',
               _ImageSearchStep.identifying => 'Identifying',
-              _ImageSearchStep.results => _detectedCrop,
+              _ImageSearchStep.results => _detectedCrop ?? '',
             },
             style: const TextStyle(
               fontSize: 18,
@@ -390,15 +395,46 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     );
   }
 
-  void _startIdentifying() {
+  /// Opens the device picker, uploads the photo to the YOLO service, and
+  /// reveals the detected crop name — or bounces back with an error toast.
+  Future<void> _identify({required ImageSource source}) async {
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
     setState(() {
       _step = _ImageSearchStep.identifying;
-      _detected = false;
+      _detectedCrop = null;
+      _detectedConfidence = null;
     });
-    // Fake recognition delay; reveals the hardcoded result once it elapses.
-    Timer(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      setState(() => _detected = true);
+
+    final crop = await ImageDetectService.detectCrop(picked);
+    if (!mounted) return;
+
+    if (crop == null) {
+      showFarmSpotSnackBar(
+        context,
+        'Could not identify the crop. Try a clearer photo.',
+        isError: true,
+      );
+      setState(() => _step = _ImageSearchStep.capture);
+      return;
+    }
+
+    setState(() {
+      _detectedCrop = crop.name;
+      _detectedConfidence = crop.confidence;
+    });
+  }
+
+  /// Returns to the capture step after a correction link or failed attempt.
+  void _restart() {
+    setState(() {
+      _step = _ImageSearchStep.capture;
+      _detectedCrop = null;
+      _detectedConfidence = null;
     });
   }
 }
