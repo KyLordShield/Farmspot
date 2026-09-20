@@ -13,3 +13,9 @@ runs/
 
 # Curated training dataset (third-party images). Keep on disk, not in git.
 ml_service/dataset/
+
+# Demo photos live on Cloudinary (see database/seeders/demo_photo_urls.json).
+# The public/ copies are seed sources only (and offline fallbacks).
+website/public/demo-crops/
+website/public/demo-farm-photos/
+website/public/testing-crops/

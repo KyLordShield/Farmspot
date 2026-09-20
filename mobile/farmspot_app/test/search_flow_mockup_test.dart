@@ -236,11 +236,69 @@ void main() {
       expect(find.text('Nearest'), findsOneWidget);
       expect(find.text('Available'), findsOneWidget);
       expect(find.text('Filters'), findsOneWidget);
-      expect(find.text('3 farms selling Carrots near you'), findsOneWidget);
+      // F1 is at the buyer (0 km -> near), F2 is ~12 km away (near),
+      // L3 has no farm/position (grouped under "Other farms").
+      expect(find.text('2 farms selling Carrots within 15 km of you'), findsOneWidget);
+      expect(find.text('Near you'), findsOneWidget);
       expect(find.text("Little A's Farm"), findsOneWidget);
       expect(find.text('Big Ben Farm'), findsOneWidget);
+
+      // The far group sits below the fold of the lazy ListView.
+      await tester.scrollUntilVisible(
+        find.text('Other farms'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Other farms'), findsOneWidget);
       expect(find.text('Sun Village Farm'), findsOneWidget);
-      expect(find.byType(SearchResultCard), findsNWidgets(3));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('farms beyond the radius are grouped under "Other farms" '
+        'instead of being hidden', (tester) async {
+      await pumpResults(
+        tester,
+        listings: [
+          _listing('L1', 'Carrots', "Little A's Farm", farmId: 'F1'),
+          _listing('L2', 'Carrots', 'Far Away Farm', farmId: 'F2'),
+          _listing('L3', 'Carrots', 'No Coords Farm'),
+        ],
+        farms: [
+          _pin('F1', 10.3178, 123.8742), // 0 km -> near
+          _pin('F2', 10.60, 124.20), // ~65 km away -> "Other farms"
+        ],
+      );
+
+      expect(find.text('Near you'), findsOneWidget);
+      final nearGrid = find.byType(SearchResultGrid).at(0);
+      expect(
+        find.descendant(of: nearGrid, matching: find.text("Little A's Farm")),
+        findsOneWidget,
+      );
+
+      await tester.scrollUntilVisible(
+        find.text('Other farms'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Far Away Farm'), findsOneWidget);
+      expect(find.text('No Coords Farm'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('when nothing is near, all results still appear under '
+        '"All results"', (tester) async {
+      await pumpResults(
+        tester,
+        listings: [
+          _listing('L1', 'Carrots', 'Far Far Away Farm', farmId: 'F1'),
+        ],
+        farms: [_pin('F1', 10.80, 124.50)], // hugely far from the buyer
+      );
+
+      expect(find.textContaining('No farms selling Carrots within'), findsOneWidget);
+      expect(find.text('All results'), findsOneWidget);
+      expect(find.text('Far Far Away Farm'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

@@ -13,6 +13,13 @@ import '../widgets/search_widgets.dart';
 import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 
+/// Radius boundary for the "Nearest" view, in kilometers. Results from farms
+/// within this distance show under "Near you"; everything farther is grouped
+/// under "Other farms" so buyers still see every match, just organized.
+const double searchRadiusKm = 15.0;
+
+String get _searchRadiusLabel => '${searchRadiusKm.toStringAsFixed(0)} km';
+
 /// Screen 2 of the search flow: real results for a submitted search term.
 ///
 /// Unlike the image-search step (still a mockup), this screen is fully live:
@@ -241,45 +248,95 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     }
 
     final rows = _sortedRows;
+    final children = <Widget>[
+      SearchResultsToolbar(
+        sort: _sort,
+        onSortChanged: (mode) => setState(() => _sort = mode),
+        onFiltersTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Filters coming soon.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 14),
+    ];
+
+    if (rows.isEmpty) {
+      children.add(_buildCountLine(rows.length));
+      children.add(const SizedBox(height: 14));
+      children.add(const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Text(
+            'No farms selling this crop yet.',
+            style: TextStyle(color: Colors.black54, fontSize: 14),
+          ),
+        ),
+      ));
+    } else if (_sort == SearchSortMode.nearest) {
+      // Group by the radius boundary: "Near you" then "Other farms". When the
+      // nearest results are all beyond the boundary (or unknown), just show
+      // everything with an honest count line instead of hiding it.
+      final near = rows
+          .where((r) => _kmFor(r).isFinite && _kmFor(r) <= searchRadiusKm)
+          .toList();
+      final other = rows
+          .where((r) => !(_kmFor(r).isFinite && _kmFor(r) <= searchRadiusKm))
+          .toList();
+
+      if (near.isEmpty && other.isNotEmpty) {
+        children.add(Text(
+          'No farms selling $_displayTitle within $_searchRadiusLabel of you',
+          style: const TextStyle(color: Colors.black54, fontSize: 13),
+        ));
+        children.add(const SizedBox(height: 14));
+        children.add(_buildSectionHeader('All results'));
+        children.add(const SizedBox(height: 10));
+        children.add(SearchResultGrid(
+          items: rows.map((r) => r.item).toList(growable: false),
+          onTap: _onCardTap,
+        ));
+      } else {
+        children.add(_buildCountLine(near.length, within: true));
+        children.add(const SizedBox(height: 14));
+        children.add(_buildSectionHeader('Near you'));
+        children.add(const SizedBox(height: 10));
+        children.add(SearchResultGrid(
+          items: near.map((r) => r.item).toList(growable: false),
+          onTap: _onCardTap,
+        ));
+        if (other.isNotEmpty) {
+          children.add(const SizedBox(height: 22));
+          children.add(_buildSectionHeader('Other farms'));
+          children.add(const SizedBox(height: 10));
+          children.add(SearchResultGrid(
+            items: other.map((r) => r.item).toList(growable: false),
+            onTap: _onCardTap,
+          ));
+        }
+      }
+    } else {
+      children.add(_buildCountLine(rows.length));
+      children.add(const SizedBox(height: 14));
+      children.add(SearchResultGrid(
+        items: rows.map((r) => r.item).toList(growable: false),
+        onTap: _onCardTap,
+      ));
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      children: [
-        SearchResultsToolbar(
-          sort: _sort,
-          onSortChanged: (mode) => setState(() => _sort = mode),
-          onFiltersTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Filters coming soon.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 14),
-        _buildCountLine(rows.length),
-        const SizedBox(height: 14),
-        if (rows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Center(
-              child: Text(
-                'No farms selling this crop yet.',
-                style: TextStyle(color: Colors.black54, fontSize: 14),
-              ),
-            ),
-          )
-        else
-          SearchResultGrid(
-            items: rows.map((r) => r.item).toList(growable: false),
-            onTap: _onCardTap,
-          ),
-      ],
+      children: children,
     );
   }
 
-  Widget _buildCountLine(int count) {
+  Widget _buildCountLine(int count, {bool within = false}) {
     final noun = count == 1 ? 'farm' : 'farms';
+    final suffix =
+        within ? 'within $_searchRadiusLabel of you' : 'near you';
     return Row(
       children: [
         Container(
@@ -293,8 +350,34 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$count $noun selling $_displayTitle near you',
+            '$count $noun selling $_displayTitle $suffix',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      children: [
+        Container(
+          width: 5,
+          height: 16,
+          decoration: BoxDecoration(
+            color: AppColors.primaryGreen,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
           ),
         ),
       ],

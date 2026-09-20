@@ -1,0 +1,158 @@
+{
+    "crops": {
+        "bataw": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927398/demo/crops/bataw/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927403/demo/crops/bataw/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927408/demo/crops/bataw/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927412/demo/crops/bataw/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927417/demo/crops/bataw/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927421/demo/crops/bataw/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927425/demo/crops/bataw/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927430/demo/crops/bataw/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927434/demo/crops/bataw/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927439/demo/crops/bataw/k9.jpg"
+        },
+        "beans": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927443/demo/crops/beans/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927448/demo/crops/beans/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927452/demo/crops/beans/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927457/demo/crops/beans/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927462/demo/crops/beans/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927466/demo/crops/beans/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927470/demo/crops/beans/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927474/demo/crops/beans/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927479/demo/crops/beans/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927484/demo/crops/beans/k9.jpg"
+        },
+        "kamatis": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927488/demo/crops/kamatis/k1.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927494/demo/crops/kamatis/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927498/demo/crops/kamatis/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927502/demo/crops/kamatis/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927506/demo/crops/kamatis/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927511/demo/crops/kamatis/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927515/demo/crops/kamatis/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927519/demo/crops/kamatis/k8.jpg"
+        },
+        "lettuce": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927523/demo/crops/lettuce/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927527/demo/crops/lettuce/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927533/demo/crops/lettuce/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927539/demo/crops/lettuce/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927544/demo/crops/lettuce/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927549/demo/crops/lettuce/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927553/demo/crops/lettuce/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927558/demo/crops/lettuce/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927563/demo/crops/lettuce/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927566/demo/crops/lettuce/k9.jpg"
+        },
+        "pechay": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927571/demo/crops/pechay/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927576/demo/crops/pechay/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927580/demo/crops/pechay/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927585/demo/crops/pechay/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927589/demo/crops/pechay/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927594/demo/crops/pechay/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927599/demo/crops/pechay/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927603/demo/crops/pechay/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927607/demo/crops/pechay/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927611/demo/crops/pechay/k9.jpg"
+        },
+        "pipino": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927615/demo/crops/pipino/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927619/demo/crops/pipino/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927624/demo/crops/pipino/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927628/demo/crops/pipino/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927632/demo/crops/pipino/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927637/demo/crops/pipino/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927641/demo/crops/pipino/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927645/demo/crops/pipino/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927649/demo/crops/pipino/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927652/demo/crops/pipino/k9.jpg"
+        },
+        "repolyo": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927657/demo/crops/repolyo/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927661/demo/crops/repolyo/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927665/demo/crops/repolyo/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927670/demo/crops/repolyo/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927674/demo/crops/repolyo/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927678/demo/crops/repolyo/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927682/demo/crops/repolyo/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927686/demo/crops/repolyo/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927690/demo/crops/repolyo/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927695/demo/crops/repolyo/k9.jpg"
+        },
+        "sayote": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927699/demo/crops/sayote/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927703/demo/crops/sayote/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927708/demo/crops/sayote/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927712/demo/crops/sayote/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927716/demo/crops/sayote/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927721/demo/crops/sayote/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927725/demo/crops/sayote/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927729/demo/crops/sayote/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927733/demo/crops/sayote/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927738/demo/crops/sayote/k9.jpg"
+        },
+        "sili": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927742/demo/crops/sili/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927746/demo/crops/sili/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927750/demo/crops/sili/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927754/demo/crops/sili/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927758/demo/crops/sili/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927762/demo/crops/sili/k5.jpg",
+            "k6": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927767/demo/crops/sili/k6.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927770/demo/crops/sili/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927775/demo/crops/sili/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927779/demo/crops/sili/k9.jpg"
+        },
+        "squash": {
+            "k1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927783/demo/crops/squash/k1.jpg",
+            "k10": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927787/demo/crops/squash/k10.jpg",
+            "k2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927791/demo/crops/squash/k2.jpg",
+            "k3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927795/demo/crops/squash/k3.jpg",
+            "k4": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927799/demo/crops/squash/k4.jpg",
+            "k5": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927803/demo/crops/squash/k5.jpg",
+            "k7": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927807/demo/crops/squash/k7.jpg",
+            "k8": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927812/demo/crops/squash/k8.jpg",
+            "k9": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927815/demo/crops/squash/k9.jpg"
+        }
+    },
+    "farms": {
+        "farm1": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927819/demo/farms/farm1/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927824/demo/farms/farm1/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927828/demo/farms/farm1/f3.jpg"
+        },
+        "farm2": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927832/demo/farms/farm2/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927836/demo/farms/farm2/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927841/demo/farms/farm2/f3.jpg"
+        },
+        "farm3": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927845/demo/farms/farm3/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927849/demo/farms/farm3/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927853/demo/farms/farm3/f3.jpg"
+        },
+        "farm4": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927857/demo/farms/farm4/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927862/demo/farms/farm4/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927867/demo/farms/farm4/f3.jpg"
+        },
+        "farm5": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927872/demo/farms/farm5/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927876/demo/farms/farm5/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927880/demo/farms/farm5/f3.jpg"
+        },
+        "farm6": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927885/demo/farms/farm6/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927890/demo/farms/farm6/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927895/demo/farms/farm6/f3.jpg"
+        },
+        "farm7": {
+            "f1": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927899/demo/farms/farm7/f1.jpg",
+            "f2": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927902/demo/farms/farm7/f2.jpg",
+            "f3": "https://res.cloudinary.com/asrnesf6/image/upload/v1789927906/demo/farms/farm7/f3.jpg"
+        }
+    }
+}
