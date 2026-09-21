@@ -6,7 +6,7 @@ from fastapi import FastAPI, UploadFile
 from ultralytics import YOLO
 
 app = FastAPI()
-model = YOLO('C:/xampp/htdocs/Farmspot/runs/detect/train-4/weights/best.pt')
+model = YOLO('C:/xampp/htdocs/Farmspot/ml_service/farmspot_image_scanner.pt')
 MIN_CONF = 0.6  # demo default: keeps everyday phone shots alive; raising it kills apples but also dim tomatoes
 UPLOADS = pathlib.Path('C:/xampp/htdocs/Farmspot/ml_service/uploads')
 
@@ -19,6 +19,8 @@ async def detect(file: UploadFile):
     results = model(image)                      # now YOLO can read it
     detections = []
     for box in results[0].boxes:
+        if int(box.cls) != 0:
+            continue                            # skip not_kamatis class
         if float(box.conf) < MIN_CONF:
             continue
         detections.append({

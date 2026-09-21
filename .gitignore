@@ -14,6 +14,9 @@ runs/
 # Curated training dataset (third-party images). Keep on disk, not in git.
 ml_service/dataset/
 
+# Auto-labeled negative samples (non-crop photos for the two-class trainer).
+ml_service/negatives/
+
 # Demo photos live on Cloudinary (see database/seeders/demo_photo_urls.json).
 # The public/ copies are seed sources only (and offline fallbacks).
 website/public/demo-crops/

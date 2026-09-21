@@ -1,22 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
+import '../models/farm_pin.dart';
+import '../models/listing.dart';
+import '../services/farm_service.dart';
 import '../services/image_detect_service.dart';
+import '../services/listing_service.dart';
+import '../services/location_service.dart';
 import '../theme.dart';
 import '../widgets/app_feedback.dart';
-import '../widgets/search_widgets.dart';
+import 'search_results_screen.dart';
 
-/// Screen 3 of the search flow: image (visual) search, driven by a three
-/// step state machine following the same enum + switch pattern as
-/// FarmDirectionsScreen.
+/// Screen 3 of the search flow: image (visual) search.
 ///
-/// The camera/gallery buttons open the real device picker, the captured
-/// photo is sent to the local YOLO service (ml_service/app.py) via
-/// ImageDetectService, and the detected crop name drives the results step.
-/// The results grid itself is still mock data until search wiring arrives.
-enum _ImageSearchStep { capture, identifying, results }
+/// The camera/gallery buttons open the real device picker, the captured photo
+/// is sent to the local YOLO service (ml_service/app.py) via
+/// ImageDetectService. Every crop the model finds becomes a section on the
+/// live results screen (SearchResultsScreen multi-crop mode), so the flow is:
+/// photo -> scan -> straight to results (no "crop detected" interstitial).
+enum _ImageSearchStep { capture, identifying }
 
 class ImageSearchScreen extends StatefulWidget {
-  const ImageSearchScreen({super.key});
+  /// Test seam: replaces the real device picker. Defaults to ImagePicker.
+  final Future<XFile?> Function(ImageSource source)? pickImage;
+
+  /// Test seam: replaces the YOLO call. Defaults to ImageDetectService.
+  final Future<List<DetectedCrop>> Function(XFile photo)? detect;
+
+  /// Forwarded to [SearchResultsScreen] so tests can inject fake loaders.
+  final Future<List<Listing>> Function(String term)? loadResults;
+  final Future<LatLng> Function()? loadPosition;
+  final Future<List<FarmPin>> Function()? loadFarms;
+
+  const ImageSearchScreen({
+    super.key,
+    this.pickImage,
+    this.detect,
+    this.loadResults,
+    this.loadPosition,
+    this.loadFarms,
+  });
 
   @override
   State<ImageSearchScreen> createState() => _ImageSearchScreenState();
@@ -24,11 +47,6 @@ class ImageSearchScreen extends StatefulWidget {
 
 class _ImageSearchScreenState extends State<ImageSearchScreen> {
   _ImageSearchStep _step = _ImageSearchStep.capture;
-
-  /// Detected crop name once the YOLO service replies; null while identifying
-  /// (drives whether the scanning or detected UI shows).
-  String? _detectedCrop;
-  double? _detectedConfidence;
 
   @override
   Widget build(BuildContext context) {
@@ -38,14 +56,13 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         child: switch (_step) {
           _ImageSearchStep.capture => _buildCapture(),
           _ImageSearchStep.identifying => _buildIdentifying(),
-          _ImageSearchStep.results => _buildResults(),
         },
       ),
     );
   }
 
   /// Step 1 — Capture: static dashed-corner viewfinder + Camera / Gallery
-  /// buttons (both fake; either advances to the identifying step).
+  /// buttons.
   Widget _buildCapture() {
     return Column(
       children: [
@@ -130,67 +147,11 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     );
   }
 
-  /// Step 2 — Identifying: shows a fake loading state, then after a short
-  /// delay reveals a hardcoded detected result with correction + proceed
-  /// actions.
+  /// Step 2 — Identifying: shows a loading state while the YOLO service runs.
   Widget _buildIdentifying() {
     return Column(
       children: [
         _buildAppBar(),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-            child: _detectedCrop == null ? _buildScanning() : _buildDetected(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildScanning() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              width: 150,
-              height: 150,
-              color: const Color(0xFFE9F1E7),
-              child: const Icon(
-                Icons.eco,
-                size: 56,
-                color: AppColors.primaryGreen,
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.primaryGreen,
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'AI identifying crop...',
-            style: TextStyle(
-              color: Colors.black87,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetected() {
-    return Column(
-      children: [
         Expanded(
           child: Center(
             child: Column(
@@ -209,154 +170,26 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 22),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                      color: AppColors.primaryGreen,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_detectedCrop!} detected',
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${(_detectedConfidence! * 100).round()}% sure this is ${_detectedCrop!}',
-                      style: const TextStyle(
-                        color: Colors.black54,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 28),
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primaryGreen,
+                  ),
                 ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: _restart,
-                  child: const Text(
-                    'Not this?',
-                    style: TextStyle(
-                      color: AppColors.mutedGreen,
-                      fontSize: 13,
-                      decoration: TextDecoration.underline,
-                    ),
+                const SizedBox(height: 14),
+                const Text(
+                  'AI identifying crop...',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
-          ),
-        ),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primaryGreen,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            onPressed: () => setState(() => _step = _ImageSearchStep.results),
-            icon: const Icon(Icons.view_list),
-            label: const Text('Show Results \u2014 Nearest First'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Step 3 — Results: reuses the same 2x2 grid as the typed-results screen,
-  /// keyed by the detected crop name, with a correction link and sort chips.
-  Widget _buildResults() {
-    return Column(
-      children: [
-        _buildAppBar(),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-            children: [
-              SearchResultsToolbar(
-                sort: SearchSortMode.nearest,
-                onSortChanged: (_) {
-                  // Visual-only toggle in this mockup.
-                },
-                trailing: GestureDetector(
-                  onTap: _restart,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE3EEDD),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.refresh,
-                          size: 15,
-                          color: AppColors.primaryGreen,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          'Not this?',
-                          style: TextStyle(
-                            color: AppColors.primaryGreen,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _buildCountLine(),
-              const SizedBox(height: 14),
-              SearchResultGrid(
-                items: mockSearchResults,
-                onTap: (item) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${item.crop} from ${item.seller} — detail coming soon.',
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCountLine() {
-    return Row(
-      children: [
-        Container(
-          width: 5,
-          height: 16,
-          decoration: BoxDecoration(
-            color: AppColors.primaryGreen,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '${mockSearchResults.length} farms selling ${_detectedCrop!} '
-            'near you',
-            style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
         ),
       ],
@@ -375,11 +208,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
             tooltip: 'Back',
           ),
           Text(
-            switch (_step) {
-              _ImageSearchStep.capture => 'Identify crop',
-              _ImageSearchStep.identifying => 'Identifying',
-              _ImageSearchStep.results => _detectedCrop ?? '',
-            },
+            _step == _ImageSearchStep.capture ? 'Identify crop' : 'Identifying',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -395,25 +224,24 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     );
   }
 
-  /// Opens the device picker, uploads the photo to the YOLO service, and
-  /// reveals the detected crop name — or bounces back with an error toast.
+  /// Opens the device picker, uploads the photo to the YOLO service, then
+  /// jumps straight to the live results screen (one section per crop the
+  /// model found). Bounces back to capture with an error toast if no crop
+  /// was confidently identified.
   Future<void> _identify({required ImageSource source}) async {
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 85,
-    );
+    final pick =
+        widget.pickImage ?? (s) => ImagePicker().pickImage(source: s, imageQuality: 85);
+    final picked = await pick(source);
     if (picked == null || !mounted) return;
 
-    setState(() {
-      _step = _ImageSearchStep.identifying;
-      _detectedCrop = null;
-      _detectedConfidence = null;
-    });
+    setState(() => _step = _ImageSearchStep.identifying);
 
-    final crop = await ImageDetectService.detectCrop(picked);
+    final detect =
+        widget.detect ?? (photo) => ImageDetectService.detectCrops(photo);
+    final crops = await detect(picked);
     if (!mounted) return;
 
-    if (crop == null) {
+    if (crops.isEmpty) {
       showFarmSpotSnackBar(
         context,
         'Could not identify the crop. Try a clearer photo.',
@@ -423,19 +251,23 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
       return;
     }
 
-    setState(() {
-      _detectedCrop = crop.name;
-      _detectedConfidence = crop.confidence;
-    });
-  }
-
-  /// Returns to the capture step after a correction link or failed attempt.
-  void _restart() {
-    setState(() {
-      _step = _ImageSearchStep.capture;
-      _detectedCrop = null;
-      _detectedConfidence = null;
-    });
+    // Every found crop becomes a results section; each section is sorted
+    // nearest-first inside SearchResultsScreen.
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchResultsScreen(
+          query: crops.first.name,
+          queries: [for (final crop in crops) crop.name],
+          loadResults:
+              widget.loadResults ?? (t) => ListingService.fetchListings(search: t),
+          loadPosition: widget.loadPosition ?? LocationService.defaultBuyerPosition,
+          loadFarms: widget.loadFarms ?? FarmService.fetchPublicFarms,
+        ),
+      ),
+    );
+    // Back from results -> ready for the next photo.
+    if (!mounted) return;
+    setState(() => _step = _ImageSearchStep.capture);
   }
 }
 

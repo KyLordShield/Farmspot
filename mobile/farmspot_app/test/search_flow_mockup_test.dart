@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,7 @@ import 'package:farmspot_app/screens/image_search_screen.dart';
 import 'package:farmspot_app/screens/product_detail_screen.dart';
 import 'package:farmspot_app/screens/search_results_screen.dart';
 import 'package:farmspot_app/screens/search_screen.dart';
+import 'package:farmspot_app/services/image_detect_service.dart';
 import 'package:farmspot_app/services/recent_searches.dart';
 import 'package:farmspot_app/widgets/search_widgets.dart';
 
@@ -416,36 +418,57 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Camera advances to scanning, then fake delay reveals result',
-        (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: ImageSearchScreen()));
+    testWidgets('Camera advances to scanning, then jumps straight to the '
+        'live multi-crop results screen', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(MaterialApp(
+        home: ImageSearchScreen(
+          pickImage: (_) async => XFile('/tmp/crop.jpg'),
+          detect: (_) async => [
+            DetectedCrop(name: 'Carrots', confidence: 0.94),
+            DetectedCrop(name: 'Lettuce', confidence: 0.77),
+          ],
+          loadResults: (term) async => [
+            _listing('L1', term, 'Little A\'s Farm', farmId: 'F1'),
+          ],
+          loadPosition: () async => _userPos,
+          loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
+        ),
+      ));
 
       await tester.tap(find.text('Camera'));
       await tester.pump();
       expect(find.text('AI identifying crop...'), findsOneWidget);
 
-      // Fake 1.5s recognition delay.
-      await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text('Carrots detected'), findsOneWidget);
-      expect(find.text('Not this?'), findsWidgets);
-      expect(find.text('Show Results \u2014 Nearest First'), findsOneWidget);
+      // Scan completes -> live results screen (no "detected" interstitial).
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(SearchResultsScreen), findsOneWidget);
+      // Multi-crop header + one section per detected crop.
+      expect(find.text('2 crops found in your photo'), findsOneWidget);
+      // Section header + the result card inside that section, per crop.
+      expect(find.text('Carrots'), findsNWidgets(2));
+      expect(find.text('Lettuce'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Show Results renders the 2x2 grid under the crop name',
+    testWidgets('detecting nothing bounces back to capture with an error toast',
         (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(
+        home: ImageSearchScreen(
+          pickImage: (_) async => XFile('/tmp/crop.jpg'),
+          detect: (_) async => <DetectedCrop>[],
+        ),
+      ));
 
-      await tester.pumpWidget(const MaterialApp(home: ImageSearchScreen()));
       await tester.tap(find.text('Camera'));
-      await tester.pump(const Duration(milliseconds: 1600));
-      await tester.tap(find.text('Show Results \u2014 Nearest First'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(find.text('Carrots'), findsWidgets); // header
-      expect(find.text('Nearest'), findsOneWidget);
-      expect(find.text('Available'), findsOneWidget);
-      expect(find.byType(SearchResultCard), findsWidgets);
+      expect(find.text('Identify crop'), findsOneWidget);
+      expect(find.byType(SearchResultsScreen), findsNothing);
+      expect(find.textContaining('Could not identify the crop'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

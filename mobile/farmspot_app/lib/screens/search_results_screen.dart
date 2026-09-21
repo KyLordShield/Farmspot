@@ -38,7 +38,13 @@ String get _searchRadiusLabel => '${searchRadiusKm.toStringAsFixed(0)} km';
 /// for tests, mirroring the MapScreen pattern. Defaults hit the real endpoints.
 class SearchResultsScreen extends StatefulWidget {
   /// The raw term submitted by the buyer (what gets searched AND logged).
+  /// Used when [queries] is empty (single-crop search).
   final String query;
+
+  /// Multiple crop names (e.g. every crop identified in one photo). When
+  /// non-empty, the screen renders one section per crop instead of a single
+  /// flat result set.
+  final List<String> queries;
 
   final Future<List<Listing>> Function(String term) loadResults;
 
@@ -49,6 +55,7 @@ class SearchResultsScreen extends StatefulWidget {
   const SearchResultsScreen({
     super.key,
     required this.query,
+    this.queries = const [],
     this.loadResults = _defaultLoadResults,
     this.loadPosition = LocationService.defaultBuyerPosition,
     this.loadFarms = FarmService.fetchPublicFarms,
@@ -71,10 +78,20 @@ class _ResultRow {
   const _ResultRow({required this.item, required this.listing});
 }
 
+class _ResultSection {
+  final String title;
+  final List<_ResultRow> rows;
+
+  const _ResultSection({required this.title, required this.rows});
+}
+
 class _SearchResultsScreenState extends State<SearchResultsScreen> {
   SearchSortMode _sort = SearchSortMode.nearest;
 
   List<_ResultRow> _rows = const [];
+
+  /// One section per crop when [SearchResultsScreen.queries] is non-empty.
+  List<_ResultSection> _sections = const [];
   bool _loading = true;
   String? _error;
 
@@ -87,6 +104,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// Farm id -> distance in km from the buyer's position (null when unknown,
   /// e.g. the farm has no coordinates or wasn't resolvable).
   Map<String, double> _distances = const {};
+
+  /// True when showing one section per detected crop (image search).
+  bool get _multi => widget.queries.isNotEmpty;
 
   String get _displayTitle {
     final t = widget.query.trim();
@@ -113,11 +133,38 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         categories = await ListingService.fetchCropCategories();
       } catch (_) {}
 
-      final listings = await widget.loadResults(widget.query);
-
       // Distance data behind the "Nearest" sort: buyer position + public farm
       // pins. Both calls are failure-tolerant (fallback position / empty list),
-      // so results still render when distances can't be resolved.
+      // so results still render when distances can't be resolved. Loaded AFTER
+      // the results themselves so a slow/failed term lookup fails fast.
+      final terms = _multi ? widget.queries : <String>[widget.query];
+
+      final sections = _multi ? <_ResultSection>[] : null;
+      var rows = const <_ResultRow>[];
+      for (final term in terms) {
+        final listings = await widget.loadResults(term);
+        final mapped = listings.map((listing) {
+          final crop = listing.toCropListing();
+          return _ResultRow(
+            item: SearchResultItem(
+              crop: crop.cropName,
+              seller: crop.farmName,
+              distance: 'Distance unavailable',
+              icon: cropIconForCrop(crop.cropName, crop.cropType),
+              imageUrl: crop.imageUrl,
+              listingId: crop.listingId,
+              farmId: crop.farmId,
+            ),
+            listing: crop,
+          );
+        }).toList();
+        if (_multi) {
+          sections!.add(_ResultSection(title: term, rows: mapped));
+        } else {
+          rows = mapped;
+        }
+      }
+
       final position = await widget.loadPosition();
       final farms = await widget.loadFarms();
       final distances = <String, double>{
@@ -130,28 +177,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             ),
       };
 
-      final rows = listings.map((listing) {
-        final crop = listing.toCropListing();
-        final km = distances[crop.farmId];
-        return _ResultRow(
-          item: SearchResultItem(
-            crop: crop.cropName,
-            seller: crop.farmName,
-            distance: km != null
-                ? LocationService.distanceLabel(km)
-                : 'Distance unavailable',
-            icon: cropIconForCrop(crop.cropName, crop.cropType),
-            imageUrl: crop.imageUrl,
-            listingId: crop.listingId,
-            farmId: crop.farmId,
-          ),
-          listing: crop,
-        );
-      }).toList();
-
       if (!mounted) return;
       setState(() {
         _rows = rows;
+        if (_multi && sections != null) {
+          _sections = sections;
+        }
         _distances = distances;
         _categories = categories;
         if (_activeCategoryId != null &&
@@ -217,7 +248,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   void _onCardTap(SearchResultItem item) {
     // Real results carry the listing id; find the CropListing and open the real
     // ProductDetailScreen. Defensive no-op fallback for edge/legacy rows.
-    for (final row in _rows) {
+    final rows = _multi
+        ? [for (final s in _sections) ...s.rows]
+        : _rows;
+    for (final row in rows) {
       if (row.item.listingId != null &&
           row.item.listingId == item.listingId) {
         Navigator.of(context).push(
@@ -353,6 +387,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       );
     }
 
+    if (_multi) {
+      return _buildMultiBody();
+    }
+
     final rows = _sortedRows;
     final children = <Widget>[
       SearchResultsToolbar(
@@ -436,6 +474,55 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
   }
 
+  /// Multi-crop view (image search): one section per detected crop, each
+  /// sorted nearest-first and headed by the crop name count line. No radius
+  /// split — all farms for that crop render in one nearest-sorted grid.
+  Widget _buildMultiBody() {
+    final children = <Widget>[
+      const SizedBox(height: 4),
+      Text(
+        _sections.length == 1
+            ? '${_sections.length} crop found in your photo'
+            : '${_sections.length} crops found in your photo',
+        style: const TextStyle(color: Colors.black54, fontSize: 13),
+      ),
+      const SizedBox(height: 8),
+    ];
+
+    for (final section in _sections) {
+      final sorted = List<_ResultRow>.of(section.rows)
+        ..sort((a, b) => _kmFor(a).compareTo(_kmFor(b)));
+      children.add(const SizedBox(height: 10));
+      children.add(_buildSectionHeader(section.title));
+      children.add(const SizedBox(height: 8));
+      if (sorted.isEmpty) {
+        children.add(const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: Text(
+              'No farms selling this crop yet.',
+              style: TextStyle(color: Colors.black54, fontSize: 14),
+            ),
+          ),
+        ));
+      } else {
+        children.add(_sort == SearchSortMode.available
+            ? _buildCountLine(sorted.length)
+            : _buildCountLine(sorted.length, within: true));
+        children.add(const SizedBox(height: 10));
+        children.add(SearchResultGrid(
+          items: sorted.map((r) => r.item).toList(growable: false),
+          onTap: _onCardTap,
+        ));
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      children: children,
+    );
+  }
+
   Widget _buildCountLine(int count, {bool within = false}) {
     final noun = count == 1 ? 'farm' : 'farms';
     final suffix =
@@ -500,7 +587,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           ),
           Expanded(
             child: Text(
-              _displayTitle,
+              _multi ? 'From photo' : _displayTitle,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
