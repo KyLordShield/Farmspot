@@ -6,6 +6,9 @@
     <title>Admin Login — FarmSpot</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -15,30 +18,35 @@
             display: flex;
         }
         .brand-panel {
+            position: relative;
+            overflow: hidden;
             background-color: #1e4d2b;
             color: #ffffff;
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 4rem;
+            padding: 0;
         }
-        .brand-panel h1 {
-            font-weight: 700;
-            font-size: 2rem;
+        .brand-image {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .brand-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 1;
+        }
+        .login-card .brand-title-form {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: 800;
+            font-size: 2.6rem;
+            color: #1e4d2b;
             letter-spacing: 0.5px;
-        }
-        .brand-panel .subtitle {
-            color: #cfe3d6;
-            font-size: 0.95rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-        .brand-panel p.description {
-            color: #d7e8dc;
-            margin-top: 1.5rem;
-            max-width: 380px;
-            line-height: 1.6;
+            margin-bottom: 0.25rem;
+            text-align: center;
+            transform: translateY(-1.25rem);
         }
         .form-panel {
             flex: 1;
@@ -60,7 +68,7 @@
         .login-card .subtext {
             color: #64748b;
             font-size: 0.9rem;
-            margin-bottom: 2rem;
+            margin-bottom: 0;
         }
         .form-label {
             font-weight: 600;
@@ -110,18 +118,15 @@
 
     <!-- Left Brand Panel -->
     <div class="brand-panel">
-        <div class="subtitle">FarmSpot</div>
-        <h1>Association Administrator Portal</h1>
-        <p class="description">
-            Geolocation-based produce vendor locator and real-time availability tracking system.
-            Sign in to manage users, listings, and reports.
-        </p>
+        <img src="{{ asset('images/login-farm.jpg') }}" alt="FarmSpot Login" class="brand-image">
+        <div class="brand-overlay"></div>
     </div>
 
     <!-- Right Form Panel -->
     <div class="form-panel">
         <div class="login-card">
 
+            <h2 class="brand-title-form">FarmSpot</h2>
             <h2>Sign In</h2>
             <p class="subtext">Enter your administrator credentials to continue.</p>
 
