@@ -17,6 +17,10 @@ ml_service/dataset/
 # Auto-labeled negative samples (non-crop photos for the two-class trainer).
 ml_service/negatives/
 
+# Seed / staging folders created during dataset preparation at repo root
+# (unused image metadata, original exports before re-numbering). Not code.
+zip files datasets/
+
 # Demo photos live on Cloudinary (see database/seeders/demo_photo_urls.json).
 # The public/ copies are seed sources only (and offline fallbacks).
 website/public/demo-crops/
