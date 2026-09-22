@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/farm_pin.dart';
 import '../models/listing.dart';
+import '../models/search_crop_group.dart';
 import '../services/farm_service.dart';
 import '../services/image_detect_service.dart';
 import '../services/listing_service.dart';
@@ -251,13 +252,14 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
       return;
     }
 
-    // Every found crop becomes a results section; each section is sorted
+    // Every found crop becomes a results section (with its alias terms so a
+    // "kamatis" also surfaces listings titled "Tomato"), each section sorted
     // nearest-first inside SearchResultsScreen.
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SearchResultsScreen(
           query: crops.first.name,
-          queries: [for (final crop in crops) crop.name],
+          groups: [for (final crop in crops) SearchCropGroup.resolve(crop.name)],
           loadResults:
               widget.loadResults ?? (t) => ListingService.fetchListings(search: t),
           loadPosition: widget.loadPosition ?? LocationService.defaultBuyerPosition,

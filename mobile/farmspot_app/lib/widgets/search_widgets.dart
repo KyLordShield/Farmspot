@@ -181,6 +181,7 @@ class SearchResultCard extends StatelessWidget {
                       Image.network(
                         item.imageUrl!,
                         fit: BoxFit.cover,
+                        cacheWidth: 600,
                         errorBuilder: (context, error, stackTrace) =>
                             const _GradientFill(),
                       )

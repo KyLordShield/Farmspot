@@ -331,6 +331,7 @@ class CropCard extends StatelessWidget {
     return Image.network(
       url,
       fit: BoxFit.cover,
+      cacheWidth: 600,
       errorBuilder: (context, error, stackTrace) => Container(
         color: AppColors.fieldBackground,
         child: Icon(

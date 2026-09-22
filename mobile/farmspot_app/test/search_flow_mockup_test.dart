@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmspot_app/models/crop_suggestion.dart';
 import 'package:farmspot_app/models/farm_pin.dart';
 import 'package:farmspot_app/models/listing.dart';
+import 'package:farmspot_app/models/search_crop_group.dart';
 import 'package:farmspot_app/screens/home_screen.dart';
 import 'package:farmspot_app/screens/image_search_screen.dart';
 import 'package:farmspot_app/screens/product_detail_screen.dart';
@@ -217,6 +218,38 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
     }
+
+    testWidgets('image-search groups merge alias terms (kamatis + tomato) '
+        'into one deduped section', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SearchResultsScreen(
+            query: 'kamatis',
+            groups: const [
+              SearchCropGroup(title: 'Tomato', terms: ['kamatis', 'tomato']),
+            ],
+            loadResults: (term) async => [
+              _listing('L1', 'Kamatis', 'Bayan Farm', farmId: 'F1'),
+              if (term == 'tomato')
+                _listing('L2', 'tomato', 'Upland Farm', farmId: 'F2'),
+            ],
+            loadPosition: () async => _userPos,
+            loadFarms: () async => [_pin('F1', 10.3178, 123.8742), _pin('F2', 10.3178, 123.8742)],
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // English section title, and BOTH spellings show together.
+      expect(find.text('Tomato'), findsOneWidget);
+      expect(find.text('Bayan Farm'), findsOneWidget);
+      expect(find.text('Upland Farm'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('shows real count line, sort toolbar, and grid', (tester) async {
       await pumpResults(

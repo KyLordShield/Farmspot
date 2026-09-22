@@ -291,7 +291,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return CircleAvatar(
         radius: 34,
         backgroundColor: AppColors.primaryGreen,
-        backgroundImage: NetworkImage(widget.photoUrl),
+        backgroundImage: ResizeImage(NetworkImage(widget.photoUrl), width: 160),
       );
     }
 

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/crop_category.dart';
 import '../models/farm_pin.dart';
 import '../models/listing.dart';
+import '../models/search_crop_group.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
 import '../services/location_service.dart';
@@ -38,13 +39,13 @@ String get _searchRadiusLabel => '${searchRadiusKm.toStringAsFixed(0)} km';
 /// for tests, mirroring the MapScreen pattern. Defaults hit the real endpoints.
 class SearchResultsScreen extends StatefulWidget {
   /// The raw term submitted by the buyer (what gets searched AND logged).
-  /// Used when [queries] is empty (single-crop search).
+  /// Used when [groups] is empty (single-crop search).
   final String query;
 
-  /// Multiple crop names (e.g. every crop identified in one photo). When
-  /// non-empty, the screen renders one section per crop instead of a single
-  /// flat result set.
-  final List<String> queries;
+  /// Multiple crops found in one photo (image search). When non-empty, the
+  /// screen renders one section per crop's [SearchCropGroup], merging that
+  /// group's alias terms (e.g. "Kamatis" + "Tomato") into a deduped section.
+  final List<SearchCropGroup> groups;
 
   final Future<List<Listing>> Function(String term) loadResults;
 
@@ -55,7 +56,7 @@ class SearchResultsScreen extends StatefulWidget {
   const SearchResultsScreen({
     super.key,
     required this.query,
-    this.queries = const [],
+    this.groups = const [],
     this.loadResults = _defaultLoadResults,
     this.loadPosition = LocationService.defaultBuyerPosition,
     this.loadFarms = FarmService.fetchPublicFarms,
@@ -106,7 +107,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   Map<String, double> _distances = const {};
 
   /// True when showing one section per detected crop (image search).
-  bool get _multi => widget.queries.isNotEmpty;
+  bool get _multi => widget.groups.isNotEmpty;
 
   String get _displayTitle {
     final t = widget.query.trim();
@@ -137,13 +138,40 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       // pins. Both calls are failure-tolerant (fallback position / empty list),
       // so results still render when distances can't be resolved. Loaded AFTER
       // the results themselves so a slow/failed term lookup fails fast.
-      final terms = _multi ? widget.queries : <String>[widget.query];
-
       final sections = _multi ? <_ResultSection>[] : null;
       var rows = const <_ResultRow>[];
-      for (final term in terms) {
-        final listings = await widget.loadResults(term);
-        final mapped = listings.map((listing) {
+
+      if (_multi) {
+        // One section per crop group: fetch every alias term the group knows
+        // (e.g. "kamatis" and "tomato") and merge into a deduped section so a
+        // photo of a kamatis shows BOTH the Kamatis and the Tomato listings.
+        for (final group in widget.groups) {
+          final seen = <String>{};
+          final mapped = <_ResultRow>[];
+          for (final term in group.terms) {
+            final listings = await widget.loadResults(term);
+            for (final listing in listings) {
+              if (!seen.add(listing.id)) continue; // same listing from another alias
+              final crop = listing.toCropListing();
+              mapped.add(_ResultRow(
+                item: SearchResultItem(
+                  crop: crop.cropName,
+                  seller: crop.farmName,
+                  distance: 'Distance unavailable',
+                  icon: cropIconForCrop(crop.cropName, crop.cropType),
+                  imageUrl: crop.imageUrl,
+                  listingId: crop.listingId,
+                  farmId: crop.farmId,
+                ),
+                listing: crop,
+              ));
+            }
+          }
+          sections!.add(_ResultSection(title: group.title, rows: mapped));
+        }
+      } else {
+        final listings = await widget.loadResults(widget.query);
+        rows = listings.map((listing) {
           final crop = listing.toCropListing();
           return _ResultRow(
             item: SearchResultItem(
@@ -158,11 +186,6 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             listing: crop,
           );
         }).toList();
-        if (_multi) {
-          sections!.add(_ResultSection(title: term, rows: mapped));
-        } else {
-          rows = mapped;
-        }
       }
 
       final position = await widget.loadPosition();

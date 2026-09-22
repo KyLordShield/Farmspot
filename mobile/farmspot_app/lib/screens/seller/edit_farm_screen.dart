@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -429,7 +429,7 @@ class _NewPhotoThumbState extends State<_NewPhotoThumb> {
               future: _bytes,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                  return Image.memory(snapshot.data!, cacheWidth: 200, fit: BoxFit.cover);
                 }
                 if (snapshot.hasError) {
                   return Container(

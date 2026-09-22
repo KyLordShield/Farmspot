@@ -489,6 +489,7 @@ class _StripThumb extends StatelessWidget {
             url: url,
             fit: BoxFit.cover,
             brokenIconSize: 22,
+            cacheWidth: 300,
           ),
         ),
       ),
@@ -503,12 +504,14 @@ class _BoxedNetworkImage extends StatelessWidget {
   final BoxFit fit;
   final IconData? errorIcon;
   final double brokenIconSize;
+  final int cacheWidth;
 
   const _BoxedNetworkImage({
     required this.url,
     required this.fit,
     this.errorIcon,
     this.brokenIconSize = 24,
+    this.cacheWidth = 1080,
   });
 
   @override
@@ -516,6 +519,7 @@ class _BoxedNetworkImage extends StatelessWidget {
     return Image.network(
       url,
       fit: fit,
+      cacheWidth: cacheWidth,
       errorBuilder: (context, error, stackTrace) => Container(
         color: Colors.grey.shade200,
         alignment: Alignment.center,

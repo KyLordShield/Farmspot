@@ -6,6 +6,11 @@ import 'screens/home_screen.dart';
 import 'services/auth_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Cap the decoded-image cache so a photo-heavy feed can't inflate the
+  // process past the point where Android's low-memory killer reaps the app
+  // (which dropped users back to the Home screen after using the camera).
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 48 << 20;
   runApp(const FarmSpotApp());
 }
 

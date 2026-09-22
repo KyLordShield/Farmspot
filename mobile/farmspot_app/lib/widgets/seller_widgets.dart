@@ -597,6 +597,7 @@ class CropListTile extends StatelessWidget {
           child: Image.network(
             _imageUrl,
             fit: BoxFit.cover,
+            cacheWidth: 200,
             errorBuilder: (context, error, stack) => _iconThumbnail(),
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;

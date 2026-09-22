@@ -534,6 +534,7 @@ class _FarmCard extends StatelessWidget {
         width: 52,
         height: 52,
         fit: BoxFit.cover,
+        cacheWidth: 160,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );
@@ -642,6 +643,7 @@ class _FarmListTile extends StatelessWidget {
         width: 44,
         height: 44,
         fit: BoxFit.cover,
+        cacheWidth: 160,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );

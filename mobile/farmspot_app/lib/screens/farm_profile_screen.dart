@@ -157,6 +157,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
             Image.network(
               photo,
               fit: BoxFit.cover,
+              cacheWidth: 1080,
               errorBuilder: (context, error, stackTrace) => const Icon(
                 Icons.agriculture,
                 size: 96,
