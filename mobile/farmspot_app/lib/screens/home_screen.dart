@@ -13,6 +13,7 @@ import 'profile_screen.dart';
 import 'seller/my_farm_screen.dart';
 import 'search_screen.dart';
 import 'image_search_screen.dart';
+import 'ai_chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -214,7 +215,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: FloatingActionButton(
                 backgroundColor: AppColors.primaryGreen,
                 onPressed: () {
-                  debugPrint('Chat support tapped — no backend wired yet.');
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AiChatScreen()),
+                  );
                 },
                 child: const Icon(Icons.chat_bubble_outline),
               ),
