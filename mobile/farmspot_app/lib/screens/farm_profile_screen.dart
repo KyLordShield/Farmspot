@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/farm_profile.dart';
 import '../services/farm_service.dart';
+import '../services/location_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/farmspot_loader.dart';
@@ -42,12 +43,26 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
   bool _loading = true;
   String? _error;
 
+  /// Real "as the crow flies" distance to this farm, resolved from the buyer's
+  /// GPS once the profile's coordinates arrive. Null while resolving or when
+  /// the farm carries no coordinates, in which case the listing-derived
+  /// [FarmProfileData.distanceLabel] string (a placeholder, "0.4 km away") is
+  /// shown instead.
+  String? _computedDistance;
+
+  /// True while the real "as the crow flies" distance is resolving (GPS +
+  /// farm coordinates). While set, the stats row renders a compact loader
+  /// instead of the placeholder string, so the fake "0.4 km away" is never
+  /// shown even momentarily during the swap.
+  bool _distanceResolving = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.initialData != null) {
       _profile = widget.initialData;
       _loading = false;
+      _resolveDistance(widget.initialData!);
       return;
     }
     _load();
@@ -68,6 +83,9 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
         _profile = profile;
         _loading = false;
       });
+      // Real distance replaces the placeholder "0.4 km away" string once GPS
+      // resolves. Fire-and-forget; the UI renders with the fallback until then.
+      _resolveDistance(profile);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -75,6 +93,25 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  /// Computes the straight-line distance to the farm from the buyer's position
+  /// (GPS, falling back to the Cebu City anchor — the same math and fallback
+  /// the Map screen uses), so the stats row matches the map instead of always
+  /// showing the placeholder distance. Never throws: with no coordinates the
+  /// profile keeps its listing-derived label.
+  void _resolveDistance(FarmProfileData profile) async {
+    final lat = profile.latitude;
+    final lng = profile.longitude;
+    if (lat == null || lng == null || _computedDistance != null) return;
+    setState(() => _distanceResolving = true);
+    final you = await LocationService.defaultBuyerPosition();
+    if (!mounted) return;
+    final km = LocationService.distanceKm(you, LatLng(lat, lng));
+    setState(() {
+      _computedDistance = LocationService.distanceLabel(km);
+      _distanceResolving = false;
+    });
   }
 
   /// Opens the full turn-by-turn directions screen for this farm. No-op when
@@ -275,7 +312,10 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
   }
 
   Widget _buildStats(FarmProfileData profile) {
-    final distance = profile.distanceLabel;
+    // While the real distance resolves, show neither the old placeholder nor
+    // a stale value — a compact loader takes the number's spot instead.
+    final distance =
+        _distanceResolving ? null : (_computedDistance ?? profile.distanceLabel);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       // Expanded per stat so the two pairs always share the row width
@@ -290,13 +330,20 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               label: 'Available Now',
             ),
           ),
-          if (distance != null) ...[
+          if (distance != null || _distanceResolving) ...[
             const SizedBox(width: 24),
             Expanded(
-              child: _StatPair(
-                icon: Icons.near_me_outlined,
-                value: distance,
-                label: 'from you',
+              // The distance stat is tappable exactly like the header location
+              // row: both open the same turn-by-turn directions screen.
+              child: GestureDetector(
+                onTap: () => _openDirections(profile),
+                behavior: HitTestBehavior.opaque,
+                child: _StatPair(
+                  icon: Icons.near_me_outlined,
+                  value: distance,
+                  label: 'from you',
+                  loading: _distanceResolving,
+                ),
               ),
             ),
           ],
@@ -359,13 +406,18 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
 /// Compact icon + value/label stat shown under the farm banner.
 class _StatPair extends StatelessWidget {
   final IconData icon;
-  final String value;
+  final String? value;
   final String label;
+
+  /// When true (and [value] is null), a compact loader stands in for the
+  /// number so the row never flashes a placeholder mid-resolve.
+  final bool loading;
 
   const _StatPair({
     required this.icon,
     required this.value,
     required this.label,
+    this.loading = false,
   });
 
   @override
@@ -389,15 +441,21 @@ class _StatPair extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              if (loading)
+                const SizedBox(
+                  height: 16,
+                  child: FarmSpotLoader(size: 16),
+                )
+              else
+                Text(
+                  value ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
               Text(
                 label,
                 maxLines: 1,

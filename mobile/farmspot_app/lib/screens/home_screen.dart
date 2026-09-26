@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../theme.dart';
 import '../models/crop_category.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
+import '../services/farm_service.dart';
+import '../services/location_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
@@ -106,9 +109,17 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final listings = await ListingService.fetchListings(search: search);
       if (!mounted) return;
+      // Resolve the real distance BEFORE the grid renders (the existing load
+      // spinner covers the wait): one fetch of the public farm pins + one buyer
+      // GPS lookup services the whole feed, so the seeded "0.4 km away" never
+      // flashes on screen. Cards whose farm can't be matched keep the seed
+      // label rather than hiding the line (same fallback as the detail screen).
+      final crops = await _resolveDistances(
+          listings.map((l) => l.toCropListing()).toList());
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _listings = listings.map((l) => l.toCropListing()).toList();
+        _listings = crops;
       });
     } catch (e) {
       if (!mounted) return;
@@ -124,6 +135,29 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadListings(showLoading: false);
     await _loadSellerStatus();
     await _loadCategories();
+  }
+
+  /// Swaps every listing's seeded "0.4 km away" for the real haversine
+  /// distance to its farm, computing buyer GPS + the public pin list once for
+  /// the whole feed. Silent on failure: unresolvable cards keep their current
+  /// label (matching what the profile/detail screens show while unresolvable).
+  Future<List<CropListing>> _resolveDistances(List<CropListing> listings) async {
+    try {
+      final farms = await FarmService.fetchPublicFarms();
+      if (farms.isEmpty) return listings;
+      final you = await LocationService.defaultBuyerPosition();
+      final byId = {for (final f in farms) f.id: f};
+      return listings.map((l) {
+        final farm = l.farmId == null ? null : byId[l.farmId];
+        if (farm == null) return l;
+        final km =
+            LocationService.distanceKm(you, LatLng(farm.latitude, farm.longitude));
+        return l.withDistance(LocationService.distanceLabel(km));
+      }).toList();
+    } catch (_) {
+      // Offline / no pins: keep the seeded labels rather than crash the feed.
+      return listings;
+    }
   }
 
   void _handleNavTap(int i) {

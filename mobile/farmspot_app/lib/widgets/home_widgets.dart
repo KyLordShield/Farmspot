@@ -33,7 +33,7 @@ class CropListing {
     this.distance = '0.4 km away',
     this.status = 'P_status',
     this.barangay = 'Brgy. Sudlon',
-    this.sitio = 'Sitio Maraag',
+    this.sitio = '',
     this.postedLabel = 'today',
     this.expiresLabel = '3 days',
     this.contactNumber = '0900-000-0000',
@@ -45,6 +45,28 @@ class CropListing {
     this.categoryId,
     this.placeholderIcon = Icons.eco,
   });
+
+  /// Copy with an overridden [distance] label (used by the feed to swap the
+  /// seeded placeholder for the real haversine distance once buyer GPS is known).
+  CropListing withDistance(String distance) => CropListing(
+        cropName: cropName,
+        farmName: farmName,
+        cropType: cropType,
+        distance: distance,
+        status: status,
+        barangay: barangay,
+        sitio: sitio,
+        postedLabel: postedLabel,
+        expiresLabel: expiresLabel,
+        contactNumber: contactNumber,
+        imageUrl: imageUrl,
+        description: description,
+        photoUrls: photoUrls,
+        listingId: listingId,
+        farmId: farmId,
+        categoryId: categoryId,
+        placeholderIcon: placeholderIcon,
+      );
 }
 
 /// Rounded green square placeholder used when a listing has no photo yet.

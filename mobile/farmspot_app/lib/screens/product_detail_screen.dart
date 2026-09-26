@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../models/farm_pin.dart';
+import '../services/farm_service.dart';
 import '../services/listing_service.dart';
+import '../services/location_service.dart';
 import '../theme.dart';
-import '../widgets/home_widgets.dart';
 import '../widgets/farmspot_loader.dart';
+import '../widgets/home_widgets.dart';
 import 'farm_profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -33,6 +38,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   /// Single cover photo shown big at the top (the primary/thumbnail image).
   String? get _headerUrl => _photoUrls.isEmpty ? null : _photoUrls.first;
+
+  /// The listing payload carries no farm coordinates (and no real distance —
+  /// `distance` is a seeded placeholder), so the real "as the crow flies"
+  /// distance is resolved here: buyer GPS against the farm's pin coords from
+  /// the public farms endpoint. Null while unresolved; the stats line renders
+  /// a compact loader in that window instead of the fake "0.4 km away".
+  String? _distance;
+  bool _distanceResolving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveDistance();
+  }
+
+  /// Looks up the listing's farm in the public pin feed (same endpoint the Map
+  /// uses) and computes the straight-line distance to it. Silent on any
+  /// failure or missing data: the distance line hides rather than lying.
+  Future<void> _resolveDistance() async {
+    final farmId = listing.farmId;
+    if (farmId == null || farmId.isEmpty || _distance != null) return;
+    setState(() => _distanceResolving = true);
+    try {
+      final farms = await FarmService.fetchPublicFarms();
+      FarmPin? farm;
+      for (final f in farms) {
+        if (f.id == farmId) {
+          farm = f;
+          break;
+        }
+      }
+      if (farm == null) {
+        if (mounted) setState(() => _distanceResolving = false);
+        return;
+      }
+      final you = await LocationService.defaultBuyerPosition();
+      if (!mounted) return;
+      final km =
+          LocationService.distanceKm(you, LatLng(farm.latitude, farm.longitude));
+      setState(() {
+        _distance = LocationService.distanceLabel(km);
+        _distanceResolving = false;
+      });
+    } catch (_) {
+      // No coords / offline: hide the line rather than show a placeholder.
+      if (mounted) setState(() => _distanceResolving = false);
+    }
+  }
 
   Future<void> _callSeller() async {
     // Fire-and-forget analytics: never awaited, so the dialer opens the moment
@@ -199,25 +252,39 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          Flexible(
-                            child: Text(
-                              listing.sitio,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.black54),
+                          if (listing.sitio.trim().isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                listing.sitio,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    const TextStyle(color: Colors.black54),
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 26),
-                      child: Text(
-                        listing.distance,
-                        style: const TextStyle(color: Colors.black45, fontSize: 12),
+                    if (_distanceResolving)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 26),
+                        child: SizedBox(
+                          height: 16,
+                          child: FarmSpotLoader(size: 16),
+                        ),
+                      )
+                    else if (_distance != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 26),
+                        child: Text(
+                          _distance!,
+                          style: const TextStyle(
+                            color: Colors.black45,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 16),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
