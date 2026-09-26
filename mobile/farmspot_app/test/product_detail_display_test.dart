@@ -37,7 +37,7 @@ void main() {
     expect(find.text('Test Farm'), findsOneWidget);
     expect(find.text('Vegetables'), findsOneWidget);
     expect(find.textContaining('Call Seller'), findsOneWidget);
-    expect(find.text('Send SMS to Seller'), findsOneWidget);
+    expect(find.text('Message Seller'), findsOneWidget);
     expect(find.text('Sudlon II'), findsOneWidget);
     expect(find.text('Posted '), findsOneWidget);
 
@@ -68,6 +68,6 @@ void main() {
     expect(find.byIcon(Icons.eco), findsOneWidget); // placeholder icon
     expect(find.byType(Image), findsNothing);
     expect(find.textContaining('Call Seller'), findsOneWidget);
-    expect(find.text('Send SMS to Seller'), findsOneWidget);
+    expect(find.text('Message Seller'), findsOneWidget);
   });
 }

@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/home_widgets.dart';
 import 'farm_profile_screen.dart';
+import 'in_app_messages_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final CropListing listing;
@@ -100,15 +101,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  Future<void> _smsSeller() async {
-    ListingService.logContact(
-      listingId: listing.listingId ?? '',
-      method: 'SMS',
+  /// Opens the in-app conversation with the seller for this listing.
+  Future<void> _openMessages() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppMessagesScreen(listing: listing),
+      ),
     );
-    final uri = Uri(scheme: 'sms', path: listing.contactNumber);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
   }
 
   /// Opens the farm's public profile. No-op when the listing carries no farm id
@@ -321,12 +320,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       width: double.infinity,
                       height: 50,
                       child: OutlinedButton.icon(
-                        onPressed: _smsSeller,
-                        icon: const Icon(Icons.sms_outlined, size: 18),
-                        label: const Text('Send SMS to Seller'),
+                        onPressed: _openMessages,
+                        icon: const Icon(Icons.chat_outlined, size: 18),
+                        label: const Text('Message Seller'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primaryGreen,
-                          side: const BorderSide(color: AppColors.primaryGreen),
+                          side:
+                              const BorderSide(color: AppColors.primaryGreen),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),
