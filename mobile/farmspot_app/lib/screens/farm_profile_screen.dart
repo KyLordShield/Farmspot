@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../models/farm_profile.dart';
 import '../services/farm_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/farmspot_loader.dart';
+import 'farm_directions_screen.dart';
 import 'product_detail_screen.dart';
 
 /// Buyer-facing Farm Profile: farm banner + quick stats, then a sticky tab bar
@@ -73,6 +75,24 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  /// Opens the full turn-by-turn directions screen for this farm. No-op when
+  /// the farm has no coordinates (legacy rows) rather than navigating with a
+  /// bogus origin/destination.
+  void _openDirections(FarmProfileData profile) {
+    final lat = profile.latitude;
+    final lng = profile.longitude;
+    if (lat == null || lng == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FarmDirectionsScreen(
+          farmId: profile.id,
+          farmName: profile.name,
+          farmPosition: LatLng(lat, lng),
+        ),
+      ),
+    );
   }
 
   @override
@@ -218,22 +238,32 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
                 ),
                 if (profile.barangay != null) ...[
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Colors.white, size: 16),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          profile.barangay!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                  GestureDetector(
+                    onTap: () => _openDirections(profile),
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white, size: 16),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            profile.barangay!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                              decorationColor: Colors.white70,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right, color: Colors.white70, size: 18),
+                      ],
+                    ),
                   ),
                 ],
               ],
