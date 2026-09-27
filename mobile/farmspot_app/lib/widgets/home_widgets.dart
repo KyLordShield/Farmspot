@@ -119,6 +119,10 @@ class HomeSearchField extends StatelessWidget {
   final VoidCallback? onSearchTap;
   final bool tapToOpen;
 
+  /// Bar height. Lowered on Home so the notifications and messages buttons fit
+  /// beside it without squeezing the bar into something unreadable.
+  final double height;
+
   const HomeSearchField({
     super.key,
     this.onCameraTap,
@@ -126,6 +130,7 @@ class HomeSearchField extends StatelessWidget {
     this.onSubmitted,
     this.onSearchTap,
     this.tapToOpen = false,
+    this.height = 46,
   });
 
   @override
@@ -184,11 +189,11 @@ class HomeSearchField extends StatelessWidget {
           );
 
     return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      height: height,
+      padding: EdgeInsets.symmetric(horizontal: height >= 46 ? 14 : 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(height / 2),
       ),
       child: Row(
         children: [

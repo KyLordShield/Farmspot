@@ -5,7 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/screens/home_screen.dart';
 import 'package:farmspot_app/screens/messages_inbox_screen.dart';
+import 'package:farmspot_app/screens/notifications_screen.dart';
 import 'package:farmspot_app/services/message_service.dart';
+import 'package:farmspot_app/widgets/home_widgets.dart';
 
 /// Stands in for the backend so the Home bell can be exercised without a
 /// server. Only the inbox call is used by Home.
@@ -71,26 +73,144 @@ Future<void> _pumpHome(WidgetTester tester, _HomeGateway api) async {
 }
 
 void main() {
-  testWidgets('the bell is in the header, not buried in the feed',
+  testWidgets('messages and notifications are separate header buttons',
       (tester) async {
     await _pumpHome(tester, _HomeGateway());
 
-    final bell = find.byIcon(Icons.notifications_none_rounded);
-    expect(bell, findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget,
+        reason: 'the message button carries the conversation entry point');
+    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget,
+        reason: 'the bell now means notifications, not messages');
+  });
 
-    // The header sits above the scrollable feed, so the bell is reachable
-    // without scrolling and stays put however far down the user is.
-    final headerBellY = tester.getTopLeft(bell).dy;
+  testWidgets('both buttons stay put when the feed scrolls', (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    final messagesY = tester.getTopLeft(find.byIcon(Icons.chat_bubble_outline_rounded)).dy;
+    final bellY = tester.getTopLeft(find.byIcon(Icons.notifications_none_rounded)).dy;
+
     await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
     await tester.pump();
-    expect(tester.getTopLeft(bell).dy, headerBellY,
-        reason: 'the entry must not scroll away with the feed');
+
+    expect(tester.getTopLeft(find.byIcon(Icons.chat_bubble_outline_rounded)).dy,
+        messagesY);
+    expect(tester.getTopLeft(find.byIcon(Icons.notifications_none_rounded)).dy,
+        bellY);
+  });
+
+  testWidgets('the search bar is trimmed but still wide enough to use',
+      (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    final field = find.byType(HomeSearchField);
+    final width = tester.getSize(field).width;
+
+    // Trimmed from 46 tall, yet still the widest thing in the header.
+    expect(tester.getSize(field).height, 40);
+    expect(width, greaterThan(200),
+        reason: 'the bar must not be squeezed into a stub by the two buttons');
+    expect(find.text('Search Crops or farms'), findsOneWidget);
+  });
+
+  testWidgets('both buttons still fit beside the bar on a narrow phone',
+      (tester) async {
+    tester.view.physicalSize = const Size(320 * 3, 640 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await _pumpHome(tester, _HomeGateway());
+
+    // Geometry, not a whole-screen overflow assertion: the "Available now" row
+    // below overflows at 320dp under the test font (every glyph is a full em
+    // square), which is unrelated to the header.
+    final bellRight =
+        tester.getTopRight(find.byIcon(Icons.notifications_none_rounded)).dx;
+    final messagesRight =
+        tester.getTopRight(find.byIcon(Icons.chat_bubble_outline_rounded)).dx;
+
+    expect(bellRight, lessThanOrEqualTo(304.5),
+        reason: 'the bell must sit inside the 16dp header padding');
+    expect(messagesRight, lessThan(bellRight),
+        reason: 'messages sit to the left of notifications');
+    expect(tester.getSize(find.byType(HomeSearchField)).width, greaterThan(150),
+        reason: 'the bar must not be squeezed into a stub by the two buttons');
+  });
+
+  testWidgets('the header icons have no plate behind them', (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    for (final icon in [
+      find.byIcon(Icons.chat_bubble_outline_rounded),
+      find.byIcon(Icons.notifications_none_rounded),
+    ]) {
+      final glyph = tester.widget<Icon>(icon);
+      expect(glyph.color, Colors.white,
+          reason: 'the glyph sits directly on the green header now');
+
+      // A white CircleBorder Material would be the leftover plate. The only
+      // Material allowed here is the transparent one InkWell needs to paint.
+      final materials = find
+          .descendant(of: icon, matching: find.byType(Material))
+          .evaluate()
+          .map((e) => (e.widget as Material).type)
+          .toList();
+      expect(materials, isNot(contains(MaterialType.canvas)),
+          reason: 'no opaque plate behind a header icon');
+    }
+  });
+
+  testWidgets('the two header icons sit close together', (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    final messages = find.byIcon(Icons.chat_bubble_outline_rounded);
+    final bell = find.byIcon(Icons.notifications_none_rounded);
+
+    // These are the 40x40 tap boxes, not the 22px glyphs: SizedBox forces
+    // tight constraints so the Icon's box is the whole button. The gap between
+    // the boxes is the SizedBox(4) in the header row.
+    final boxGap = tester.getTopLeft(bell).dx - tester.getTopRight(messages).dx;
+    expect(boxGap, moreOrLessEquals(4, epsilon: 0.1),
+        reason: 'the two buttons should be tucked together');
+
+    // ...and the glyphs inside still clear each other, 9px of padding per box.
+    expect(tester.widget<Icon>(messages).size, 22);
+    expect(tester.widget<Icon>(bell).size, 22);
+    expect(tester.getSize(messages).width, 40,
+        reason: 'tap target stays comfortable even though the plate is gone');
+  });
+
+  testWidgets('the support FAB icon is white on the green button',
+      (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    final fab = tester.widget<Icon>(find.byIcon(Icons.support_agent));
+    expect(fab.color, Colors.white,
+        reason: 'grey disappeared into the green background');
+  });
+
+  testWidgets('an unread badge never blocks the message button', (tester) async {
+    // A wide 99+ badge is the worst case for overlapping the glyph.
+    await _pumpHome(tester, _HomeGateway()..inbox = [_thread(unread: 250)]);
+
+    expect(find.text('99+'), findsOneWidget);
+
+    // Directional: the badge text lives *inside* an IgnorePointer, so this
+    // cannot be satisfied by one of the unrelated IgnorePointers in the tree.
+    expect(
+      find.descendant(of: find.byType(IgnorePointer), matching: find.text('99+')),
+      findsOneWidget,
+      reason: 'the badge is decoration and must not absorb the tap',
+    );
+
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MessagesInboxScreen), findsOneWidget);
   });
 
   testWidgets('no badge when every thread is read', (tester) async {
     await _pumpHome(tester, _HomeGateway()..inbox = [_thread(unread: 0)]);
 
-    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
     expect(find.text('0'), findsNothing);
   });
 
@@ -113,16 +233,37 @@ void main() {
     expect(find.text('120'), findsNothing);
   });
 
-  testWidgets('tapping the bell opens the inbox', (tester) async {
+  testWidgets('the message button opens the inbox', (tester) async {
     await _pumpHome(tester, _HomeGateway()..inbox = [_thread(unread: 1)]);
 
-    await tester.tap(find.byIcon(Icons.notifications_none_rounded));
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(MessagesInboxScreen), findsOneWidget);
     expect(find.text('React A'), findsOneWidget,
         reason: 'the inbox must open on the real thread list');
+  });
+
+  testWidgets('the bell opens the notifications screen, not the inbox',
+      (tester) async {
+    await _pumpHome(tester, _HomeGateway()..inbox = [_thread(unread: 1)]);
+
+    await tester.tap(find.byIcon(Icons.notifications_none_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(NotificationsScreen), findsOneWidget);
+    expect(find.byType(MessagesInboxScreen), findsNothing);
+    expect(find.text('Nothing new yet'), findsOneWidget);
+  });
+
+  testWidgets('the support FAB uses the customer support mark', (tester) async {
+    await _pumpHome(tester, _HomeGateway());
+
+    expect(find.byIcon(Icons.support_agent), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing,
+        reason: 'the old chat bubble is now the messages button, not support');
   });
 
   testWidgets('the header copy stays role-agnostic for a seller who also buys',
@@ -147,11 +288,11 @@ void main() {
         reason: 'a farmer can be a buyer in one thread and a seller in another');
   });
 
-  testWidgets('a failed inbox call leaves the bell usable with no badge',
+  testWidgets('a failed inbox call leaves the header usable with no badge',
       (tester) async {
     await _pumpHome(tester, _HomeGateway()..inboxError = Exception('offline'));
 
-    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
     expect(tester.takeException(), isNull,
         reason: 'an unread-count failure must not break the Home screen');
   });

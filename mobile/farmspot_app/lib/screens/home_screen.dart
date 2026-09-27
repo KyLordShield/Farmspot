@@ -19,6 +19,7 @@ import 'search_screen.dart';
 import 'image_search_screen.dart';
 import 'ai_chat_screen.dart';
 import 'messages_inbox_screen.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   /// Injectable for tests; the real HTTP-backed service is used when omitted.
@@ -267,18 +268,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            // Temporary floating chat/support button.
+            // Customer support / AI assistant. The headset mark is deliberate:
+            // it no longer reads as a second, competing "chat bubble" now that
+            // real conversations live behind the messages button in the header.
             Positioned(
               right: 20,
               bottom: 20,
               child: FloatingActionButton(
                 backgroundColor: AppColors.primaryGreen,
+                // Pinned explicitly: the theme's default foreground was the
+                // muddy grey that disappeared into the green.
+                foregroundColor: Colors.white,
+                tooltip: 'Customer support',
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AiChatScreen()),
                   );
                 },
-                child: const Icon(Icons.chat_bubble_outline),
+                child: const Icon(Icons.support_agent,
+                    color: Colors.white, size: 26),
               ),
             ),
           ],
@@ -300,6 +308,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: HomeSearchField(
               tapToOpen: true,
+              // Trimmed from 46 so both header buttons fit beside it while the
+              // bar still reads as a long, easily-tapped search field.
+              height: 40,
               onSearchTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SearchScreen()),
@@ -312,72 +323,113 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-          const SizedBox(width: 10),
-          _buildMessagesBell(),
+          const SizedBox(width: 8),
+          _buildMessagesButton(),
+          const SizedBox(width: 4),
+          _buildNotificationsButton(),
         ],
+      ),
+    );
+  }
+
+  /// Icon-only header action. No filled circle behind it: the glyph sits
+  /// straight on the green header, which is both lighter on the eye and gives
+  /// the search bar back the width the circles were eating. The 40x40 box is
+  /// kept as the tap target even though the icon is only 22px, so it stays
+  /// comfortable to hit.
+  ///
+  /// The Material is transparent rather than white: an InkWell needs a Material
+  /// ancestor to paint its ripple, and the nearest one here is the Scaffold's,
+  /// which sits *behind* the green header and would make the splash invisible.
+  Widget _buildHeaderButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    Widget? badge,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                // White now that there is no white plate behind it: the glyph
+                // sits directly on the green header, where the old black54
+                // would have been nearly unreadable.
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+            ),
+          ),
+          // IgnorePointer is load-bearing: the badge is decoration, not a
+          // control, and without it the badge can sit over the icon and swallow
+          // the tap on the button underneath.
+          if (badge != null)
+            Positioned(right: 0, top: 0, child: IgnorePointer(child: badge)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessagesButton() {
+    return _buildHeaderButton(
+      icon: Icons.chat_bubble_outline_rounded,
+      tooltip: 'Messages',
+      onTap: _openInbox,
+      badge: _unreadMessages > 0 ? _buildUnreadBadge() : null,
+    );
+  }
+
+  Widget _buildNotificationsButton() {
+    return _buildHeaderButton(
+      icon: Icons.notifications_none_rounded,
+      tooltip: 'Notifications',
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+        );
+      },
+    );
+  }
+
+  Widget _buildUnreadBadge() {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16),
+      height: 16,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Text(
+          _unreadMessages > 99 ? '99+' : '$_unreadMessages',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+        ),
       ),
     );
   }
 
   /// Messages live in the header rather than in the feed because a conversation
   /// is not browseable content: it has to be reachable from anywhere on this
-  /// screen, and its unread count is only useful while it is in view. A bell
-  /// also keeps it visually distinct from the AI chat FAB below, which would
-  /// otherwise be a second chat-bubble icon meaning something else.
+  /// screen, and its unread count is only useful while it is in view.
   ///
   /// The entry is deliberately role-agnostic. Selling and buying are not
   /// exclusive — a farmer can be the buyer in one thread and the seller in
   /// another, and can message another farmer entirely — so the inbox tags each
   /// thread with the role that user is playing in it rather than this screen
   /// guessing from a single account-wide flag.
-  Widget _buildMessagesBell() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Material(
-          color: Colors.white,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: _openInbox,
-            child: const SizedBox(
-              width: 46,
-              height: 46,
-              child: Icon(Icons.notifications_none_rounded,
-                  color: Colors.black54, size: 24),
-            ),
-          ),
-        ),
-        if (_unreadMessages > 0)
-          Positioned(
-            right: 2,
-            top: 2,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 20),
-              height: 20,
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.primaryGreen, width: 2),
-              ),
-              child: Center(
-                child: Text(
-                  _unreadMessages > 99 ? '99+' : '$_unreadMessages',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    height: 1,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
   Future<void> _openInbox() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -452,17 +504,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSectionTitle() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Available now',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        // Expanded so the heading yields space to the "see all" link on a narrow
+        // phone or at a large system text scale, instead of overflowing.
+        const Expanded(
+          child: Text(
+            'Available now',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ),
         GestureDetector(
           onTap: () {
             debugPrint('See all tapped — no backend wired yet.');
           },
           child: const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'see all',
