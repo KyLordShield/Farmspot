@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\UserStatsController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ConversationController;
+use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
     Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);
+
+    // Farming assistant. Throttled per user to sit under the provider's free
+    // 30 requests/minute, so one client cannot eat the shared budget.
+    Route::post('/ai/chat', [AiChatController::class, 'chat'])->middleware('throttle:20,1');
 
     // In-app buyer <-> seller messaging.
     Route::get('/conversations', [ConversationController::class, 'index']);

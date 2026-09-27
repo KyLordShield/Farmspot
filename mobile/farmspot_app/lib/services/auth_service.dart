@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ai_chat_service.dart';
 import 'session_state.dart';
 
 /// Structured login outcome so screens can distinguish network failures from
@@ -544,6 +545,10 @@ class AuthService {
     await prefs.remove('auth_token');
     await prefs.remove(SessionState.userPrefsKey);
     SessionState.instance.clear();
+    // The AI transcript is a process-wide singleton so it can outlive the chat
+    // screen. Without this, whoever signs in next would be continuing the
+    // previous user's conversation.
+    AiChatSession.instance.clear();
   }
 
   /// Extracts the first field error from a Laravel 422 body

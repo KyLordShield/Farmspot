@@ -35,4 +35,23 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Groq (AI assistant)
+    |--------------------------------------------------------------------------
+    |
+    | The assistant's provider credentials live here and nowhere else — the
+    | Flutter app never sees the key, it only ever talks to /api/ai/chat.
+    |
+    | When the key is missing the assistant degrades to a friendly "unavailable"
+    | message instead of erroring, so the rest of the app keeps working.
+    |
+    */
+
+    'groq' => [
+        'key' => env('GROQ_API_KEY'),
+        'model' => env('GROQ_MODEL', 'openai/gpt-oss-120b'),
+        'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+    ],
+
 ];
