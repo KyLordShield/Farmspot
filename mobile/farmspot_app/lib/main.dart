@@ -4,6 +4,7 @@ import 'screens/splash_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/auth_service.dart';
+import 'services/session_state.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,15 +48,22 @@ class _AuthGateState extends State<AuthGate> {
 
   /// Read the saved token while the splash plays; never swap the screen
   /// before the splash has had its moment.
+  ///
+  /// [SessionState.init] rides along in the same window. Seeding the role here
+  /// — behind the splash rather than in the first screen's `initState` — is
+  /// what stops the bottom nav from painting a buyer nav and then swapping to
+  /// the seller nav once the role resolves. It costs no extra wall-clock time
+  /// because the 1950ms splash delay is already the long pole.
   Future<void> _bootstrap() async {
-    final results = await Future.wait<String?>([
+    final results = await Future.wait<Object?>([
       AuthService.getToken(),
-      Future<String?>.delayed(const Duration(milliseconds: 1950), () => null),
+      SessionState.instance.init(),
+      Future<Object?>.delayed(const Duration(milliseconds: 1950), () => null),
     ]);
     if (!mounted) return;
     setState(() {
       _ready = true;
-      _token = results.first;
+      _token = results.first as String?;
     });
   }
 

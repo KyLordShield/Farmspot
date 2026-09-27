@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'session_state.dart';
+
 /// Structured login outcome so screens can distinguish network failures from
 /// auth failures (401/403) and show the right friendly message.
 class AuthLoginResult {
@@ -65,7 +67,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
-        await prefs.setString('user_data', jsonEncode(data['user']));
+        await _cacheUser(data['user'] as Map<String, dynamic>);
 
         // Make GET /api/user the single source of truth for the cached user
         // BEFORE login returns (and before the first post-login screen builds).
@@ -83,6 +85,18 @@ class AuthService {
     } catch (e) {
       return 'Could not reach the server. Check your connection.';
     }
+  }
+
+  /// Single funnel for every `user_data` write.
+  ///
+  /// Writing the cache and telling [SessionState] must never be two separate
+  /// steps: a write that skipped the notifier left the bottom nav showing a
+  /// stale role until something happened to refetch. Keeping it in one helper
+  /// means the disk and the in-memory session cannot drift apart.
+  static Future<void> _cacheUser(Map<String, dynamic> user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(SessionState.userPrefsKey, jsonEncode(user));
+    SessionState.instance.applyUser(user);
   }
 
   /// Login variant that keeps the raw server response so the UI can map 401 vs
@@ -111,7 +125,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
-        await prefs.setString('user_data', jsonEncode(data['user']));
+        await _cacheUser(data['user'] as Map<String, dynamic>);
 
         // Same authoritative user refresh as login() — see its comment.
         await fetchUser();
@@ -182,7 +196,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
-        await prefs.setString('user_data', jsonEncode(data['user']));
+        await _cacheUser(data['user'] as Map<String, dynamic>);
 
         await fetchUser();
 
@@ -251,7 +265,7 @@ class AuthService {
         final token = data['token'] as String;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
-        await prefs.setString('user_data', jsonEncode(data['user']));
+        await _cacheUser(data['user'] as Map<String, dynamic>);
 
         // Same as login: fetch the authoritative user via GET /api/user so the
         // cached copy is fresh before the app proceeds to the first screen.
@@ -305,8 +319,7 @@ class AuthService {
       if (response.statusCode == 200) {
         final user = data['user'];
         if (user is Map<String, dynamic>) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_data', jsonEncode(user));
+          await _cacheUser(user);
           return (error: null, user: user);
         }
         return (error: null, user: null);
@@ -363,8 +376,7 @@ class AuthService {
       if (response.statusCode == 200) {
         final user = data['user'];
         if (user is Map<String, dynamic>) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_data', jsonEncode(user));
+          await _cacheUser(user);
           return (error: null, user: user);
         }
         return (error: null, user: null);
@@ -389,7 +401,7 @@ class AuthService {
 
   static Future<Map<String, dynamic>?> getUser() async {
     final prefs = await SharedPreferences.getInstance();
-    final userJson = prefs.getString('user_data');
+    final userJson = prefs.getString(SessionState.userPrefsKey);
     if (userJson == null) return null;
     return jsonDecode(userJson) as Map<String, dynamic>;
   }
@@ -415,8 +427,7 @@ class AuthService {
       final data = jsonDecode(response.body);
       if (data is! Map<String, dynamic>) return null;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_data', jsonEncode(data));
+      await _cacheUser(data);
       return data;
     } catch (_) {
       return null;
@@ -425,8 +436,13 @@ class AuthService {
 
   /// Reports whether seller mode is active (USR_IS_SELLER == 1), fetching the
   /// latest user from the server (GET /api/user) and falling back to the cached
-  /// copy if the request fails. Shared so the first post-login screen can decide
-  /// which bottom nav (seller vs buyer) to show without waiting for Profile.
+  /// copy if the request fails.
+  ///
+  /// Prefer [SessionState.instance.isSeller] when deciding what to render: it
+  /// is synchronous and already correct on the first frame, whereas this call
+  /// blocks on HTTP and cannot be used during build. Keep this for the cases
+  /// that genuinely need a round trip, such as pulling data that is gated
+  /// behind the role.
   static Future<bool> isSeller() async {
     var user = await fetchUser();
     user ??= await getUser();
@@ -456,6 +472,12 @@ class AuthService {
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
+        // Pull the authoritative user back so USR_IS_SELLER lands in the cache
+        // and in [SessionState]. Without this the nav kept rendering the old
+        // role: activateSeller used to leave `user_data` untouched, so Map and
+        // Insights — which read the cache — hid "My Farm" even after the user
+        // had successfully become a seller.
+        await fetchUser();
         return (
           error: null,
           reactivated: data['reactivated'] == true,
@@ -488,7 +510,12 @@ class AuthService {
         },
       );
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200) return null;
+      if (response.statusCode == 200) {
+        // Same reasoning as activateSeller: the cached role has to follow the
+        // toggle or the nav keeps offering My Farm to a deactivated seller.
+        await fetchUser();
+        return null;
+      }
       return data['message'] ?? 'Could not deactivate seller mode.';
     } catch (_) {
       return 'Could not reach the server. Check your connection.';
@@ -515,7 +542,8 @@ class AuthService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
-    await prefs.remove('user_data');
+    await prefs.remove(SessionState.userPrefsKey);
+    SessionState.instance.clear();
   }
 
   /// Extracts the first field error from a Laravel 422 body

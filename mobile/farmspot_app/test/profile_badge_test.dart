@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:farmspot_app/screens/profile_screen.dart';
+import 'package:farmspot_app/services/session_state.dart';
 
 // Widget checks for the Profile screen's seller/buyer badge. Network is blocked
 // in testWidgets, so the badge must derive from the cached seller flag exactly
@@ -19,6 +20,10 @@ Future<void> _pumpProfile(WidgetTester tester, int isSeller) async {
       'USR_IS_SELLER': isSeller,
     }),
   });
+  // The badge reads the shared session, which main() seeds from that same cache
+  // during the splash. Without this the screen would render as a buyer no
+  // matter what the cache says.
+  await SessionState.instance.init();
 
   await tester.pumpWidget(const MaterialApp(home: ProfileScreen()));
   // Let _syncStateFromServer settle (network fails, cached user is used).

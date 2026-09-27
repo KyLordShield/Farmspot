@@ -3,7 +3,7 @@ import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../models/insights.dart';
-import '../services/auth_service.dart';
+import '../services/session_state.dart';
 import '../services/insights_service.dart';
 import '../widgets/farmspot_loader.dart';
 import 'home_screen.dart';
@@ -19,15 +19,12 @@ class InsightsScreen extends StatefulWidget {
 }
 
 class _InsightsScreenState extends State<InsightsScreen> {
-  bool _isSeller = false;
-
   late Future<InsightsPayload> _payloadFuture;
   InsightsPayload? _payload;
 
   @override
   void initState() {
     super.initState();
-    _loadSellerStatus();
     _payloadFuture = InsightsService.fetchInsights();
   }
 
@@ -44,18 +41,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
     }
   }
 
-  Future<void> _loadSellerStatus() async {
-    final user = await AuthService.getUser();
-    if (!mounted) return;
-    if (user != null) {
-      final raw = user['USR_IS_SELLER'];
-      final intFlag = raw is int ? raw : int.tryParse(raw.toString()) ?? 0;
-      setState(() => _isSeller = intFlag == 1);
-    }
-  }
-
   void _handleNavTap(int i) {
     if (i == 2) return;
+    // Read live session state: buyer nav has 4 tabs and seller nav 5, so a
+    // stale role here routes the tap to the wrong screen.
+    final isSeller = SessionState.instance.isSeller;
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
@@ -69,11 +59,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
         break;
       case 3:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => _isSeller ? const MyFarmScreen() : const ProfileScreen()),
+          MaterialPageRoute(builder: (_) => isSeller ? const MyFarmScreen() : const ProfileScreen()),
         );
         break;
       case 4:
-        if (_isSeller) {
+        if (isSeller) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const ProfileScreen()),
           );
@@ -126,9 +116,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _isSeller
-          ? SellerBottomNav(currentIndex: 2, onTap: _handleNavTap)
-          : FarmSpotBottomNav(currentIndex: 2, onTap: _handleNavTap),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: SessionState.instance,
+        builder: (context, _) => SessionState.instance.isSeller
+            ? SellerBottomNav(currentIndex: 2, onTap: _handleNavTap)
+            : FarmSpotBottomNav(currentIndex: 2, onTap: _handleNavTap),
+      ),
     );
   }
 

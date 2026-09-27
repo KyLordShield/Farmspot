@@ -10,6 +10,7 @@ import 'edit_profile_screen.dart';
 import 'seller/farm_setup_details_screen.dart';
 import 'seller/my_farm_screen.dart';
 import '../services/auth_service.dart';
+import '../services/session_state.dart';
 import '../services/farm_service.dart';
 import '../models/farm_setup_data.dart';
 import 'login_screen.dart';
@@ -29,12 +30,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _phone = '';
   String _photoUrl = '';
   bool _photoBusy = false;
-  bool _isSeller = false;
   bool _hasPendingReview = false;
   bool _sellerBusy = false;
   String? _sellerError;
 
-  bool get isSellerNav => _isSeller;
+  /// The role itself is not tracked here. It lives in [SessionState] because the
+  /// bottom nav on every screen has to agree on it; a private copy here is
+  /// exactly what let Profile disagree with Map about whether My Farm existed.
+  bool get isSellerNav => SessionState.instance.isSeller;
 
   @override
   void initState() {
@@ -44,13 +47,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUser() async => _syncStateFromServer();
 
-  static bool _parseSellerFlag(Map<String, dynamic> user) {
-    final v = user['USR_IS_SELLER'];
-    if (v is int) return v == 1;
-    return int.tryParse(v?.toString() ?? '') == 1;
-  }
-
   /// Fetches latest user + farm count from the server and updates local state.
+  ///
+  /// `AuthService.fetchUser()` writes through the session, so the shared role
+  /// is refreshed here as a side effect and every other screen's nav follows
+  /// without re-deriving anything.
   Future<void> _syncStateFromServer() async {
     var user = await AuthService.fetchUser();
     user ??= await AuthService.getUser();
@@ -65,7 +66,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // simply hasn't set one yet (this replaces the old hardcoded 'Address').
     final address = user['USR_ADDRESS'] as String? ?? '';
     final photoUrl = user['USR_PHOTO_PATH'] as String? ?? '';
-    final isSeller = _parseSellerFlag(user);
 
     final farms = await FarmService.getFarms();
     if (!mounted) return;
@@ -83,7 +83,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _phone = phone;
       _address = address;
       _photoUrl = photoUrl;
-      _isSeller = isSeller;
       _hasPendingReview = hasPending && !hasApproved;
     });
   }
@@ -160,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
         break;
       case 3:
-        if (_isSeller) {
+        if (isSellerNav) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const MyFarmScreen()),
           );
@@ -258,63 +257,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final fullName = '$_firstName $_lastName';
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: RefreshIndicator(
-          // Pull-to-refresh: re-pull user + farm state from the server (same
-          // pattern as MyFarmScreen) so changes made elsewhere show up here.
-          onRefresh: _syncStateFromServer,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            children: [
-              _buildHeaderCard(fullName),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildBecomeSellerCard(),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'ACCOUNT',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        letterSpacing: 0.5,
-                        color: Colors.black45,
+      // The whole body listens, not just the nav: the "Seller Account" badge and
+      // the Become-a-Seller switch read the same shared role, so a toggle can
+      // never leave them disagreeing with the nav above them.
+      body: ListenableBuilder(
+        listenable: SessionState.instance,
+        builder: (context, _) => SafeArea(
+          child: RefreshIndicator(
+            // Pull-to-refresh: re-pull user + farm state from the server (same
+            // pattern as MyFarmScreen) so changes made elsewhere show up here.
+            onRefresh: _syncStateFromServer,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              children: [
+                _buildHeaderCard(fullName),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildBecomeSellerCard(),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'ACCOUNT',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 0.5,
+                          color: Colors.black45,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _accountTile(
-                      icon: Icons.person_outline,
-                      label: 'Personal Info',
-                      value: fullName,
-                      onTap: _openEditProfile,
-                    ),
-                    _accountTile(
-                      icon: Icons.phone_outlined,
-                      label: 'Contact Number',
-                      value: _phone,
-                      onTap: _openEditProfile,
-                    ),
-                    _accountTile(
-                      icon: Icons.logout,
-                      label: 'log out',
-                      value: '',
-                      iconColor: Colors.red,
-                      labelColor: Colors.red,
-                      onTap: _logout,
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      _accountTile(
+                        icon: Icons.person_outline,
+                        label: 'Personal Info',
+                        value: fullName,
+                        onTap: _openEditProfile,
+                      ),
+                      _accountTile(
+                        icon: Icons.phone_outlined,
+                        label: 'Contact Number',
+                        value: _phone,
+                        onTap: _openEditProfile,
+                      ),
+                      _accountTile(
+                        icon: Icons.logout,
+                        label: 'log out',
+                        value: '',
+                        iconColor: Colors.red,
+                        labelColor: Colors.red,
+                        onTap: _logout,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: _isSeller
-          ? SellerBottomNav(currentIndex: 4, onTap: _handleNavTap)
-          : FarmSpotBottomNav(currentIndex: 3, onTap: _handleNavTap),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: SessionState.instance,
+        builder: (context, _) => SessionState.instance.isSeller
+            ? SellerBottomNav(currentIndex: 4, onTap: _handleNavTap)
+            : FarmSpotBottomNav(currentIndex: 3, onTap: _handleNavTap),
+      ),
     );
   }
 
@@ -448,7 +456,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // buyer. A pending seller keeps 'Buyer Account' — the separate
               // Pending Approval card already makes that status obvious, so a
               // third badge would be redundant.
-              _isSeller ? 'Seller Account' : 'Buyer Account',
+              isSellerNav ? 'Seller Account' : 'Buyer Account',
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
@@ -483,7 +491,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               Switch(
-                value: _isSeller,
+                value: isSellerNav,
                 activeThumbColor: AppColors.primaryGreen,
                 onChanged: _sellerBusy ? null : _toggleSeller,
               ),

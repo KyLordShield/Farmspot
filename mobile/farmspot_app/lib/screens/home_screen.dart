@@ -7,7 +7,7 @@ import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
 import '../services/farm_service.dart';
 import '../services/location_service.dart';
-import '../services/auth_service.dart';
+import '../services/session_state.dart';
 import '../services/message_service.dart';
 import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
@@ -34,7 +34,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   /// 0 = "All"; 1..n index into [_categories] (the real API categories).
   int _selectedCategory = 0;
-  bool _isSeller = false;
 
   List<CropCategory> _categories = [];
 
@@ -51,9 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadListings();
-    _loadSellerStatus();
     _loadCategories();
     _loadUnreadMessages();
+    if (SessionState.instance.isSeller) _loadActiveListingCount();
   }
 
   /// Counts unread messages for the Messages entry. Deliberately failure
@@ -79,17 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _categories = categories);
     } catch (_) {
       // Chips fall back to just "All".
-    }
-  }
-
-  /// Fetch fresh seller status so the bottom nav (seller vs buyer) is correct
-  /// on the very first screen after login, without waiting for ProfileScreen.
-  Future<void> _loadSellerStatus() async {
-    final isSeller = await AuthService.isSeller();
-    if (!mounted) return;
-    setState(() => _isSeller = isSeller);
-    if (isSeller) {
-      await _loadActiveListingCount();
     }
   }
 
@@ -158,7 +146,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Pull-to-refresh: reload the feed while keeping current content on screen.
   Future<void> _refresh() async {
     await _loadListings(showLoading: false);
-    await _loadSellerStatus();
+    // The role is not refetched here. It is shared session state that survives
+    // navigation, so re-deriving it on refresh is what used to make the nav
+    // flicker. The seller banner's count still refreshes, since that is real
+    // listing data.
+    if (SessionState.instance.isSeller) await _loadActiveListingCount();
     await _loadCategories();
     await _loadUnreadMessages();
   }
@@ -188,7 +180,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleNavTap(int i) {
     if (i == 0) return; // already on Home
-    if (_isSeller) {
+    // Read the role at tap time rather than from a field captured at build
+    // time. The two nav layouts index differently (4 buyer tabs vs 5 seller
+    // tabs), so a stale read here sends the user to the wrong screen.
+    if (SessionState.instance.isSeller) {
       switch (i) {
         case 1:
           Navigator.of(context).pushReplacement(
@@ -253,10 +248,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildCategoryRow(),
-                          if (_isSeller) ...[
-                            const SizedBox(height: 14),
-                            _buildSellerBanner(),
-                          ],
+                          // Both the banner and the bottom nav are driven by the
+                          // shared session, so they update together on a role
+                          // change instead of each re-deriving it.
+                          ListenableBuilder(
+                            listenable: SessionState.instance,
+                            builder: (context, _) =>
+                                SessionState.instance.isSeller
+                                    ? Column(
+                                        children: [
+                                          const SizedBox(height: 14),
+                                          _buildSellerBanner(),
+                                        ],
+                                      )
+                                    : const SizedBox.shrink(),
+                          ),
                           const SizedBox(height: 20),
                           _buildSectionTitle(),
                           const SizedBox(height: 12),
@@ -292,9 +298,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _isSeller
-          ? SellerBottomNav(currentIndex: 0, onTap: _handleNavTap)
-          : FarmSpotBottomNav(currentIndex: 0, onTap: _handleNavTap),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: SessionState.instance,
+        builder: (context, _) => SessionState.instance.isSeller
+            ? SellerBottomNav(currentIndex: 0, onTap: _handleNavTap)
+            : FarmSpotBottomNav(currentIndex: 0, onTap: _handleNavTap),
+      ),
     );
   }
 

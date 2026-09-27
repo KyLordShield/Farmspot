@@ -4,7 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/farm_pin.dart';
-import '../services/auth_service.dart';
+import '../services/session_state.dart';
 import '../services/farm_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
@@ -63,8 +63,6 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  bool _isSeller = false;
-
   // 0 = Listing view toggle, 1 = Map view toggle.
   int _viewToggle = 1;
 
@@ -79,19 +77,8 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSellerStatus();
     _loadFarms();
     _loadPosition();
-  }
-
-  Future<void> _loadSellerStatus() async {
-    final user = await AuthService.getUser();
-    if (!mounted) return;
-    if (user != null) {
-      final raw = user['USR_IS_SELLER'];
-      final intFlag = raw is int ? raw : int.tryParse(raw.toString()) ?? 0;
-      setState(() => _isSeller = intFlag == 1);
-    }
   }
 
   Future<void> _loadFarms() async {
@@ -126,6 +113,9 @@ class _MapScreenState extends State<MapScreen> {
 
   void _handleNavTap(int i) {
     if (i == 1) return;
+    // Read live session state: buyer nav has 4 tabs and seller nav 5, so a
+    // stale role here routes the tap to the wrong screen.
+    final isSeller = SessionState.instance.isSeller;
     switch (i) {
       case 0:
         Navigator.of(context).pushReplacement(
@@ -141,12 +131,12 @@ class _MapScreenState extends State<MapScreen> {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) =>
-                _isSeller ? const MyFarmScreen() : const ProfileScreen(),
+                isSeller ? const MyFarmScreen() : const ProfileScreen(),
           ),
         );
         break;
       case 4:
-        if (_isSeller) {
+        if (isSeller) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const ProfileScreen()),
           );
@@ -205,9 +195,12 @@ class _MapScreenState extends State<MapScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _isSeller
-          ? SellerBottomNav(currentIndex: 1, onTap: _handleNavTap)
-          : FarmSpotBottomNav(currentIndex: 1, onTap: _handleNavTap),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: SessionState.instance,
+        builder: (context, _) => SessionState.instance.isSeller
+            ? SellerBottomNav(currentIndex: 1, onTap: _handleNavTap)
+            : FarmSpotBottomNav(currentIndex: 1, onTap: _handleNavTap),
+      ),
     );
   }
 
