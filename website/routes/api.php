@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\UserStatsController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\InsightsController;
+use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +46,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
     Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);
+
+    // In-app buyer <-> seller messaging.
+    Route::get('/conversations', [ConversationController::class, 'index']);
+    Route::post('/conversations', [ConversationController::class, 'store']);
+    Route::get('/conversations/{id}/messages', [ConversationController::class, 'messages']);
+    Route::post('/conversations/{id}/messages', [ConversationController::class, 'sendMessage']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

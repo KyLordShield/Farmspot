@@ -130,6 +130,7 @@ class DemoFarmMarketSeeder extends Seeder
                 'FRM_STATUS' => 'APPROVED',
                 'FRM_PIN_ACTIVE' => 1,
                 'FRM_VERIFICATION_DOC_PATH' => null,
+                'FRM_FARM_CERTIFICATE_PATH' => null,
                 'FRM_CREATED_AT' => $createdAt,
                 'FMR_ID' => $fmrId,
             ]);

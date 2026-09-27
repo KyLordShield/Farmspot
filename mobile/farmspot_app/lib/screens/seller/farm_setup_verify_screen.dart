@@ -43,15 +43,23 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     super.dispose();
   }
 
-  XFile? get _proofDocument => widget.farmSetupData.verificationDocument;
+  XFile? get _idDocument => widget.farmSetupData.verificationDocument;
 
-  String get _proofSubtitle {
-    final doc = _proofDocument;
-    if (doc == null) return 'Upload a valid ID or proof of your farm/plot';
+  XFile? get _certificateDocument => widget.farmSetupData.farmCertificate;
+
+  String get _idSubtitle {
+    final doc = _idDocument;
+    if (doc == null) return 'Upload a valid government-issued ID';
     return 'Uploaded ${doc.name}';
   }
 
-  Future<void> _pickProofDocument() async {
+  String get _certificateSubtitle {
+    final doc = _certificateDocument;
+    if (doc == null) return 'Upload your farm permit or certificate';
+    return 'Uploaded ${doc.name}';
+  }
+
+  Future<void> _pickDocument(void Function(XFile) assign) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -76,11 +84,21 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
 
     final picked = await _picker.pickImage(source: source);
     if (picked != null && mounted) {
-      setState(() => widget.farmSetupData.verificationDocument = picked);
+      setState(() => assign(picked));
     }
   }
 
   void _next() {
+    if (_idDocument == null || _certificateDocument == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload both your valid ID and farm '
+              'permit/certificate to continue.'),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
@@ -91,7 +109,8 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasProof = _proofDocument != null;
+    final hasId = _idDocument != null;
+    final hasCert = _certificateDocument != null;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -112,24 +131,33 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 children: [
                   const FieldLabel(
-                    'VALID ID OR FARM CERTIFICATE',
-                    badge: '(optional)',
-                    badgeColor: Colors.black38,
+                    'VALID ID',
+                    badge: '(required)',
+                    badgeColor: AppColors.primaryGreen,
                   ),
                   UploadBox(
                     icon: Icons.badge_outlined,
-                    title: 'Barangay ID',
-                    subtitle: _proofSubtitle,
-                    buttonLabel: hasProof ? 'Change' : 'Upload',
-                    onTap: _pickProofDocument,
+                    title: 'Government ID',
+                    subtitle: _idSubtitle,
+                    buttonLabel: hasId ? 'Change' : 'Upload',
+                    onTap: () => _pickDocument(
+                      (f) => widget.farmSetupData.verificationDocument = f,
+                    ),
                   ),
                   const SizedBox(height: 20),
+                  const FieldLabel(
+                    'FARM PERMIT / CERTIFICATE',
+                    badge: '(required)',
+                    badgeColor: AppColors.primaryGreen,
+                  ),
                   UploadBox(
                     icon: Icons.description_outlined,
-                    title: 'Farm Certificate/Photo',
-                    subtitle: _proofSubtitle,
-                    buttonLabel: hasProof ? 'Change' : 'Upload',
-                    onTap: _pickProofDocument,
+                    title: 'Farm Certificate/Permit',
+                    subtitle: _certificateSubtitle,
+                    buttonLabel: hasCert ? 'Change' : 'Upload',
+                    onTap: () => _pickDocument(
+                      (f) => widget.farmSetupData.farmCertificate = f,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   const FieldLabel('SELLER FULL NAME'),

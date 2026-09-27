@@ -8,6 +8,7 @@ import '../services/listing_service.dart';
 import '../services/farm_service.dart';
 import '../services/location_service.dart';
 import '../services/auth_service.dart';
+import '../services/message_service.dart';
 import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 import 'map_screen.dart';
@@ -17,9 +18,13 @@ import 'seller/my_farm_screen.dart';
 import 'search_screen.dart';
 import 'image_search_screen.dart';
 import 'ai_chat_screen.dart';
+import 'messages_inbox_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// Injectable for tests; the real HTTP-backed service is used when omitted.
+  final MessagesGateway? gateway;
+
+  const HomeScreen({super.key, this.gateway});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -37,12 +42,31 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _errorMessage;
   int? _activeListingCount;
 
+  /// Total unread across every thread, for the Messages entry badge. The home
+  /// feed never blocks on it — a failure just leaves the badge hidden.
+  int _unreadMessages = 0;
+
   @override
   void initState() {
     super.initState();
     _loadListings();
     _loadSellerStatus();
     _loadCategories();
+    _loadUnreadMessages();
+  }
+
+  /// Counts unread messages for the Messages entry. Deliberately failure
+  /// tolerant: messaging being unreachable must never break the feed.
+  Future<void> _loadUnreadMessages() async {
+    try {
+      final gateway = widget.gateway ?? MessageService.instance;
+      final threads = await gateway.fetchConversations();
+      if (!mounted) return;
+      setState(() =>
+          _unreadMessages = threads.fold(0, (sum, t) => sum + t.unreadCount));
+    } catch (_) {
+      // Leave the badge hidden.
+    }
   }
 
   /// Real crop categories for the filter chips. Failure-tolerant: on error the
@@ -135,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadListings(showLoading: false);
     await _loadSellerStatus();
     await _loadCategories();
+    await _loadUnreadMessages();
   }
 
   /// Swaps every listing's seeded "0.4 km away" for the real haversine
@@ -270,20 +295,97 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       color: AppColors.primaryGreen,
-      child: HomeSearchField(
-        tapToOpen: true,
-        onSearchTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SearchScreen()),
-          );
-        },
-        onCameraTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
-          );
-        },
+      child: Row(
+        children: [
+          Expanded(
+            child: HomeSearchField(
+              tapToOpen: true,
+              onSearchTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SearchScreen()),
+                );
+              },
+              onCameraTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          _buildMessagesBell(),
+        ],
       ),
     );
+  }
+
+  /// Messages live in the header rather than in the feed because a conversation
+  /// is not browseable content: it has to be reachable from anywhere on this
+  /// screen, and its unread count is only useful while it is in view. A bell
+  /// also keeps it visually distinct from the AI chat FAB below, which would
+  /// otherwise be a second chat-bubble icon meaning something else.
+  ///
+  /// The entry is deliberately role-agnostic. Selling and buying are not
+  /// exclusive — a farmer can be the buyer in one thread and the seller in
+  /// another, and can message another farmer entirely — so the inbox tags each
+  /// thread with the role that user is playing in it rather than this screen
+  /// guessing from a single account-wide flag.
+  Widget _buildMessagesBell() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          color: Colors.white,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _openInbox,
+            child: const SizedBox(
+              width: 46,
+              height: 46,
+              child: Icon(Icons.notifications_none_rounded,
+                  color: Colors.black54, size: 24),
+            ),
+          ),
+        ),
+        if (_unreadMessages > 0)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 20),
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.primaryGreen, width: 2),
+              ),
+              child: Center(
+                child: Text(
+                  _unreadMessages > 99 ? '99+' : '$_unreadMessages',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openInbox() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MessagesInboxScreen(gateway: widget.gateway),
+      ),
+    );
+    // Threads may have been read since the badge was counted.
+    if (mounted) _loadUnreadMessages();
   }
 
   Widget _buildCategoryRow() {

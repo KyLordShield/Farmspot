@@ -232,9 +232,13 @@ class FarmSetupCompleteScreen extends StatelessWidget {
           _summaryRow('Photos', '${farmSetupData.photos.length}'),
           _summaryRow(
             'Verification',
-            farmSetupData.verificationDocument != null
-                ? 'Document provided'
-                : 'None',
+            farmSetupData.verificationDocument != null &&
+                    farmSetupData.farmCertificate != null
+                ? '2 documents provided'
+                : farmSetupData.verificationDocument != null ||
+                        farmSetupData.farmCertificate != null
+                    ? 'Partial documents'
+                    : 'None',
           ),
         ],
       ),

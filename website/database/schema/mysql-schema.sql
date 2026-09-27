@@ -54,19 +54,45 @@ CREATE TABLE `cache_locks` (
   KEY `cache_locks_expiration_index` (`expiration`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `contact_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_log` (
+  `CTL_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `LST_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `CTL_METHOD` enum('CALL','SMS') NOT NULL,
+  `CTL_CREATED_AT` datetime NOT NULL,
+  PRIMARY KEY (`CTL_ID`),
+  KEY `FK_CONTACTLOG_USER` (`USR_ID`),
+  KEY `FK_CONTACTLOG_LISTING` (`LST_ID`),
+  CONSTRAINT `contact_log_lst_id_foreign` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `contact_log_usr_id_foreign` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `conversation`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `conversation` (
   `CONV_ID` char(6) NOT NULL COMMENT 'Unique conversation ID',
+  `LST_ID` char(6) DEFAULT NULL,
   `CONV_CREATED_AT` datetime NOT NULL COMMENT 'Conversation start timestamp',
   `BUY_ID` char(6) NOT NULL COMMENT 'Buyer who initiated the conversation',
   `FMR_ID` char(6) NOT NULL COMMENT 'Farmer participating in conversation',
+  `FRM_ID` char(6) DEFAULT NULL,
+  `CNV_LAST_MESSAGE` varchar(500) DEFAULT NULL,
+  `CNV_LAST_MESSAGE_AT` datetime DEFAULT NULL,
   PRIMARY KEY (`CONV_ID`),
+  UNIQUE KEY `UNQ_CONVERSATION_LISTING_BUYER` (`LST_ID`,`BUY_ID`),
   KEY `FK_CONVERSATION_BUYER` (`BUY_ID`),
   KEY `FK_CONVERSATION_FARMER` (`FMR_ID`),
+  KEY `FK_CONVERSATION_LISTING` (`LST_ID`),
+  KEY `FK_CONVERSATION_FARM` (`FRM_ID`),
+  KEY `IDX_CONVERSATION_LAST_ACTIVITY` (`CNV_LAST_MESSAGE_AT`),
   CONSTRAINT `FK_CONVERSATION_BUYER` FOREIGN KEY (`BUY_ID`) REFERENCES `buyer` (`BUY_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `FK_CONVERSATION_FARMER` FOREIGN KEY (`FMR_ID`) REFERENCES `farmer` (`FMR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `FK_CONVERSATION_FARMER` FOREIGN KEY (`FMR_ID`) REFERENCES `farmer` (`FMR_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `conversation_frm_id_foreign` FOREIGN KEY (`FRM_ID`) REFERENCES `farm` (`FRM_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `conversation_lst_id_foreign` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Conversations between buyers and farmers';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `crop_category`;
@@ -107,7 +133,10 @@ CREATE TABLE `farm` (
   `FRM_LATITUDE` decimal(10,8) NOT NULL COMMENT 'GPS latitude coordinate',
   `FRM_LONGITUDE` decimal(11,8) NOT NULL COMMENT 'GPS longitude coordinate',
   `FRM_PIN_ACTIVE` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Map visibility flag (0 or 1)',
+  `FRM_STATUS` enum('PENDING_REVIEW','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING_REVIEW',
   `FRM_CREATED_AT` datetime NOT NULL COMMENT 'Farm creation timestamp',
+  `FRM_VERIFICATION_DOC_PATH` varchar(500) DEFAULT NULL,
+  `FRM_FARM_CERTIFICATE_PATH` varchar(500) DEFAULT NULL,
   `FMR_ID` char(6) NOT NULL COMMENT 'References the farmer owner',
   PRIMARY KEY (`FRM_ID`),
   KEY `FK_FARM_FARMER` (`FMR_ID`),
@@ -126,6 +155,21 @@ CREATE TABLE `farm_photo` (
   KEY `FK_FARMPHOTO_FARM` (`FRM_ID`),
   CONSTRAINT `FK_FARMPHOTO_FARM` FOREIGN KEY (`FRM_ID`) REFERENCES `farm` (`FRM_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Photos belonging to a farm';
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `farm_visit_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `farm_visit_log` (
+  `FVL_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `FRM_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `FVL_CREATED_AT` datetime NOT NULL,
+  PRIMARY KEY (`FVL_ID`),
+  KEY `FK_FARMVISITLOG_USER` (`USR_ID`),
+  KEY `FK_FARMVISITLOG_FARM` (`FRM_ID`),
+  CONSTRAINT `farm_visit_log_frm_id_foreign` FOREIGN KEY (`FRM_ID`) REFERENCES `farm` (`FRM_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `farm_visit_log_usr_id_foreign` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `farmer`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -148,8 +192,8 @@ CREATE TABLE `insight` (
   `INS_TITLE` varchar(200) NOT NULL COMMENT 'Title of the insight',
   `INS_CONTENT` text NOT NULL COMMENT 'Insight description/body',
   `INS_CREATED_AT` datetime NOT NULL COMMENT 'When insight was generated',
-  `CAT_ID` char(6) NOT NULL COMMENT 'Crop category this insight is about',
-  `SRCH_ID` char(6) NOT NULL COMMENT 'Search log that generated this insight',
+  `CAT_ID` char(6) DEFAULT NULL,
+  `SRCH_ID` char(6) DEFAULT NULL,
   PRIMARY KEY (`INS_ID`),
   KEY `FK_INSIGHT_CATEGORY` (`CAT_ID`),
   KEY `FK_INSIGHT_SEARCHLOG` (`SRCH_ID`),
@@ -200,6 +244,7 @@ CREATE TABLE `listing` (
   `LST_HARVEST_DATE` date DEFAULT NULL COMMENT 'Expected harvest date',
   `LST_EXPIRY_DATE` datetime DEFAULT NULL COMMENT 'Auto-expiry date (3-day rule)',
   `LST_IMAGE` varchar(500) DEFAULT NULL COMMENT 'URL to crop image',
+  `LST_DESCRIPTION` text DEFAULT NULL,
   `LST_CREATED_AT` datetime NOT NULL COMMENT 'Listing creation timestamp',
   `LST_UPDATED_AT` datetime NOT NULL COMMENT 'Last update timestamp',
   `FMR_ID` char(6) NOT NULL COMMENT 'Farmer who owns the listing',
@@ -214,18 +259,36 @@ CREATE TABLE `listing` (
   CONSTRAINT `FK_LISTING_FARMER` FOREIGN KEY (`FMR_ID`) REFERENCES `farmer` (`FMR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Crop listings posted by farmers';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `listing_photo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `listing_photo` (
+  `LPHOTO_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `LPHOTO_FILE_PATH` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `LPHOTO_UPLOADED_AT` datetime NOT NULL,
+  `LPHOTO_IS_PRIMARY` tinyint(1) NOT NULL DEFAULT 0,
+  `LST_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`LPHOTO_ID`),
+  KEY `FK_LISTINGPHOTO_LISTING` (`LST_ID`),
+  CONSTRAINT `listing_photo_lst_id_foreign` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `message`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `message` (
   `MSG_ID` char(6) NOT NULL COMMENT 'Unique message ID',
+  `MSG_SEQ` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
+  `MSG_IS_READ` tinyint(1) NOT NULL DEFAULT 0,
   `MSG_CREATED_AT` datetime NOT NULL COMMENT 'Timestamp message was sent',
   `CONV_ID` char(6) NOT NULL COMMENT 'Conversation this message belongs to',
   `USR_ID` char(6) NOT NULL COMMENT 'User who sent the message',
   PRIMARY KEY (`MSG_ID`),
+  UNIQUE KEY `UNQ_MESSAGE_SEQ` (`MSG_SEQ`),
   KEY `FK_MESSAGE_CONVERSATION` (`CONV_ID`),
   KEY `FK_MESSAGE_USER` (`USR_ID`),
+  KEY `IDX_MESSAGE_CONVERSATION_SEQ` (`CONV_ID`,`MSG_SEQ`),
   CONSTRAINT `FK_MESSAGE_CONVERSATION` FOREIGN KEY (`CONV_ID`) REFERENCES `conversation` (`CONV_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `FK_MESSAGE_USER` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Individual messages within a conversation';
@@ -238,6 +301,26 @@ CREATE TABLE `migrations` (
   `migration` varchar(255) NOT NULL,
   `batch` int(11) NOT NULL,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `personal_access_tokens`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `personal_access_tokens` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `tokenable_type` varchar(255) NOT NULL,
+  `tokenable_id` varchar(6) NOT NULL,
+  `name` text NOT NULL,
+  `token` varchar(64) NOT NULL,
+  `abilities` text DEFAULT NULL,
+  `last_used_at` timestamp NULL DEFAULT NULL,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `personal_access_tokens_token_unique` (`token`),
+  KEY `personal_access_tokens_tokenable_type_tokenable_id_index` (`tokenable_type`,`tokenable_id`),
+  KEY `personal_access_tokens_expires_at_index` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `report`;
@@ -280,7 +363,7 @@ CREATE TABLE `trend` (
   `TRND_DATA` text NOT NULL COMMENT 'Trend data / analysis results',
   `TRND_CREATED_AT` datetime NOT NULL COMMENT 'When trend was generated',
   `TRND_PERIOD_MONTH` char(7) NOT NULL COMMENT 'Month this trend covers (YYYY-MM)',
-  `CAT_ID` char(6) NOT NULL COMMENT 'Crop category this trend is about',
+  `CAT_ID` char(6) DEFAULT NULL,
   PRIMARY KEY (`TRND_ID`),
   KEY `FK_TREND_CATEGORY` (`CAT_ID`),
   CONSTRAINT `FK_TREND_CATEGORY` FOREIGN KEY (`CAT_ID`) REFERENCES `crop_category` (`CAT_ID`) ON UPDATE CASCADE
@@ -295,6 +378,8 @@ CREATE TABLE `user` (
   `USR_EMAIL` varchar(200) NOT NULL COMMENT 'Email address',
   `USR_PASSWORD` varchar(255) NOT NULL COMMENT 'Hashed password (bcrypt)',
   `USR_MOBILE_NUMBER` varchar(20) NOT NULL COMMENT 'Mobile contact number',
+  `USR_ADDRESS` varchar(255) DEFAULT NULL,
+  `USR_PHOTO_PATH` varchar(500) DEFAULT NULL,
   `USR_ROLE` enum('GENERAL_USER','ADMIN') NOT NULL COMMENT 'System role',
   `USR_IS_SELLER` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Seller mode flag (0 or 1)',
   `USR_STATUS` enum('ACTIVE','PENDING_VERIFICATION','DEACTIVATED') NOT NULL COMMENT 'Account state',
@@ -332,3 +417,15 @@ CREATE TABLE `whitelist` (
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (1,'0001_01_01_000000_create_users_table',1);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (2,'0001_01_01_000001_create_cache_table',1);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (3,'0001_01_01_000002_create_jobs_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (5,'2026_08_30_140207_create_personal_access_tokens_table',2);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (6,'2026_09_02_053007_add_frm_verification_doc_path_to_farm_table',3);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (7,'2026_09_02_175011_add_frm_status_to_farm_table',4);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (8,'2026_09_06_000001_create_farm_visit_log_table',5);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (9,'2026_09_06_000002_create_contact_log_table',5);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (10,'2026_09_17_000001_create_listing_photo_table',6);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (11,'2026_09_17_000002_add_lst_description_to_listing_table',6);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (12,'2026_09_19_000001_add_usr_address_and_photo_path_to_user_table',7);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2026_09_26_000001_add_frm_farm_certificate_path_to_farm_table',8);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2026_09_26_000002_add_messaging_fields_to_conversation_table',9);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2026_09_26_000003_add_messaging_fields_to_message_table',9);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_09_27_000004_add_msg_seq_to_message_table',10);

@@ -67,6 +67,23 @@ class FarmService {
         );
       }
 
+      final farmCertificate = data.farmCertificate;
+      if (farmCertificate != null) {
+        final bytes = await farmCertificate.readAsBytes();
+        final uploadName = _uploadFileName(
+          farmCertificate.name,
+          farmCertificate.path,
+        );
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'farm_certificate',
+            bytes,
+            filename: uploadName,
+            contentType: _contentTypeFor(uploadName),
+          ),
+        );
+      }
+
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
       final json = jsonDecode(response.body);
@@ -78,6 +95,7 @@ class FarmService {
           'frm_status': json['frm_status'] ?? 'APPROVED',
           'photoUrls': json['photo_urls'] ?? const <dynamic>[],
           'verificationDocumentUrl': json['verification_document_url'],
+          'farmCertificateUrl': json['farm_certificate_url'],
         };
       }
 

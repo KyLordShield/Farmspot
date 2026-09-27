@@ -140,11 +140,27 @@
     <div class="panel-header">
         <h5 class="panel-title">
             <i class="bi bi-file-earmark-check"></i>
-            Verification Document
+            Valid ID Document
         </h5>
     </div>
     <div class="panel-body">
         <a href="{{ $farm->FRM_VERIFICATION_DOC_PATH }}" target="_blank" class="btn btn-ghost">
+            <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
+        </a>
+    </div>
+</div>
+@endif
+
+@if($farm->FRM_FARM_CERTIFICATE_PATH)
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-file-earmark-check"></i>
+            Farm Permit / Certificate
+        </h5>
+    </div>
+    <div class="panel-body">
+        <a href="{{ $farm->FRM_FARM_CERTIFICATE_PATH }}" target="_blank" class="btn btn-ghost">
             <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
         </a>
     </div>

@@ -63,7 +63,8 @@ class FarmController extends Controller
             'longitude' => ['required', 'numeric'],
             'photos' => ['required', 'array', 'min:1'],
             'photos.*' => ['image', 'max:5120'],
-            'verification_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'verification_document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'farm_certificate' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
         $isWhitelisted = Whitelist::where('WLST_MOBILE_NUMBER', $user->USR_MOBILE_NUMBER)
@@ -74,17 +75,24 @@ class FarmController extends Controller
 
         try {
             $result = DB::transaction(function () use ($validated, $farmId, $farmer, $user, $isWhitelisted) {
+                // Valid government ID (verification_document) + farm permit/
+                // certificate (farm_certificate) are BOTH required, so each is
+                // uploaded to Cloudinary and stored on its own column.
                 $verificationUrl = null;
+                $certificateUrl = null;
 
-                if (isset($validated['verification_document'])) {
-                    $doc = $validated['verification_document'];
-                    $extension = $doc->getClientOriginalExtension() ?: 'jpg';
-                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+                $verifyDoc = $validated['verification_document'];
+                $certDoc = $validated['farm_certificate'];
 
-                    Storage::disk('cloudinary')->put($path, $doc->getRealPath());
+                $verifyExtension = $verifyDoc->getClientOriginalExtension() ?: 'jpg';
+                $verifyPath = "farm-verification/{$farmId}/" . uniqid() . ".{$verifyExtension}";
+                Storage::disk('cloudinary')->put($verifyPath, $verifyDoc->getRealPath());
+                $verificationUrl = Storage::disk('cloudinary')->url($verifyPath);
 
-                    $verificationUrl = Storage::disk('cloudinary')->url($path);
-                }
+                $certExtension = $certDoc->getClientOriginalExtension() ?: 'jpg';
+                $certPath = "farm-verification/{$farmId}/" . uniqid() . ".{$certExtension}";
+                Storage::disk('cloudinary')->put($certPath, $certDoc->getRealPath());
+                $certificateUrl = Storage::disk('cloudinary')->url($certPath);
 
                 $farm = Farm::create([
                     'FRM_ID' => $farmId,
@@ -97,6 +105,7 @@ class FarmController extends Controller
                     'FRM_STATUS' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
                     'FRM_CREATED_AT' => now(),
                     'FRM_VERIFICATION_DOC_PATH' => $verificationUrl,
+                    'FRM_FARM_CERTIFICATE_PATH' => $certificateUrl,
                     'FMR_ID' => $farmer->FMR_ID,
                 ]);
 
@@ -132,6 +141,7 @@ class FarmController extends Controller
                 return [
                     'photo_urls' => $urls,
                     'verification_document_url' => $verificationUrl,
+                    'farm_certificate_url' => $certificateUrl,
                 ];
             });
         } catch (\Throwable $e) {
@@ -146,6 +156,7 @@ class FarmController extends Controller
             'frm_status' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
             'photo_urls' => $result['photo_urls'],
             'verification_document_url' => $result['verification_document_url'],
+            'farm_certificate_url' => $result['farm_certificate_url'],
         ], 201);
     }
 

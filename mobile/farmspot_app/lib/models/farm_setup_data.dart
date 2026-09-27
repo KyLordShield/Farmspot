@@ -9,6 +9,7 @@ class FarmSetupData {
   double? longitude;
   List<XFile> photos = [];
   XFile? verificationDocument;
+  XFile? farmCertificate;
 
   bool get hasDetails =>
       name.trim().isNotEmpty &&

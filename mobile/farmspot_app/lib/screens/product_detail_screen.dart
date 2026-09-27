@@ -6,6 +6,7 @@ import '../models/farm_pin.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
 import '../services/location_service.dart';
+import '../services/message_service.dart';
 import '../theme.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/home_widgets.dart';
@@ -14,7 +15,15 @@ import 'in_app_messages_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final CropListing listing;
-  const ProductDetailScreen({super.key, required this.listing});
+
+  /// Injectable for tests; the real HTTP-backed service is used when omitted.
+  final MessagesGateway? gateway;
+
+  const ProductDetailScreen({
+    super.key,
+    required this.listing,
+    this.gateway,
+  });
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -47,6 +56,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// a compact loader in that window instead of the fake "0.4 km away".
   String? _distance;
   bool _distanceResolving = false;
+
+  /// True while the conversation is being created/fetched, so the Message button
+  /// cannot be double-tapped into two pushes.
+  bool _startingThread = false;
 
   @override
   void initState() {
@@ -102,11 +115,41 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   /// Opens the in-app conversation with the seller for this listing.
+  ///
+  /// The thread is created (or fetched, if this buyer already messaged about
+  /// this crop) before navigating, so the chat screen always opens on a real
+  /// conversation with its history already in place.
   Future<void> _openMessages() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => InAppMessagesScreen(listing: listing),
-      ),
+    final listingId = listing.listingId;
+    if (listingId == null || listingId.isEmpty) {
+      _toast('This crop cannot be messaged about yet.');
+      return;
+    }
+
+    setState(() => _startingThread = true);
+    try {
+      final gateway = widget.gateway ?? MessageService.instance;
+      final conversation = await gateway.startConversation(listingId);
+      if (!mounted) return;
+      setState(() => _startingThread = false);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => InAppMessagesScreen(
+            conversation: conversation,
+            gateway: widget.gateway,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _startingThread = false);
+      _toast(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -320,9 +363,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       width: double.infinity,
                       height: 50,
                       child: OutlinedButton.icon(
-                        onPressed: _openMessages,
-                        icon: const Icon(Icons.chat_outlined, size: 18),
-                        label: const Text('Message Seller'),
+                        onPressed: _startingThread ? null : _openMessages,
+                        icon: _startingThread
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primaryGreen),
+                              )
+                            : const Icon(Icons.chat_outlined, size: 18),
+                        label: Text(
+                            _startingThread ? 'Opening...' : 'Message Seller'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primaryGreen,
                           side:
