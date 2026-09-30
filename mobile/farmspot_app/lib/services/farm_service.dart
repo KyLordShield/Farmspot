@@ -326,6 +326,59 @@ class FarmService {
     _throwForError(response, 'Update farm failed.');
   }
 
+  /// Removes one of the authenticated seller's farms
+  /// (DELETE /api/farms/{farmId}).
+  ///
+  /// This is an ARCHIVE on the server: the farm row, its photos, its listings
+  /// and every buyer conversation about it are kept, and only the farm's
+  /// visibility changes. That is why the call is a "remove" from the seller's
+  /// point of view without being a data loss.
+  ///
+  /// The server rejects the call with 422 LAST_FARM when this is the seller's
+  /// only farm — [FarmRemovalBlocked] carries that specific case so the UI can
+  /// explain it instead of showing a generic failure. Returns normally on
+  /// success, or throws an Exception with a user-friendly message.
+  static Future<void> removeFarm(String farmId) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.delete(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    if (response.statusCode == 422) {
+      // The last farm is protected, so tell the caller that specifically: the
+      // fix is to deactivate the seller, not to retry.
+      String code = '';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          code = (decoded['code'] ?? '').toString();
+        }
+      } catch (_) {
+        // Fall through to the generic error below.
+      }
+
+      if (code == 'LAST_FARM') {
+        throw const FarmRemovalBlocked(
+          'You cannot remove your only farm. Deactivate your seller account '
+          'instead if you no longer want to sell.',
+        );
+      }
+    }
+
+    _throwForError(response, 'Remove farm failed.');
+  }
+
   /// Appends new photos to the authenticated seller's own farm
   /// (POST /api/farms/{id}/photos). This is a separate call from the JSON
   /// PATCH because PHP only parses multipart uploads on POST — the same
@@ -456,4 +509,19 @@ class FarmService {
         return http.MediaType('application', 'octet-stream');
     }
   }
+}
+
+/// Thrown by [FarmService.removeFarm] when the server refuses the removal
+/// because the farm is the seller's last one.
+///
+/// This is a distinct type so the UI can say "deactivate your seller account
+/// instead" rather than showing a generic failure — retrying the same request
+/// will never succeed.
+class FarmRemovalBlocked implements Exception {
+  final String message;
+
+  const FarmRemovalBlocked(this.message);
+
+  @override
+  String toString() => message;
 }

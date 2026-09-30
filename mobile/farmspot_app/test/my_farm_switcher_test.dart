@@ -26,6 +26,11 @@ Never _missing(Invocation invocation, Object owner, String what) {
       'which this test double does not implement.');
 }
 
+/// Answers one intercepted request. The method is part of the signature
+/// because the app reaches the API through more than one verb, and a test has
+/// to be able to tell a GET /farms refresh from a DELETE /farms/{id} archive.
+typedef _RequestHandler = Future<http.Response> Function(String method, Uri url);
+
 /// `HttpHeaders` is abstract, so this supplies what IOClient touches on a
 /// response plus the `set` used to build an outgoing request.
 class _StubHeaders implements HttpHeaders {
@@ -137,7 +142,7 @@ class _StubRequest implements HttpClientRequest {
 
   final Uri url;
 
-  final Future<http.Response> Function(Uri url) onRequest;
+  final _RequestHandler onRequest;
 
   @override
   final _StubHeaders headers = _StubHeaders();
@@ -166,7 +171,7 @@ class _StubRequest implements HttpClientRequest {
   Future<HttpClientResponse> close() => _respond();
 
   Future<HttpClientResponse> _respond() async {
-    final response = await onRequest(url);
+    final response = await onRequest(method, url);
     return _StubClientResponse(response.bodyBytes, response.statusCode);
   }
 
@@ -193,7 +198,7 @@ class _StubRequest implements HttpClientRequest {
 class _StubClient implements HttpClient {
   _StubClient(this.onRequest);
 
-  final Future<http.Response> Function(Uri url) onRequest;
+  final _RequestHandler onRequest;
 
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) async =>
@@ -210,7 +215,7 @@ class _StubClient implements HttpClient {
 class _StubOverrides extends HttpOverrides {
   _StubOverrides(this.onRequest);
 
-  final Future<http.Response> Function(Uri url) onRequest;
+  final _RequestHandler onRequest;
 
   @override
   HttpClient createHttpClient(SecurityContext? context) =>
@@ -252,7 +257,7 @@ void main() {
   late List<String> statsRequests;
 
   /// Served to the screen under test. Reassigned per test.
-  late Future<http.Response> Function(Uri url) handler;
+  late _RequestHandler handler;
 
   setUp(() => statsRequests = []);
 
@@ -273,7 +278,7 @@ void main() {
     required List<Map<String, dynamic>> farms,
     List<Map<String, dynamic>> listings = const [],
   }) async {
-    handler = (url) async {
+    handler = (method, url) async {
       final segments = url.pathSegments;
 
       if (segments.contains('farms') && segments.contains('stats')) {
@@ -307,7 +312,8 @@ void main() {
     // The test binding installs a blocking HttpOverrides.global of its own, so
     // the double has to replace it around the pump rather than from setUp,
     // which runs before the binding exists.
-    HttpOverrides.global = _StubOverrides((url) => handler(url));
+    HttpOverrides.global =
+        _StubOverrides((method, url) => handler(method, url));
     addTearDown(() => HttpOverrides.global = null);
 
     await tester.pumpWidget(const MaterialApp(home: MyFarmScreen()));
@@ -322,7 +328,7 @@ void main() {
 
   test('the HTTP double answers a request through IOClient', () async {
     final client = IOClient(_StubClient(
-      (_) async => http.Response('{"farms":[]}', 200),
+      (_, _) async => http.Response('{"farms":[]}', 200),
     ));
 
     // This is the exact code path the services use, so a gap in the double
@@ -438,4 +444,233 @@ void main() {
         reason: "the second farm's stats must not load before it is selected");
   });
 
+  /*
+  |--------------------------------------------------------------------------
+  | Removing a farm
+  |--------------------------------------------------------------------------
+  |
+  | A seller can drop one of several farms but never their last one. Both halves
+  | matter: the archive has to be reachable for the farm that is genuinely
+  | surplus, and the protected one must not be offered as a button that the
+  | server would only refuse.
+  |
+  */
+
+  /// Pumps the screen with a farm list and a recorded DELETE handler.
+  ///
+  /// [removedFarms] collects the ids the screen asked to archive, and
+  /// [afterDelete] is what GET /farms returns once one is gone, so the tests
+  /// can watch the selection move instead of asserting on request counts.
+  Future<void> pumpWithDelete(
+    WidgetTester tester, {
+    required List<Map<String, dynamic>> farms,
+    List<Map<String, dynamic>>? farmsAfterDelete,
+    List<String>? removedFarms,
+    int deleteStatus = 200,
+    Map<String, dynamic> deleteBody = const {},
+  }) async {
+    var deleted = false;
+    final remaining = farmsAfterDelete ?? farms;
+
+    handler = (method, url) async {
+      if (method == 'DELETE' && url.path.contains('/farms/')) {
+        removedFarms?.add(url.pathSegments.last);
+        if (deleteStatus == 200) deleted = true;
+        return http.Response(jsonEncode(deleteBody), deleteStatus);
+      }
+      if (url.path.contains('stats')) {
+        final farmId = url.pathSegments[url.pathSegments.indexOf('farms') + 1];
+        statsRequests.add(farmId);
+        return http.Response(
+          jsonEncode({'profile_views': 1, 'buyer_contacts': 1, 'active_listings': 0}),
+          200,
+        );
+      }
+      if (url.path.endsWith('/farms')) {
+        return http.Response(
+          jsonEncode({'farms': deleted ? remaining : farms}),
+          200,
+        );
+      }
+      if (url.path.endsWith('/my-listings')) {
+        return http.Response(jsonEncode({'listings': <dynamic>[]}), 200);
+      }
+      return http.Response('{}', 200);
+    };
+
+    SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
+    HttpOverrides.global =
+        _StubOverrides((method, url) => handler(method, url));
+    addTearDown(() => HttpOverrides.global = null);
+
+    await tester.pumpWidget(const MaterialApp(home: MyFarmScreen()));
+    await settle(tester);
+  }
+
+  /// The screen's main vertical list. The farm switcher is a horizontal
+  /// ListView, so it has to be excluded when scrolling the page.
+  ///
+  /// scrollUntilVisible wants the Scrollable the ListView builds internally,
+  /// not the ListView widget itself. The listings area is a nested ListView and
+  /// so contributes a second Scrollable below it; the outer one comes first in
+  /// a depth-first walk, which is the one that scrolls the whole page.
+  final mainScrollable = find
+      .descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is ListView && w.scrollDirection == Axis.vertical,
+        ),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+
+  /// Scrolls the page until the remove action is on screen, then returns.
+  ///
+  /// It sits below the farm card and the stats, so it is off the fold in the
+  /// default 800x600 test viewport and a plain tap would hit the wrong thing.
+  Future<void> revealRemoveAction(WidgetTester tester) async {
+    await tester.scrollUntilVisible(
+      find.text('Remove this farm'),
+      120,
+      scrollable: mainScrollable,
+    );
+    await settle(tester);
+  }
+
+  /// Reveals the remove action and opens its confirmation dialog.
+  ///
+  /// The extra pumpAndSettle matters: showDialog animates the sheet in, and a
+  /// tap computed before the animation finishes lands on the barrier instead of
+  /// the button, so the dialog never closes.
+  Future<void> openRemoveDialog(WidgetTester tester) async {
+    await revealRemoveAction(tester);
+    await tester.tap(find.text('Remove this farm'));
+    await settle(tester);
+    await tester.pumpAndSettle();
+  }
+
+  /// Confirms the open remove dialog.
+  Future<void> confirmRemove(WidgetTester tester) async {
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await settle(tester);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a seller with one farm is not offered the remove action',
+      (tester) async {
+    await pumpWithDelete(tester, farms: [farmA]);
+
+    // The last farm is what keeps the account selling. Deactivating the seller
+    // is the way to stop, so the button is hidden rather than shown disabled.
+    expect(find.text('Remove this farm'), findsNothing);
+  });
+  testWidgets('a seller with several farms can remove the selected one',
+      (tester) async {
+    final removed = <String>[];
+    await pumpWithDelete(
+      tester,
+      farms: [farmA, farmB],
+      farmsAfterDelete: [farmB],
+      removedFarms: removed,
+    );
+
+    // The action sits below the farm card and the stats, so it has to be
+    // scrolled into view before it exists as a mounted widget.
+    await revealRemoveAction(tester);
+    expect(find.text('Remove this farm'), findsOneWidget);
+
+    await openRemoveDialog(tester);
+
+    // Confirmation first, and it names the farm that is actually on screen:
+    // the first APPROVED farm, which is farm A.
+    expect(find.text('Remove North Field?'), findsOneWidget);
+    await confirmRemove(tester);
+
+    // The farm that was on screen, and only that farm.
+    expect(removed, ['AAAAAA']);
+    expect(find.text('Remove North Field?'), findsNothing,
+        reason: 'the dialog must close once the request is sent');
+  });
+
+  testWidgets('cancelling the remove dialog keeps the farm', (tester) async {
+    final removed = <String>[];
+    await pumpWithDelete(
+      tester,
+      farms: [farmA, farmB],
+      removedFarms: removed,
+    );
+
+    await openRemoveDialog(tester);
+    expect(find.text('Remove North Field?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove North Field?'), findsNothing);
+    expect(removed, isEmpty, reason: 'cancelling must not remove anything');
+  });
+
+  testWidgets('removing a farm leaves the seller on a farm they still have',
+      (tester) async {
+    await pumpWithDelete(
+      tester,
+      farms: [farmA, farmB],
+      farmsAfterDelete: [farmA],
+    );
+
+    // Archive the selected farm (B), so the screen has to fall back to A.
+    await tester.tap(find.text('South Field').last);
+    await settle(tester);
+
+    await openRemoveDialog(tester);
+    await confirmRemove(tester);
+
+    // The card must not keep showing a farm that is no longer in the list.
+    expect(find.text('South Field'), findsNothing);
+    expect(find.text('North Field'), findsWidgets);
+    expect(statsRequests, contains('AAAAAA'),
+        reason: 'the surviving farm is what should be shown and loaded');
+  });
+
+  testWidgets('the remove confirmation says the buyer history is kept',
+      (tester) async {
+    // The reason this is an archive and not a delete: conversation.FRM_ID
+    // cascades from farm, so a real delete would take the threads with it.
+    await pumpWithDelete(tester, farms: [farmA, farmB]);
+
+    await openRemoveDialog(tester);
+
+    expect(find.textContaining('conversations about this farm are kept'),
+        findsOneWidget);
+  });
+
+  testWidgets('a refused removal is reported instead of looking like success',
+      (tester) async {
+    final removed = <String>[];
+    await pumpWithDelete(
+      tester,
+      farms: [farmA, farmB],
+      removedFarms: removed,
+      deleteStatus: 422,
+      deleteBody: {
+        'code': 'LAST_FARM',
+        'message': 'You cannot remove your only farm. Deactivate your seller '
+            'account instead if you no longer want to sell.',
+      },
+    );
+
+    await openRemoveDialog(tester);
+    await confirmRemove(tester);
+
+    // The server has the final say on the last-farm rule; when it refuses, the
+    // seller is told why rather than seeing a cheerful "removed".
+    expect(find.textContaining('You cannot remove your only farm'),
+        findsOneWidget);
+    expect(find.textContaining('removed.'), findsNothing);
+    expect(removed, ['AAAAAA'], reason: 'the farm on screen is farm A');
+
+    // Still two farms, so the action is still on offer and nothing was lost.
+    await revealRemoveAction(tester);
+    expect(find.text('Remove this farm'), findsOneWidget);
+  });
 }

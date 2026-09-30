@@ -315,6 +315,80 @@ class FarmController extends Controller
     }
 
     /**
+     * Archive one of the authenticated seller's farms (DELETE /api/farms/{farmId}).
+     *
+     * This is a SOFT delete on purpose. The farm row, its photos, its listings
+     * and every buyer conversation that referenced it are all left in place;
+     * only FRM_STATUS and FRM_PIN_ACTIVE change. That is enough to take the
+     * farm off the public map (mapPins requires APPROVED + FRM_PIN_ACTIVE = 1)
+     * and out of the seller's farm switcher (index only returns APPROVED /
+     * PENDING_REVIEW), while the seller's buyer history survives.
+     *
+     * A hard delete would be destructive here: conversation.FRM_ID,
+     * contact_log and farm_visit_log are all ON DELETE CASCADE from farm, so
+     * dropping the farm row would silently erase every message thread the
+     * seller ever had with the buyers of that farm.
+     *
+     * The seller's LAST farm cannot be removed. Keeping one farm always
+     * present means the account can never end up as an "active seller" with an
+     * empty farm list, and it keeps deactivating the seller account as the only
+     * way to go inactive — the flow that already resets the seller flags.
+     */
+    public function destroy(Request $request, $farmId)
+    {
+        $farm = Farm::find($farmId);
+
+        if (! $farm) {
+            return response()->json([
+                'message' => 'Farm not found.',
+            ], 404);
+        }
+
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer || $farm->FMR_ID !== $farmer->FMR_ID) {
+            return response()->json([
+                'message' => 'You do not own this farm.',
+            ], 403);
+        }
+
+        // Archived farms are already out of the switcher, so they must not
+        // count toward the "you still have a farm left" total.
+        $activeFarmCount = $farmer->farms()
+            ->whereIn('FRM_STATUS', ['APPROVED', 'PENDING_REVIEW', 'REJECTED'])
+            ->count();
+
+        if ($activeFarmCount <= 1) {
+            return response()->json([
+                'message' => 'You cannot remove your only farm. Deactivate your seller account instead if you no longer want to sell.',
+                'code' => 'LAST_FARM',
+            ], 422);
+        }
+
+        $farm->FRM_STATUS = 'ARCHIVED';
+        $farm->FRM_PIN_ACTIVE = 0;
+        $farm->save();
+
+        // The farm is off the map, so its crops must stop being offered too.
+        // LST_AVAILABILITY is an enum ('ACTIVE','NOT_AVAILABLE','REMOVED') and
+        // the buyer-facing feed filters on it, so REMOVED is the same soft
+        // "take it off sale" state the seller's own delete-listing action uses
+        // (ListingController::destroy). The rows stay for a future restore.
+        Listing::where('FRM_ID', $farm->FRM_ID)
+            ->where('LST_AVAILABILITY', 'ACTIVE')
+            ->update([
+                'LST_AVAILABILITY' => 'REMOVED',
+                'LST_UPDATED_AT' => now(),
+            ]);
+
+        return response()->json([
+            'message' => 'Farm removed.',
+            'farm_id' => $farm->FRM_ID,
+            'remaining_farms' => $activeFarmCount - 1,
+        ]);
+    }
+
+    /**
      * Append new photos to the authenticated seller's own farm (POST so the
      * multipart uploads are actually parsed by PHP). New uploads go to
      * Cloudinary exactly like POST /api/farms and are APPENDED as new

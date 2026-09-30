@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/listings/{id}', [FarmerListingController::class, 'destroy']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
+Route::delete('/farms/{farmId}', [FarmController::class, 'destroy']);
     Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);
 
     // Farming assistant. Throttled per user to sit under the provider's free

@@ -32,6 +32,10 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   List<Map<String, dynamic>> _farms = [];
   String? _selectedFarmId;
 
+  /// True while the remove request is in flight, so the action cannot be
+  /// tapped twice and the row can show progress.
+  bool _removingFarm = false;
+
   /// The farm currently being displayed, or null before the first load or when
   /// the seller has none.
   Map<String, dynamic>? get _farm {
@@ -214,6 +218,98 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       }
     });
     if (createdId != null) await _loadStats();
+  }
+
+  /// Removes the farm currently on screen, after an explicit confirmation.
+  ///
+  /// Only offered when the seller has more than one farm: the last farm is
+  /// what keeps the account selling, so it is protected. A seller who wants to
+  /// stop entirely deactivates their seller account instead, which is the flow
+  /// that resets the seller flags.
+  ///
+  /// The server archives rather than deletes, so the farm disappears from the
+  /// map and this list while its listings and buyer conversations are kept.
+  Future<void> _removeSelectedFarm() async {
+    final farmId = _selectedFarmId;
+    final farm = _farm;
+    if (farmId == null || farm == null) return;
+
+    // Guarded in the UI so the action never appears when it would be refused,
+    // but the server re-checks: this is a rule about the data, not the widget.
+    if (_farms.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You cannot remove your only farm. Deactivate your seller account '
+            'instead if you no longer want to sell.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final name = farm['FRM_NAME'] as String? ?? 'This farm';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove $name?'),
+        content: const Text(
+          'It will stop appearing on the map and in your farm list, and its '
+          'crops will be taken off sale.\n\n'
+          'Your buyers\' conversations about this farm are kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _removingFarm = true);
+    try {
+      await FarmService.removeFarm(farmId);
+      if (!mounted) return;
+
+      final farms = await FarmService.getFarms();
+      if (!mounted) return;
+
+      setState(() {
+        _farms = farms;
+        _removingFarm = false;
+        // Move the selection off the farm that was just removed, otherwise the
+        // card would keep rendering a farm that is no longer in the list.
+        if (!farms.any((f) => f['FRM_ID'] == _selectedFarmId)) {
+          _selectedFarmId = farms.isEmpty ? null : farms.first['FRM_ID'] as String?;
+          _stats = null;
+        }
+      });
+      if (_selectedFarmId != null) await _loadStats();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$name" removed.')),
+      );
+    } on FarmRemovalBlocked catch (e) {
+      if (!mounted) return;
+      setState(() => _removingFarm = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _removingFarm = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_friendlyError(e))),
+      );
+    }
   }
 
   Future<void> _addCrop() async {
@@ -461,6 +557,8 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
                     ),
                     const SizedBox(height: 8),
                     _buildListingsArea(),
+                    const SizedBox(height: 8),
+                    _buildRemoveFarmAction(),
                   ],
                 ),
             ),
@@ -471,6 +569,36 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       bottomNavigationBar: SellerBottomNav(
         currentIndex: 3,
         onTap: _handleNavTap,
+      ),
+    );
+  }
+
+  /// "Remove this farm", shown only when there is more than one farm to choose
+  /// from. With a single farm the action would be refused anyway, so it is
+  /// hidden rather than shown disabled — the seller is not invited to press a
+  /// button that cannot work. Going fully inactive is the Profile screen's
+  /// "Deactivate seller" action.
+  Widget _buildRemoveFarmAction() {
+    if (_farmsLoading || _farms.length < 2 || _farm == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _removingFarm ? null : _removeSelectedFarm,
+        icon: _removingFarm
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.delete_outline, size: 16),
+        label: const Text(
+          'Remove this farm',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
       ),
     );
   }
