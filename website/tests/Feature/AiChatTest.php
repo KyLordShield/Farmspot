@@ -303,6 +303,26 @@ class AiChatTest extends TestCase
             // Stops it answering politics, medical, coding and the like.
             $this->assertStringContainsString('OUT OF SCOPE', $prompt);
 
+            // A chat bubble renders plain text, so a "**Add Crop**" would reach
+            // the user with the asterisks still on screen. The app also strips
+            // it as a backstop, but the prompt is the real fix.
+            $this->assertStringContainsString('Markdown is not', $prompt);
+            $this->assertStringContainsString('laid out as steps', $prompt);
+            $this->assertStringContainsString('numbered list', $prompt);
+
+            // The model kept answering the first question in a thread and
+            // ignoring the follow-up, so this needs to be stated outright.
+            $this->assertStringContainsString(
+                'WHICH MESSAGE YOU ANSWER', $prompt);
+            $this->assertStringContainsString(
+                'Never carry on answering an earlier', $prompt);
+
+            // English stays English; Tagalog and Bisaya both get a Bisaya
+            // answer. The table has to be spelled out or the model falls back
+            // to mirroring whatever it was sent.
+            $this->assertStringContainsString('Tagalog in, Bisaya out', $prompt);
+            $this->assertStringContainsString('English in, English out', $prompt);
+
             return true;
         });
     }

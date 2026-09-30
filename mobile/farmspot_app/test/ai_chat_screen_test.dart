@@ -63,6 +63,55 @@ void main() {
     expect(gateway.calls, isEmpty);
   });
 
+  group('the context pill does not invent or echo a subject', () {
+    // It used to read a fixed "Cabbage Inquiry", so every thread was labelled
+    // as a question about one crop. Showing the user's first question instead
+    // was worse: it echoed their message back at the top, and a long one
+    // overflowed the row and pushed the layout off screen.
+    testWidgets('names the assistant, not a crop and not the question',
+        (tester) async {
+      await pumpChat(tester);
+
+      expect(
+        tester.widget<Text>(find.byKey(AiChatScreen.topicPillKey)).data,
+        'Assistant',
+      );
+      expect(find.textContaining('Cabbage'), findsNothing);
+    });
+
+    testWidgets('stays a fixed label after the first question', (tester) async {
+      await pumpChat(tester);
+
+      await ask(tester, 'How do I add a crop?');
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(AiChatScreen.topicPillKey)).data,
+        'Assistant',
+      );
+      // The question is not duplicated anywhere in the header.
+      expect(find.text('How do I add a crop?'), findsOneWidget);
+    });
+
+    testWidgets('a very long first question does not overflow the header',
+        (tester) async {
+      await pumpChat(tester);
+
+      await ask(
+        tester,
+        'Kumusta po ang tanan nga mga klase sa traditional na pagsusaka sa '
+        'kasalukuyan ay climate change pati na rin ang lupa nga naaabot ng '
+        'bakal na umaatras na araw-araw bago pa man mag-ulan ng panahon nga '
+        'abihon ang mga magsasaka sa buong Pilipinas lalo na sa mga probinsiya',
+      );
+      await tester.pumpAndSettle();
+
+      // A RenderFlex overflow is what used to break this header.
+      expect(tester.takeException(), isNull);
+      expect(find.text('Via Farmspot'), findsOneWidget);
+    });
+  });
+
   testWidgets('shows the question, the typing dots, then the reply',
       (tester) async {
     gateway.gate = Completer<void>();

@@ -38,6 +38,74 @@ abstract class AiGateway {
   Future<String> replyTo(List<AiTurn> history);
 }
 
+/// Removes markdown markers from an assistant reply.
+///
+/// The system prompt already forbids markdown, because a chat bubble renders
+/// plain text. This is the backstop for when the model ignores that anyway:
+/// without it a stray "**Add Crop**" is shown to the user with the asterisks
+/// still on screen, which reads as a bug in the app rather than in the answer.
+///
+/// Deliberately narrow. It removes emphasis, code, heading and link syntax and
+/// leaves the words and the line structure alone, so numbered steps and plain
+/// dashes survive. A lone asterisk with no partner is left untouched, because
+/// stripping it would mangle ordinary text that happens to contain one.
+String stripMarkdown(String text) {
+  var out = text;
+
+  // [label](url) -> label. Done before the emphasis rules so the URL's own
+  // asterisks and underscores cannot be mistaken for emphasis.
+  out = out.replaceAllMapped(
+    RegExp(r'\[([^\]\n]*)\]\(([^)\n]*)\)'),
+    (m) => m.group(1) ?? '',
+  );
+
+  // Fenced and inline code, with an unterminated fence caught by [\s\S]*?.
+  // replaceAllMapped rather than replaceAll: a string replacement does not
+  // expand $1, it writes the literal characters.
+  out = out.replaceAllMapped(
+    RegExp(r'```[a-zA-Z0-9]*\n?([\s\S]*?)\n?```'),
+    (m) => m.group(1) ?? '',
+  );
+  out = out.replaceAllMapped(
+    RegExp(r'`([^`\n]*)`'),
+    (m) => m.group(1) ?? '',
+  );
+
+  // Headings: "### Title" -> "Title", keeping the line break.
+  out = out.replaceAll(RegExp(r'^[ \t]*#{1,6}[ \t]+', multiLine: true), '');
+
+  // Emphasis. The pair has to close on the same line, and a lone "*" or "_"
+  // is left alone, so "5 * 3" and "snake_case_name" survive untouched.
+  out = out.replaceAllMapped(
+    RegExp(r'\*\*([^*\n]+)\*\*'),
+    (m) => m.group(1) ?? '',
+  );
+  out = out.replaceAllMapped(
+    RegExp(r'__([^_\n]+)__'),
+    (m) => m.group(1) ?? '',
+  );
+  out = out.replaceAllMapped(
+    RegExp(r'(?<![\w*])\*([^*\n]+)\*(?![\w*])'),
+    (m) => m.group(1) ?? '',
+  );
+  out = out.replaceAllMapped(
+    RegExp(r'(?<![\w_])_([^_\n]+)_(?![\w_])'),
+    (m) => m.group(1) ?? '',
+  );
+
+  // A bullet or horizontal rule that is now the first thing on its line reads
+  // as debris, since the bubble has no margin to hang a bullet on.
+  out = out.replaceAll(RegExp(r'^[ \t]*[-*+][ \t]+', multiLine: true), '');
+
+  return out
+      .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+      .replaceAll(RegExp(r' *\n *'), '\n')
+      // A paragraph break is kept, but a fence that was lifted out of the
+      // middle of a reply can leave two of them back to back.
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+}
+
 /// Talks to the app's own Laravel endpoint, which holds the provider key.
 ///
 /// The app never calls Groq directly. That keeps the key server-side and lets
@@ -107,7 +175,10 @@ class AiChatService implements AiGateway {
       if (reply == null || reply.trim().isEmpty) {
         throw const AiException('The assistant did not return an answer.');
       }
-      return reply;
+      // Stripped here rather than in the bubble so a caller that reads the
+      // reply for anything else sees the same clean text the user does.
+      final clean = stripMarkdown(reply);
+      return clean.isEmpty ? reply.trim() : clean;
     }
 
     throw AiException((body['message'] as String?) ??

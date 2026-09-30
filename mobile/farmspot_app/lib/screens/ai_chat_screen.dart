@@ -10,10 +10,8 @@ import '../theme.dart';
 class AiChatScreen extends StatefulWidget {
   const AiChatScreen({
     super.key,
-    this.initialTopic = 'Cabbage Inquiry',
     this.gateway,
   });
-  final String initialTopic;
   final AiGateway? gateway;
 
   /// The questions people actually ask most often, offered as one-tap chips so
@@ -31,6 +29,11 @@ class AiChatScreen extends StatefulWidget {
 
   /// Finds the horizontal chip strip in tests, where several ListViews exist.
   static const Key suggestionStripKey = Key('ai-suggestion-strip');
+
+  /// Finds the context pill's topic label. It repeats text from the first
+  /// question, so a test that wants the pill alone needs to target this rather
+  /// than searching the whole screen for the string.
+  static const Key topicPillKey = Key('ai-topic-pill');
 
   @override
   State<AiChatScreen> createState() => _AiChatScreenState();
@@ -282,7 +285,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 ],
               ),
             ),
-            // Context pill: "Via Farmspot • <topic>".
+            // Context pill: "Via Farmspot • Assistant".
+            //
+            // This was a fixed "Cabbage Inquiry", which labelled every thread as
+            // a question about one crop. Showing the user's first question
+            // instead was worse: it echoed their message back at the top of the
+            // screen, and a long one ran off the edge. The label is now static,
+            // and Flexible below guarantees it can never overflow whatever
+            // somebody types.
             Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -293,7 +303,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 border: Border.all(color: const Color(0xFFE3E8E1)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.storefront_outlined,
                       size: 14, color: AppColors.primaryGreen),
@@ -310,8 +320,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     decoration: const BoxDecoration(
                         color: AppColors.mutedGreen, shape: BoxShape.circle),
                   ),
-                  Text(widget.initialTopic,
-                      style: TextStyle(color: muted, fontSize: 12)),
+                  const Flexible(
+                    child: Text(
+                      'Assistant',
+                      key: AiChatScreen.topicPillKey,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  ),
                 ],
               ),
             ),
