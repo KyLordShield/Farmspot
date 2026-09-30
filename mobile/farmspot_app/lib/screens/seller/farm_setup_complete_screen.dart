@@ -14,11 +14,16 @@ class FarmSetupCompleteScreen extends StatelessWidget {
   /// AddCropScreen can list against the REAL farm instead of guessing one.
   final String? farmId;
 
+  /// True when this is a second or later farm, which reused the documents
+  /// already on file from the seller's first farm.
+  final bool isAdditionalFarm;
+
   const FarmSetupCompleteScreen({
     super.key,
     required this.farmSetupData,
     this.farmId,
     this.frmStatus = 'APPROVED',
+    this.isAdditionalFarm = false,
   });
 
   bool get _isPending => frmStatus == 'PENDING_REVIEW';
@@ -69,7 +74,9 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                       Text(
                         _isPending
                             ? 'Thanks for\nsubmitting!'
-                            : 'Do you have crops\nready to sell?',
+                            : isAdditionalFarm
+                                ? 'Do you have crops\nready to sell here?'
+                                : 'Do you have crops\nready to sell?',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -82,8 +89,11 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                         _isPending
                             ? "Your farm has been submitted for review. You'll be "
                                 'notified once approved. You cannot list crops until then.'
-                            : 'If you have harvest available now or coming soon, you can add your first listing. '
-                                'If not, no problem — you can add crops anytime from My Farm.',
+                            : isAdditionalFarm
+                                ? 'List what this farm is harvesting. Your other farms and their '
+                                    'listings are untouched.'
+                                : 'If you have harvest available now or coming soon, you can add your first listing. '
+                                    'If not, no problem — you can add crops anytime from My Farm.',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 13,
@@ -133,9 +143,11 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                               );
                             },
                             icon: const Icon(Icons.add_circle_outline),
-                            label: const Text(
-                              'Yes, add my first crop now',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                            label: Text(
+                              isAdditionalFarm
+                                  ? 'Yes, add a crop now'
+                                  : 'Yes, add my first crop now',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
@@ -165,7 +177,9 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                               size: 16,
                             ),
                             label: const Text(
-                              'Skip for now - go to My Farm',
+                              // This button goes Home, not to My Farm, so it
+                              // should not claim otherwise.
+                              'Skip for now - go to Home',
                               style: TextStyle(color: Colors.white),
                             ),
                             style: OutlinedButton.styleFrom(
@@ -190,8 +204,21 @@ class FarmSetupCompleteScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryCard() {
-    final location = farmSetupData.latitude != null &&
+  /// What the Verification row should say. On a second or later farm the
+  /// documents were inherited from the first one, so "None" would be a
+  /// misleading way to describe it.
+  String get _verificationSummary {
+    final hasBoth = farmSetupData.verificationDocument != null &&
+        farmSetupData.farmCertificate != null;
+    final hasSome = farmSetupData.verificationDocument != null ||
+        farmSetupData.farmCertificate != null;
+
+    if (hasBoth) return '2 documents provided';
+    if (hasSome) return 'Partial documents';
+    return isAdditionalFarm ? 'Reused from your first farm' : 'None';
+  }
+
+  Widget _buildSummaryCard() {    final location = farmSetupData.latitude != null &&
             farmSetupData.longitude != null
         ? '${farmSetupData.latitude!.toStringAsFixed(6)}, '
             '${farmSetupData.longitude!.toStringAsFixed(6)}'
@@ -232,13 +259,7 @@ class FarmSetupCompleteScreen extends StatelessWidget {
           _summaryRow('Photos', '${farmSetupData.photos.length}'),
           _summaryRow(
             'Verification',
-            farmSetupData.verificationDocument != null &&
-                    farmSetupData.farmCertificate != null
-                ? '2 documents provided'
-                : farmSetupData.verificationDocument != null ||
-                        farmSetupData.farmCertificate != null
-                    ? 'Partial documents'
-                    : 'None',
+            _verificationSummary,
           ),
         ],
       ),

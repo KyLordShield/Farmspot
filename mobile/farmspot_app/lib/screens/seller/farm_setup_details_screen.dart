@@ -6,12 +6,24 @@ import 'package:image_picker/image_picker.dart';
 import '../../../models/farm_setup_data.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
+import 'farm_setup_location_screen.dart';
 import 'farm_setup_verify_screen.dart';
 
 class FarmSetupDetailsScreen extends StatefulWidget {
   final FarmSetupData farmSetupData;
 
-  const FarmSetupDetailsScreen({super.key, required this.farmSetupData});
+  /// True when the seller already has at least one farm. It only changes the
+  /// identity step that follows: their documents were verified then, so the
+  /// server copies them onto the new farm instead of asking for them again.
+  /// This step itself always applies, since every farm needs its own name,
+  /// description and photos.
+  final bool isAdditionalFarm;
+
+  const FarmSetupDetailsScreen({
+    super.key,
+    required this.farmSetupData,
+    this.isAdditionalFarm = false,
+  });
 
   @override
   State<FarmSetupDetailsScreen> createState() => _FarmSetupDetailsScreenState();
@@ -92,8 +104,16 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            FarmSetupVerifyScreen(farmSetupData: widget.farmSetupData),
+        // A seller who already has a farm skips the identity step entirely:
+        // the server copies their ID and permit onto the new farm, so the step
+        // would only ever show two empty boxes and a Skip button. That leaves
+        // two steps for them - these details, then the location.
+        builder: (_) => widget.isAdditionalFarm
+            ? FarmSetupLocationScreen(
+                farmSetupData: widget.farmSetupData,
+                isAdditionalFarm: true,
+              )
+            : FarmSetupVerifyScreen(farmSetupData: widget.farmSetupData),
       ),
     );
   }
@@ -111,6 +131,11 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
     return 'Please add at least one farm photo.';
   }
 
+  /// Additional farms skip the identity step, so their wizard is two steps
+  /// long. Showing "1 of 3" and then jumping to a screen that says "3 of 3"
+  /// would look like a skipped step rather than a deliberate one.
+  int get _totalSteps => widget.isAdditionalFarm ? 2 : 3;
+
   @override
   Widget build(BuildContext context) {
     final photos = widget.farmSetupData.photos;
@@ -123,11 +148,11 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
               title: 'Set Up Your Farm',
               subtitle: 'Tell buyers about your farm',
             ),
-            const StepProgress(
+            StepProgress(
               step: 1,
-              totalSteps: 3,
+              totalSteps: _totalSteps,
               label: 'Farm Details',
-              percent: 0.33,
+              percent: widget.isAdditionalFarm ? 0.5 : 0.33,
             ),
             Expanded(
               child: ListView(
@@ -193,14 +218,16 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                     const SizedBox(height: 12),
                   ],
                   WizardNextButton(
-                    label: 'Next: Verify Identity',
+                    label: widget.isAdditionalFarm
+                        ? 'Next: Pin Farm Location'
+                        : 'Next: Verify Identity',
                     onPressed: _next,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Step 1 of 3',
+                  Text(
+                    'Step 1 of $_totalSteps',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: Colors.black38),
+                    style: const TextStyle(fontSize: 11, color: Colors.black38),
                   ),
                 ],
               ),

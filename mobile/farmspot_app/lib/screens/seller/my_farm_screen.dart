@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/farm_setup_data.dart';
 import '../../models/farm_stats.dart';
 import '../../models/listing.dart';
 import '../../services/farm_service.dart';
@@ -14,6 +15,7 @@ import '../profile_screen.dart';
 import '../home_screen.dart';
 import 'add_crop_screen.dart';
 import 'edit_farm_screen.dart';
+import 'farm_setup_details_screen.dart';
 
 class MyFarmScreen extends StatefulWidget {
   const MyFarmScreen({super.key});
@@ -24,7 +26,21 @@ class MyFarmScreen extends StatefulWidget {
 
 class _MyFarmScreenState extends State<MyFarmScreen> {
   bool _farmsLoading = true;
-  Map<String, dynamic>? _farm;
+
+  /// Every operational farm the seller owns. A seller may run several, so this
+  /// is a list and [_selectedFarmId] says which one the screen is showing.
+  List<Map<String, dynamic>> _farms = [];
+  String? _selectedFarmId;
+
+  /// The farm currently being displayed, or null before the first load or when
+  /// the seller has none.
+  Map<String, dynamic>? get _farm {
+    if (_selectedFarmId == null) return null;
+    for (final farm in _farms) {
+      if (farm['FRM_ID'] == _selectedFarmId) return farm;
+    }
+    return null;
+  }
 
   /// Farm-owner performance totals (profile views / buyer contacts / active
   /// listings) from GET /api/farms/{id}/stats. Null while loading or on
@@ -32,12 +48,20 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   FarmStats? _stats;
 
   bool _listingsLoading = true;
-  List<Listing> _listings = [];
+
+  /// All of the seller's listings. Filtered down to the selected farm for
+  /// display, because listings belong to a farm, not to the account.
+  List<Listing> _allListings = [];
   String? _listingsError;
 
   /// LST_ID of the listing currently having its status updated (for per-tile
   /// loading/disabled affordance).
   String? _updatingId;
+
+  /// Listings belonging to the farm on screen.
+  List<Listing> get _listings => _allListings
+      .where((l) => _selectedFarmId == null || l.farmId == _selectedFarmId)
+      .toList();
 
   @override
   void initState() {
@@ -49,28 +73,55 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   Future<void> _loadFarm() async {
     final farms = await FarmService.getFarms();
     if (!mounted) return;
+
+    // Keep the seller's current farm selected across a refresh; otherwise fall
+    // back to the first, which getFarms() orders APPROVED-first.
+    final previousId = _selectedFarmId;
+    final stillExists = farms.any((f) => f['FRM_ID'] == previousId);
+    final selectedId = stillExists
+        ? previousId
+        : (farms.isNotEmpty ? farms.first['FRM_ID'] as String? : null);
+
     setState(() {
       _farmsLoading = false;
-      // "One active farm" convention — getFarms() sorts APPROVED farms first,
-      // so the first farm returned is the operational one.
-      _farm = farms.isNotEmpty ? farms.first : null;
+      _farms = farms;
+      _selectedFarmId = selectedId;
     });
-    // Stats depend on this farm's id; only fetch once the farm is known.
-    if (_farm != null) {
-      await _loadStats();
-    }
+
+    // Stats belong to one farm, so they reload whenever the selection changes.
+    await _loadStats();
   }
 
   Future<void> _loadStats() async {
+    final farmId = _selectedFarmId;
+    if (farmId == null) {
+      if (mounted) setState(() => _stats = null);
+      return;
+    }
     try {
-      final stats = await FarmService.fetchFarmStats(_farm!['FRM_ID'] as String);
+      final stats = await FarmService.fetchFarmStats(farmId);
       if (!mounted) return;
+      // A slow response for a farm the seller has since navigated away from
+      // must not overwrite the new farm's numbers.
+      if (_selectedFarmId != farmId) return;
       setState(() => _stats = stats);
     } catch (_) {
       // Stats are supplementary — a failure keeps "—" and never breaks the screen.
       if (!mounted) return;
+      if (_selectedFarmId != farmId) return;
       setState(() => _stats = null);
     }
+  }
+
+  /// Switches the whole screen to another farm: card, stats and listings all
+  /// follow, because every panel is scoped to the selected farm.
+  Future<void> _selectFarm(String farmId) async {
+    if (_selectedFarmId == farmId) return;
+    setState(() {
+      _selectedFarmId = farmId;
+      _stats = null;
+    });
+    await _loadStats();
   }
 
   /// Pull-to-refresh: reloads the farm card, its stats, and the listings.
@@ -107,7 +158,7 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       setState(() {
         _listingsLoading = false;
         _listingsError = null;
-        _listings = listings;
+        _allListings = listings;
       });
     } catch (e) {
       if (!mounted) return;
@@ -118,10 +169,62 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     }
   }
 
+  /// Starts the add-another-farm wizard. Documents are optional on this path
+  /// because the seller's ID and permit are already on file from their first
+  /// farm — the server copies them onto the new farm.
+  Future<void> _addFarm() async {
+    // Snapshotted from the farms already on screen so the one that appears
+    // afterwards is the farm the seller just made. Picking `farms.last` would
+    // not do: getFarms() sorts APPROVED farms first, so a brand-new
+    // PENDING_REVIEW farm would land behind an older approved one.
+    final before = _farms
+        .map((f) => f['FRM_ID'] as String?)
+        .whereType<String>()
+        .toSet();
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        // Starts at step 1, not the identity step: every farm needs its own
+        // name, description, barangay and photos even when the seller's
+        // documents are already on file from their first farm.
+        builder: (_) => FarmSetupDetailsScreen(
+          farmSetupData: FarmSetupData(),
+          isAdditionalFarm: true,
+        ),
+      ),
+    );
+    if (!mounted) return;
+
+    final farms = await FarmService.getFarms();
+    if (!mounted) return;
+
+    final created = farms.firstWhere(
+      (f) => !before.contains(f['FRM_ID']),
+      orElse: () => const {},
+    );
+    final createdId = created['FRM_ID'] as String?;
+
+    setState(() {
+      _farms = farms;
+      _farmsLoading = false;
+      if (createdId != null) {
+        _selectedFarmId = createdId;
+        // The old farm's totals must not sit above the new farm's listings.
+        _stats = null;
+      }
+    });
+    if (createdId != null) await _loadStats();
+  }
+
   Future<void> _addCrop() async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => const AddCropScreen(isFirstCrop: false),
+        // Listings are created against a specific farm, so a seller with
+        // several must list on the one currently on screen.
+        builder: (_) => AddCropScreen(
+          isFirstCrop: false,
+          farmId: _selectedFarmId,
+        ),
       ),
     );
     // AddCropScreen pops true after creating the listing — refresh so the new
@@ -209,9 +312,9 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       if (!mounted) return;
       setState(() {
         _updatingId = null;
-        final index = _listings.indexWhere((l) => l.id == listing.id);
+        final index = _allListings.indexWhere((l) => l.id == listing.id);
         if (index != -1) {
-          _listings[index] = updated;
+          _allListings[index] = updated;
         }
       });
     } catch (e) {
@@ -323,31 +426,43 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _buildFarmSwitcher(),
+                    const SizedBox(height: 12),
                     _buildFarmCard(),
                     const SizedBox(height: 20),
                     _buildStatsRow(),
                     const SizedBox(height: 20),
                     Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Your Listings',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton.icon(
-                        onPressed: _addCrop,
-                        icon: const Icon(Icons.add, size: 16, color: AppColors.primaryGreen),
-                        label: const Text(
-                          'Add Crop',
-                          style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w600),
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _listings.length == 1 ? 'Listing' : 'Listings',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildListingsArea(),
-                ],
-              ),
+                        TextButton.icon(
+                          onPressed: _addCrop,
+                          icon: const Icon(
+                            Icons.add,
+                            size: 16,
+                            color: AppColors.primaryGreen,
+                          ),
+                          label: const Text(
+                            'Add Crop',
+                            style: TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildListingsArea(),
+                  ],
+                ),
             ),
           ),
         ],
@@ -365,9 +480,89 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       color: AppColors.primaryGreen,
-      child: const Text(
-        'My Farm',
-        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'My Farm',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          // A seller can run more than one farm, so there is always a way to
+          // start another from the screen that lists them.
+          TextButton.icon(
+            onPressed: _addFarm,
+            icon: const Icon(Icons.add_home_work, size: 16, color: Colors.white),
+            label: const Text(
+              'Add Farm',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.15),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Lets the seller move between their farms. Only shown when there is more
+  /// than one — with a single farm a picker would just be noise.
+  Widget _buildFarmSwitcher() {
+    if (_farmsLoading || _farms.length < 2) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _farms.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final farm = _farms[i];
+          final id = farm['FRM_ID'] as String?;
+          final name = farm['FRM_NAME'] as String? ?? 'Farm';
+          final selected = id == _selectedFarmId;
+          final pending = farm['FRM_STATUS'] == 'PENDING_REVIEW';
+
+          return GestureDetector(
+            onTap: () => _selectFarm(id!),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primaryGreen : Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: selected ? AppColors.primaryGreen : Colors.black12,
+                ),
+              ),
+              child: Row(
+                children: [
+                  if (pending) ...[
+                    Icon(
+                      Icons.schedule,
+                      size: 12,
+                      color: selected ? Colors.white : Colors.orange.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -460,11 +655,14 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     }
 
     if (_listings.isEmpty) {
+      final farmName = _farm?['FRM_NAME'] as String?;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 30),
         child: Center(
           child: Text(
-            'No crops listed yet. Tap "Add Crop" to get started.',
+            farmName == null
+                ? 'No crops listed yet. Tap "Add Crop" to get started.'
+                : 'Nothing listed on $farmName yet. Tap "Add Crop" to get started.',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
             textAlign: TextAlign.center,
           ),

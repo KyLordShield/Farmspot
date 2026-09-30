@@ -6,8 +6,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:farmspot_app/models/farm_setup_data.dart';
+import 'package:farmspot_app/screens/seller/farm_setup_details_screen.dart';
 import 'package:farmspot_app/screens/seller/farm_setup_location_screen.dart';
 import 'package:farmspot_app/screens/seller/farm_setup_verify_screen.dart';
+import 'package:farmspot_app/widgets/seller_widgets.dart';
 
 /// Replacement so the screen does not spin on unavailable GPS, matching the
 /// fake used by the location-screen tests.
@@ -112,5 +114,61 @@ void main() {
 
     expect(find.byType(FarmSetupLocationScreen), findsOneWidget,
         reason: 'both documents present must open the location step');
+  });
+
+  // ------------------------------------------- adding a second farm onward
+
+  testWidgets('a second farm skips the identity step entirely', (tester) async {
+    final original = GeolocatorPlatform.instance;
+    GeolocatorPlatform.instance = _FakeGeolocator();
+    addTearDown(() => GeolocatorPlatform.instance = original);
+
+    final data = FarmSetupData()
+      ..name = 'South Field'
+      ..description = 'A second plot down the road.'
+      ..barangay = 'Barangay Dos'
+      ..photos = [
+        XFile.fromData(Uint8List.fromList([7, 8, 9]), name: 'field.jpg')
+      ];
+
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FarmSetupDetailsScreen(
+          farmSetupData: data,
+          isAdditionalFarm: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The step counter must not promise a step 2 that no longer happens.
+    final progress = tester.widget<StepProgress>(find.descendant(
+      of: find.byType(FarmSetupDetailsScreen),
+      matching: find.byType(StepProgress),
+    ));
+    expect(progress.step, 1);
+    expect(progress.totalSteps, 2,
+        reason: 'a second farm has two steps, not three');
+    expect(find.text('Next: Pin Farm Location'), findsOneWidget);
+    expect(find.text('Next: Verify Identity'), findsNothing);
+
+    await tester.tap(find.text('Next: Pin Farm Location'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(FarmSetupLocationScreen), findsOneWidget,
+        reason: 'a second farm inherits its documents, so it must not be '
+            'asked to upload them again');
+    expect(find.byType(FarmSetupVerifyScreen), findsNothing);
+
+    final location = tester.widget<StepProgress>(find.descendant(
+      of: find.byType(FarmSetupLocationScreen),
+      matching: find.byType(StepProgress),
+    ));
+    expect(location.step, 2);
+    expect(location.totalSteps, 2,
+        reason: 'the location step is the second of two, not the third of '
+            'three, or the skipped step looks like a bug');
   });
 }

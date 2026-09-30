@@ -10,7 +10,13 @@ import 'farm_setup_location_screen.dart';
 class FarmSetupVerifyScreen extends StatefulWidget {
   final FarmSetupData farmSetupData;
 
-  const FarmSetupVerifyScreen({super.key, required this.farmSetupData});
+  /// Only reached on a seller's first farm. Additional farms skip this step
+  /// because the server copies their ID and permit from the first farm, so
+  /// there is nothing for the seller to do here.
+  const FarmSetupVerifyScreen({
+    super.key,
+    required this.farmSetupData,
+  });
 
   @override
   State<FarmSetupVerifyScreen> createState() => _FarmSetupVerifyScreenState();
@@ -49,13 +55,17 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
 
   String get _idSubtitle {
     final doc = _idDocument;
-    if (doc == null) return 'Upload a valid government-issued ID';
+    if (doc == null) {
+      return 'Upload a valid government-issued ID';
+    }
     return 'Uploaded ${doc.name}';
   }
 
   String get _certificateSubtitle {
     final doc = _certificateDocument;
-    if (doc == null) return 'Upload your farm permit or certificate';
+    if (doc == null) {
+      return 'Upload your farm permit or certificate';
+    }
     return 'Uploaded ${doc.name}';
   }
 
@@ -89,6 +99,8 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
   }
 
   void _next() {
+    // Documents are always required here: this step is only reached on a
+    // seller's first farm, where there is nothing to inherit them from.
     if (_idDocument == null || _certificateDocument == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -101,8 +113,9 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            FarmSetupLocationScreen(farmSetupData: widget.farmSetupData),
+        builder: (_) => FarmSetupLocationScreen(
+          farmSetupData: widget.farmSetupData,
+        ),
       ),
     );
   }

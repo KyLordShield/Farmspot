@@ -20,15 +20,18 @@ class FarmController extends Controller
     use FormatsListings;
 
     /**
-     * Create a new farm for the authenticated seller candidate.
+     * Create a new farm for the authenticated seller.
      *
-     * Requires only that the user has a Farmer row (created by the "Become a
-     * Seller" step) so they can submit a farm. Whitelist approval is decided
-     * here, at submission time: whitelisted users get an instant-approve farm
-     * (FRM_STATUS=APPROVED) and have their seller flags flipped, everyone else
-     * gets FRM_STATUS=PENDING_REVIEW for admin review. The old
-     * FMR_SELLER_MODE_ACTIVE gate is gone because that flag is now only set on
-     * this approval path.
+     * A seller may own several farms: the system design is one account to many
+     * farms, and the schema already allows it (farm.FMR_ID is not unique). Each
+     * farm is reviewed on its own, so approval, map pinning and stats are all
+     * per farm rather than per account.
+     *
+     * Whitelist approval is decided here, at submission time: whitelisted users
+     * get an instant-approve farm (FRM_STATUS=APPROVED) and have their seller
+     * flags flipped, everyone else gets FRM_STATUS=PENDING_REVIEW for admin
+     * review. The old FMR_SELLER_MODE_ACTIVE gate is gone because that flag is
+     * now only set on this approval path.
      */
     public function store(Request $request)
     {
@@ -42,18 +45,15 @@ class FarmController extends Controller
             ], 403);
         }
 
-        // One farm per farmer: an existing APPROVED or PENDING_REVIEW farm
-        // blocks a new submission. Only when every prior farm is REJECTED
-        // (e.g. after admin review) may the farmer submit again.
-        $hasActiveFarm = $farmer->farms()
-            ->whereIn('FRM_STATUS', ['APPROVED', 'PENDING_REVIEW'])
-            ->exists();
+        // The seller's first farm is the one that carries their uploaded ID and
+        // permit. Later farms reuse those files instead of asking for the same
+        // documents again — the person did not change, so neither did their ID.
+        $firstFarm = $farmer->farms()
+            ->orderBy('FRM_CREATED_AT')
+            ->orderBy('FRM_ID')
+            ->first();
 
-        if ($hasActiveFarm) {
-            return response()->json([
-                'message' => 'You already have a farm. Each farmer can only have one farm at a time.',
-            ], 409);
-        }
+        $isFirstFarm = $firstFarm === null;
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
@@ -63,8 +63,20 @@ class FarmController extends Controller
             'longitude' => ['required', 'numeric'],
             'photos' => ['required', 'array', 'min:1'],
             'photos.*' => ['image', 'max:5120'],
-            'verification_document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
-            'farm_certificate' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            // Required only for the first farm. Afterwards they are inherited,
+            // so omitting them is the expected path rather than an error.
+            'verification_document' => [
+                $isFirstFarm ? 'required' : 'nullable',
+                'file',
+                'mimes:jpg,jpeg,png,pdf',
+                'max:5120',
+            ],
+            'farm_certificate' => [
+                $isFirstFarm ? 'required' : 'nullable',
+                'file',
+                'mimes:jpg,jpeg,png,pdf',
+                'max:5120',
+            ],
         ]);
 
         $isWhitelisted = Whitelist::where('WLST_MOBILE_NUMBER', $user->USR_MOBILE_NUMBER)
@@ -74,25 +86,29 @@ class FarmController extends Controller
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 
         try {
-            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $user, $isWhitelisted) {
-                // Valid government ID (verification_document) + farm permit/
-                // certificate (farm_certificate) are BOTH required, so each is
-                // uploaded to Cloudinary and stored on its own column.
-                $verificationUrl = null;
-                $certificateUrl = null;
+            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $user, $isWhitelisted, $firstFarm, $isFirstFarm) {
+                $verificationUrl = $firstFarm?->FRM_VERIFICATION_DOC_PATH;
+                $certificateUrl = $firstFarm?->FRM_FARM_CERTIFICATE_PATH;
 
-                $verifyDoc = $validated['verification_document'];
-                $certDoc = $validated['farm_certificate'];
+                // A document uploaded in this request always wins, so a seller
+                // who was asked to correct one can replace it without deleting
+                // the farm. Anything not supplied falls back to the inherited
+                // file (null on a first farm, where both are required anyway).
+                if (! empty($validated['verification_document'])) {
+                    $doc = $validated['verification_document'];
+                    $extension = $doc->getClientOriginalExtension() ?: 'jpg';
+                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+                    Storage::disk('cloudinary')->put($path, $doc->getRealPath());
+                    $verificationUrl = Storage::disk('cloudinary')->url($path);
+                }
 
-                $verifyExtension = $verifyDoc->getClientOriginalExtension() ?: 'jpg';
-                $verifyPath = "farm-verification/{$farmId}/" . uniqid() . ".{$verifyExtension}";
-                Storage::disk('cloudinary')->put($verifyPath, $verifyDoc->getRealPath());
-                $verificationUrl = Storage::disk('cloudinary')->url($verifyPath);
-
-                $certExtension = $certDoc->getClientOriginalExtension() ?: 'jpg';
-                $certPath = "farm-verification/{$farmId}/" . uniqid() . ".{$certExtension}";
-                Storage::disk('cloudinary')->put($certPath, $certDoc->getRealPath());
-                $certificateUrl = Storage::disk('cloudinary')->url($certPath);
+                if (! empty($validated['farm_certificate'])) {
+                    $doc = $validated['farm_certificate'];
+                    $extension = $doc->getClientOriginalExtension() ?: 'jpg';
+                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+                    Storage::disk('cloudinary')->put($path, $doc->getRealPath());
+                    $certificateUrl = Storage::disk('cloudinary')->url($path);
+                }
 
                 $farm = Farm::create([
                     'FRM_ID' => $farmId,
@@ -154,6 +170,10 @@ class FarmController extends Controller
             'message' => 'Farm created successfully.',
             'farm_id' => $farmId,
             'frm_status' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
+            // Tells the app whether it should show the document step again. A
+            // second farm inherits them, so it should not.
+            'documents_required' => $isFirstFarm,
+            'documents_inherited' => ! $isFirstFarm,
             'photo_urls' => $result['photo_urls'],
             'verification_document_url' => $result['verification_document_url'],
             'farm_certificate_url' => $result['farm_certificate_url'],
@@ -376,8 +396,10 @@ class FarmController extends Controller
     }
 
     /**
-     * Performance stats for the authenticated seller's own farm (auth-only,
-     * ownership required — 403 when the caller doesn't own the farm).
+     * Performance stats for one of the authenticated seller's own farms (auth-only,
+     * ownership required — 403 when the caller doesn't own the farm). A seller
+     * with several farms gets a separate figure set per farm, so Farm A's views
+     * never inflate Farm B's.
      *
      * Flipped from the buyer perspective to the farm-owner perspective:
      *   - profile_views: real farm_visit_log rows whose FRM_ID is this farm
@@ -422,15 +444,18 @@ class FarmController extends Controller
      * Returns an empty list for users who have no farm yet
      * (e.g. seller mode active but wizard never completed).
      *
+     * A seller may own several farms, so this is a list and the app is expected
+     * to let the seller switch between them rather than assume a single one.
+     *
      * REJECTED farms are historical/inert and deliberately omitted — the app
-     * treats this list as "my farm(s)" and shows it selectable when creating
-     * listings, so only APPROVED / PENDING_REVIEW belong here. A farmer whose
-     * only farm was rejected therefore sees an empty list and may re-submit.
+     * treats this list as the farms you can list produce under, so only
+     * APPROVED / PENDING_REVIEW belong here. A farmer whose only farm was
+     * rejected therefore sees an empty list and may re-submit.
      *
      * Ordered deterministically so clients can rely on the first entry being
-     * "the" farm: APPROVED first, then PENDING_REVIEW, newest-created within
-     * each status. APPROVED on top matches the client's "one active farm"
-     * convention (APPROVED is the only operational one).
+     * the most active farm: APPROVED first, then PENDING_REVIEW, newest-created
+     * within each status. That keeps a client's default selection sensible
+     * without pretending there is only ever one.
      */
     public function index(Request $request)
     {

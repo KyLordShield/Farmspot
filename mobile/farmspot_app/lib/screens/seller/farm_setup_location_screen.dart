@@ -19,10 +19,16 @@ class FarmSetupLocationScreen extends StatefulWidget {
   /// omitted.
   final GeocodingService? geocodingService;
 
+  /// True when the seller is adding a second or later farm, which inherits the
+  /// documents already uploaded for their first one. Passed through so the
+  /// success screen can speak about the right farm.
+  final bool isAdditionalFarm;
+
   const FarmSetupLocationScreen({
     super.key,
     required this.farmSetupData,
     this.geocodingService,
+    this.isAdditionalFarm = false,
   });
 
   @override
@@ -280,6 +286,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
             farmSetupData: widget.farmSetupData,
             frmStatus: result['frm_status'] as String? ?? 'APPROVED',
             farmId: result['farmId'] as String?,
+            isAdditionalFarm: widget.isAdditionalFarm,
           ),
         ),
       );
@@ -326,9 +333,12 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
               title: 'Pin Your Farm',
               subtitle: 'Search, tap the map, or drag the pin to set the location',
             ),
-            const StepProgress(
-              step: 3,
-              totalSteps: 3,
+            StepProgress(
+              // Additional farms come straight here, having skipped the
+              // identity step, so this is their second of two rather than
+              // their third of three.
+              step: widget.isAdditionalFarm ? 2 : 3,
+              totalSteps: widget.isAdditionalFarm ? 2 : 3,
               label: 'Location',
               percent: 0.95,
             ),
@@ -598,10 +608,15 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Step 3 of 3',
+                    Text(
+                      widget.isAdditionalFarm
+                          ? 'Step 2 of 2'
+                          : 'Step 3 of 3',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, color: Colors.black38),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black38,
+                      ),
                     ),
                   ],
                 ),
