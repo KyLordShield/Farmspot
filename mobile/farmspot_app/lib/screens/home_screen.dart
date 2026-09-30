@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../theme.dart';
 import '../models/crop_category.dart';
+import '../models/home_filters.dart';
+import '../widgets/home_filter_sheet.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../services/listing_service.dart';
@@ -32,15 +34,17 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /// 0 = "All"; 1..n index into [_categories] (the real API categories).
-  int _selectedCategory = 0;
+  /// The Filter button's state: category, availability and sort in one value.
+  ///
+  /// One value rather than three fields so the sheet and the feed cannot
+  /// disagree about what is showing.
+  HomeFilters _filters = HomeFilters.none;
 
   List<CropCategory> _categories = [];
 
   List<CropListing> _listings = [];
   bool _isLoading = true;
   String? _errorMessage;
-  int? _activeListingCount;
 
   /// Total unread across every thread, for the Messages entry badge. The home
   /// feed never blocks on it — a failure just leaves the badge hidden.
@@ -52,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadListings();
     _loadCategories();
     _loadUnreadMessages();
-    if (SessionState.instance.isSeller) _loadActiveListingCount();
   }
 
   /// Counts unread messages for the Messages entry. Deliberately failure
@@ -62,52 +65,41 @@ class _HomeScreenState extends State<HomeScreen> {
       final gateway = widget.gateway ?? MessageService.instance;
       final threads = await gateway.fetchConversations();
       if (!mounted) return;
-      setState(() =>
-          _unreadMessages = threads.fold(0, (sum, t) => sum + t.unreadCount));
+      setState(
+        () =>
+            _unreadMessages = threads.fold(0, (sum, t) => sum + t.unreadCount),
+      );
     } catch (_) {
       // Leave the badge hidden.
     }
   }
 
-  /// Real crop categories for the filter chips. Failure-tolerant: on error the
-  /// row simply shows "All" so the feed still works.
+  /// Real crop categories, for the Filter sheet's category list.
+  /// Failure-tolerant: on error the sheet simply offers no categories and the
+  /// rest of the feed still works.
   Future<void> _loadCategories() async {
     try {
       final categories = await ListingService.fetchCropCategories();
       if (!mounted) return;
       setState(() => _categories = categories);
     } catch (_) {
-      // Chips fall back to just "All".
-    }
-  }
-
-  /// Seller-only acknowledgment: a real count of the user's own live listings
-  /// (everything not NOT_AVAILABLE). Full management lives on MyFarmScreen, so
-  /// this stays a small banner — it never duplicates the marketplace feed.
-  Future<void> _loadActiveListingCount() async {
-    try {
-      final listings = await ListingService.fetchMyListings();
-      if (!mounted) return;
-      setState(() {
-        _activeListingCount =
-            listings.where((l) => l.status != 'NOT_AVAILABLE').length;
-      });
-    } catch (_) {
-      // Fall back to the generic seller text if the count can't be fetched.
+      // The category group in the sheet stays empty.
     }
   }
 
   List<CropListing> get _filteredListings {
-    if (_selectedCategory == 0) return _listings;
-    final categoryId = _categories[_selectedCategory - 1].id;
+    // Availability and sort are already applied by the server, so this only
+    // has to narrow by category. Comparing the id directly (rather than an
+    // index into _categories) also means a category whose row has not loaded
+    // yet cannot throw here.
+    final categoryId = _filters.categoryId;
+    if (categoryId == null) return _listings;
     return _listings.where((l) => l.categoryId == categoryId).toList();
   }
 
   void _openDetail(CropListing listing) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProductDetailScreen(listing: listing),
-      ),
+      MaterialPageRoute(builder: (_) => ProductDetailScreen(listing: listing)),
     );
   }
 
@@ -120,7 +112,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      final listings = await ListingService.fetchListings(search: search);
+      // Only the two groups the server owns are sent. Category is deliberately
+      // not: it is applied locally by _filteredListings, so sending it too
+      // would narrow the feed twice over.
+      final listings = await ListingService.fetchListings(
+        search: search,
+        availability: _filters.availability?.wireValue,
+        sort: _filters.sort,
+      );
       if (!mounted) return;
       // Resolve the real distance BEFORE the grid renders (the existing load
       // spinner covers the wait): one fetch of the public farm pins + one buyer
@@ -128,7 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // flashes on screen. Cards whose farm can't be matched keep the seed
       // label rather than hiding the line (same fallback as the detail screen).
       final crops = await _resolveDistances(
-          listings.map((l) => l.toCropListing()).toList());
+        listings.map((l) => l.toCropListing()).toList(),
+      );
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -148,9 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadListings(showLoading: false);
     // The role is not refetched here. It is shared session state that survives
     // navigation, so re-deriving it on refresh is what used to make the nav
-    // flicker. The seller banner's count still refreshes, since that is real
-    // listing data.
-    if (SessionState.instance.isSeller) await _loadActiveListingCount();
+    // flicker.
     await _loadCategories();
     await _loadUnreadMessages();
   }
@@ -159,7 +157,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// distance to its farm, computing buyer GPS + the public pin list once for
   /// the whole feed. Silent on failure: unresolvable cards keep their current
   /// label (matching what the profile/detail screens show while unresolvable).
-  Future<List<CropListing>> _resolveDistances(List<CropListing> listings) async {
+  Future<List<CropListing>> _resolveDistances(
+    List<CropListing> listings,
+  ) async {
     try {
       final farms = await FarmService.fetchPublicFarms();
       if (farms.isEmpty) return listings;
@@ -168,8 +168,10 @@ class _HomeScreenState extends State<HomeScreen> {
       return listings.map((l) {
         final farm = l.farmId == null ? null : byId[l.farmId];
         if (farm == null) return l;
-        final km =
-            LocationService.distanceKm(you, LatLng(farm.latitude, farm.longitude));
+        final km = LocationService.distanceKm(
+          you,
+          LatLng(farm.latitude, farm.longitude),
+        );
         return l.withDistance(LocationService.distanceLabel(km));
       }).toList();
     } catch (_) {
@@ -211,9 +213,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     switch (i) {
       case 1:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MapScreen()),
-        );
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => const MapScreen()));
         break;
       case 2:
         Navigator.of(context).pushReplacement(
@@ -247,23 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildCategoryRow(),
-                          // Both the banner and the bottom nav are driven by the
-                          // shared session, so they update together on a role
-                          // change instead of each re-deriving it.
-                          ListenableBuilder(
-                            listenable: SessionState.instance,
-                            builder: (context, _) =>
-                                SessionState.instance.isSeller
-                                    ? Column(
-                                        children: [
-                                          const SizedBox(height: 14),
-                                          _buildSellerBanner(),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
-                          ),
-                          const SizedBox(height: 20),
                           _buildSectionTitle(),
                           const SizedBox(height: 12),
                           _buildListingsSection(),
@@ -291,8 +276,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     MaterialPageRoute(builder: (_) => const AiChatScreen()),
                   );
                 },
-                child: const Icon(Icons.support_agent,
-                    color: Colors.white, size: 26),
+                child: const Icon(
+                  Icons.support_agent,
+                  color: Colors.white,
+                  size: 26,
+                ),
               ),
             ),
           ],
@@ -321,9 +309,9 @@ class _HomeScreenState extends State<HomeScreen> {
               // bar still reads as a long, easily-tapped search field.
               height: 40,
               onSearchTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SearchScreen()),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const SearchScreen()));
               },
               onCameraTap: () {
                 Navigator.of(context).push(
@@ -400,9 +388,9 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: Icons.notifications_none_rounded,
       tooltip: 'Notifications',
       onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
       },
     );
   }
@@ -449,100 +437,77 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) _loadUnreadMessages();
   }
 
-  Widget _buildCategoryRow() {
-    // Index 0 is always "All"; each real category from the API follows it.
-    final chipCount = _categories.length + 1;
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: chipCount,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return CategoryChip(
-              label: 'All',
-              selected: _selectedCategory == 0,
-              onTap: () => setState(() => _selectedCategory = 0),
-            );
-          }
-          final category = _categories[i - 1];
-          return CategoryChip(
-            label: category.name,
-            selected: _selectedCategory == i,
-            onTap: () => setState(() => _selectedCategory = i),
-          );
-        },
-      ),
+  /// Opens the filter popup and adopts whatever it returns.
+  Future<void> _openFilters() async {
+    final picked = await showHomeFilterSheet(
+      context,
+      current: _filters,
+      categories: _categories,
     );
+
+    // Dismissed, or applied without changing anything.
+    if (picked == null || !mounted || picked == _filters) return;
+
+    // Availability is the server's half, so it needs a refetch. Category alone
+    // does not, and neither does a re-sort on its own — but a re-sort the
+    // server did not perform has to be asked for, or the order on screen would
+    // silently stay whatever the last request returned.
+    final mustRefetch = picked.needsRefetch || picked.sort != _filters.sort;
+
+    setState(() => _filters = picked);
+    if (mustRefetch) {
+      await _loadListings(showLoading: false);
+    }
   }
 
-  Widget _buildSellerBanner() {
-    final count = _activeListingCount;
-    final label = count == null
-        ? 'You are a seller on FarmSpot'
-        : 'You have $count active listing${count == 1 ? '' : 's'}';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF6EC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primaryGreen.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.storefront, size: 20, color: AppColors.primaryGreen),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  /// The display name of the applied category, for the heading and the button.
+  ///
+  /// Null when the category list has not loaded, or when the applied id is no
+  /// longer among the categories — in which case the UI falls back to wording
+  /// that does not name it.
+  String? get _appliedCategoryName {
+    final id = _filters.categoryId;
+    if (id == null) return null;
+    for (final category in _categories) {
+      if (category.id == id) return category.name;
+    }
+    return null;
+  }
+
+  /// Names what the feed is actually showing.
+  ///
+  /// The heading used to be a fixed "Available now", which was only ever true
+  /// when nothing was filtered. With the Filter button that is no longer safe:
+  /// a buyer who picks "Soon to harvest" would read a heading claiming the feed
+  /// is available now. So it reports the category and availability that are
+  /// really applied, and falls back to the old default when neither is.
+  String get _feedHeading {
+    final parts = <String>[
+      ?_appliedCategoryName,
+      ?_filters.availability?.label,
+    ];
+    if (parts.isEmpty) return 'Available now';
+    return parts.join(' • ');
   }
 
   Widget _buildSectionTitle() {
     return Row(
       children: [
-        // Expanded so the heading yields space to the "see all" link on a narrow
+        // Expanded so the heading yields space to the Filter button on a narrow
         // phone or at a large system text scale, instead of overflowing.
-        const Expanded(
+        Expanded(
           child: Text(
-            'Available now',
+            _feedHeading,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
-        GestureDetector(
-          onTap: () {
-            debugPrint('See all tapped — no backend wired yet.');
-          },
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'see all',
-                style: TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              SizedBox(width: 4),
-              Icon(Icons.arrow_forward, size: 14, color: AppColors.primaryGreen),
-            ],
-          ),
+        const SizedBox(width: 8),
+        HomeFilterButton(
+          filters: _filters,
+          categoryName: _appliedCategoryName,
+          onTap: _openFilters,
         ),
       ],
     );
@@ -567,19 +532,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.black54),
               ),
-              TextButton(
-                onPressed: _loadListings,
-                child: const Text('Retry'),
-              ),
+              TextButton(onPressed: _loadListings, child: const Text('Retry')),
             ],
           ),
         ),
       );
     }
 
-    return CropLadderGrid(
-      listings: _filteredListings,
-      onTap: _openDetail,
-    );
+    return CropLadderGrid(listings: _filteredListings, onTap: _openDetail);
   }
 }

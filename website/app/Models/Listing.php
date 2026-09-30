@@ -45,6 +45,19 @@ class Listing extends Model
             ->orderBy('LPHOTO_ID');
     }
 
+    /**
+     * Every time a buyer taps call or SMS on this listing.
+     *
+     * There is no view counter or rating in the schema, so this is the honest
+     * popularity signal: a buyer who contacted the seller is a stronger signal
+     * than one who merely scrolled past. Counted, not read, by the "popular"
+     * sort on the public feed.
+     */
+    public function contacts()
+    {
+        return $this->hasMany(ContactLog::class, 'LST_ID', 'LST_ID');
+    }
+
     public function primaryPhoto()
     {
         return $this->hasOne(ListingPhoto::class, 'LST_ID', 'LST_ID')

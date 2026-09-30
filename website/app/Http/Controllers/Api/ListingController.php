@@ -44,7 +44,22 @@ class ListingController extends Controller
     {
         $search = $request->query('search');
 
-        $listings = Listing::with(['farm', 'category', 'farmer.buyer.user', 'photos'])
+        // Feed filters. Every value is whitelisted rather than interpolated, so
+        // a hand-typed ?sort= drops the sort instead of reaching the ORDER BY,
+        // and an unknown category simply matches nothing.
+        $category = $request->query('category');
+        $status = $request->query('status');
+
+        // LST_STATUS is an enum, so these are the only two reachable values on
+        // the public feed: the query below already excludes NOT_AVAILABLE, and
+        // listings:expire has moved every past-due row out of circulation.
+        $allowedStatuses = ['AVAILABLE_NOW', 'SOON_TO_HARVEST'];
+        $allowedSorts = ['latest', 'date', 'popular'];
+        $sort = in_array($request->query('sort'), $allowedSorts, true)
+            ? $request->query('sort')
+            : 'latest';
+
+        $query = Listing::with(['farm', 'category', 'farmer.buyer.user', 'photos'])
             ->where('LST_AVAILABILITY', 'ACTIVE')
             ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->when($search, function ($query, $search) {
@@ -57,9 +72,46 @@ class ListingController extends Controller
                         })->orWhere('LST_DESCRIPTION', 'LIKE', "%{$search}%");
                 });
             })
-            ->orderByDesc('LST_CREATED_AT')
-            ->get()
-            ->map(fn ($listing) => $this->formatListing($listing));
+            ->when($category, fn ($q) => $q->where('CAT_ID', $category))
+            ->when(
+                in_array($status, $allowedStatuses, true),
+                fn ($q) => $q->where('LST_STATUS', $status)
+            );
+
+        // Each sort needs a different leading column, and only "popular" needs
+        // a join, so the three are built separately rather than through one
+        // switch. Contacts are counted in a subquery instead of an eager load,
+        // which keeps this to a single query.
+        if ($sort === 'popular') {
+            $listings = $query
+                ->withCount('contacts')
+                ->orderByDesc('contacts_count')
+                // A tie should not shuffle between refreshes, and neither
+                // should two listings that nobody has contacted yet.
+                ->orderByDesc('LST_CREATED_AT')
+                ->get();
+        } elseif ($sort === 'date') {
+            // Soonest harvest first. NULLS LAST is spelled out because a
+            // seller who has not set a harvest date should sink to the bottom
+            // rather than lead the feed on a NULL.
+            $listings = $query
+                ->orderByRaw('LST_HARVEST_DATE IS NULL, LST_HARVEST_DATE ASC')
+                ->orderByDesc('LST_CREATED_AT')
+                ->get();
+        } else {
+            $listings = $query->orderByDesc('LST_CREATED_AT')->get();
+        }
+
+        $listings = $listings->map(fn ($listing) => $this->formatListing($listing));
+
+        // The applied filters go into the analytics slot that already exists on
+        // search_log, so "what do people actually filter by" is answerable
+        // without a new table.
+        $appliedFilters = array_filter([
+            'category' => $category,
+            'status' => $status,
+            'sort' => $sort !== 'latest' ? $sort : null,
+        ]);
 
         // Only real searches by logged-in users count toward the stats.
         // /listings is a PUBLIC route (no auth middleware), so resolve the
@@ -83,7 +135,8 @@ class ListingController extends Controller
             SearchLog::create([
                 'SRCH_ID' => $searchId,
                 'SRCH_KEYWORD' => $search,
-                'SRCH_FILTERS' => $request->query('filters'),
+                'SRCH_FILTERS' => $request->query('filters')
+                    ?: ($appliedFilters ? json_encode($appliedFilters) : null),
                 'SRCH_CREATED_AT' => now(),
                 'USR_ID' => $user->USR_ID,
             ]);

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/crop_category.dart';
 import '../models/crop_suggestion.dart';
+import '../models/home_filters.dart';
 import '../models/listing.dart';
 import 'auth_service.dart';
 
@@ -17,8 +18,22 @@ class ListingService {
   /// When the user is logged in, the Bearer token is attached so the backend
   /// can log their searches into search_log (feeding the Crop Insights
   /// analytics). Guests still browse fine — their searches just don't count.
-  static Future<List<Listing>> fetchListings({String? search}) {
-    return _fetchRawListings(search: search);
+  ///
+  /// [category] and [availability] narrow the feed; [sort] reorders it. All
+  /// three are omitted from the URL when unset, so the default call is
+  /// byte-for-byte the request it was before the filter button existed.
+  static Future<List<Listing>> fetchListings({
+    String? search,
+    String? category,
+    String? availability,
+    HomeSortMode sort = HomeSortMode.latest,
+  }) {
+    return _fetchRawListings(
+      search: search,
+      category: category,
+      availability: availability,
+      sort: sort,
+    );
   }
 
   /// Backs every /listings call. [suggest] is ONLY set by the live "as you
@@ -28,6 +43,9 @@ class ListingService {
   /// real submitted searches keep logging exactly as before.
   static Future<List<Listing>> _fetchRawListings({
     String? search,
+    String? category,
+    String? availability,
+    HomeSortMode sort = HomeSortMode.latest,
     bool suggest = false,
   }) async {
     try {
@@ -36,6 +54,17 @@ class ListingService {
       if (search != null && search.trim().isNotEmpty) {
         params['search'] = search.trim();
         if (suggest) params['suggest'] = '1';
+      }
+      if (category != null && category.trim().isNotEmpty) {
+        params['category'] = category.trim();
+      }
+      if (availability != null && availability.trim().isNotEmpty) {
+        params['status'] = availability.trim();
+      }
+      // "latest" is the backend default, so sending it would be noise on the
+      // one call that happens most often: the plain home feed.
+      if (sort != HomeSortMode.latest) {
+        params['sort'] = sort.wireValue;
       }
       final uri = Uri.parse('$baseUrl/listings').replace(
         queryParameters: params.isEmpty ? null : params,
