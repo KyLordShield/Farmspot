@@ -231,7 +231,10 @@ class FarmController extends Controller
      */
     public function profile(Request $request, $farmId)
     {
-        $farm = Farm::with('photos')->find($farmId);
+        // farmer.buyer.user is loaded so formatFarm can name the seller and
+        // hand the app the farmer id it needs to report them. A farm can belong
+        // to a seller who is no longer an active farmer, so both are nullable.
+        $farm = Farm::with(['photos', 'farmer.buyer.user'])->find($farmId);
 
         if (! $farm) {
             return response()->json([
@@ -248,6 +251,7 @@ class FarmController extends Controller
 
         return response()->json([
             'farm' => $this->formatFarm($farm),
+            'owner' => $this->formatFarmOwner($farm),
             'listings' => $listings,
         ]);
     }
@@ -562,6 +566,32 @@ class FarmController extends Controller
             'longitude' => $farm->FRM_LONGITUDE,
             'status' => $farm->FRM_STATUS,
             'photos' => $farm->photos->pluck('FPHOTO_FILE_PATH'),
+        ];
+    }
+
+    /**
+     * Who runs the farm, for the buyer-facing profile screen only.
+     *
+     * Kept out of formatFarm on purpose: the other three call sites load just
+     * `photos`, so reading the farmer chain there would lazy-load three extra
+     * queries per response and add a key no other caller reads. This screen is
+     * the one place a buyer can decide to report the seller instead of a crop,
+     * and it is the one place that already eager-loads farmer.buyer.user.
+     *
+     * Null when the farmer record is missing or not linked to a buyer account.
+     */
+    private function formatFarmOwner(Farm $farm): ?array
+    {
+        $farmer = $farm->farmer;
+
+        if (! $farmer) {
+            return null;
+        }
+
+        return [
+            'farmer_id' => $farmer->FMR_ID,
+            'user_id' => $farmer->buyer?->user?->USR_ID,
+            'name' => $farmer->buyer?->user?->USR_NAME,
         ];
     }
 

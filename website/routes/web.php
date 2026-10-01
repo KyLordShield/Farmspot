@@ -14,7 +14,12 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-Route::middleware(['auth'])->group(function () {
+// The whole block below is the admin panel. It was guarded by `auth` alone, so
+// any signed-in web account could open /reports and read reported message text
+// and the names of the people accused, or reach /users and /whitelist. Now that
+// reports can be filed from the app, that is a real leak rather than a
+// theoretical one.
+Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
     Route::get('/listings', [ListingController::class, 'index'])->name('listings');
@@ -25,6 +30,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
     Route::patch('/reports/{id}/status', [ReportController::class, 'updateStatus'])->name('reports.updateStatus');
+    // The part that makes the queue worth having: a moderator who agrees a
+    // listing is fraudulent needs to be able to take it off sale, and needs to be
+    // able to put it back when they were wrong.
+    //
+    // The literal undo path has to be declared before the {action} wildcard,
+    // otherwise "undo" is just another action name and undoAction is never
+    // reachable.
+    Route::post('/reports/{id}/action/undo', [ReportController::class, 'undoAction'])->name('reports.undoAction');
+    Route::post('/reports/{id}/action/{action}', [ReportController::class, 'applyAction'])->name('reports.applyAction');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');

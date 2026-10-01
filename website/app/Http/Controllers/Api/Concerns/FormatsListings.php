@@ -53,6 +53,11 @@ trait FormatsListings
             $farmerUser = $listing->farmer?->buyer?->user;
 
             $data['farmer'] = [
+                // The farmer id is what the app reports when a buyer flags the
+                // seller rather than the crop, so it has to be reachable from
+                // here. A buyer who could only reach the seller's name would
+                // have no way to file the report.
+                'id' => $listing->farmer?->FMR_ID,
                 'name' => $farmerUser->USR_NAME ?? null,
                 'mobile_number' => $farmerUser->USR_MOBILE_NUMBER ?? null,
             ];

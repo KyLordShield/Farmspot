@@ -104,6 +104,10 @@ class UserController extends Controller
             'USR_STATUS' => $validated['USR_STATUS'],
         ]);
 
+        if ($validated['USR_STATUS'] === 'DEACTIVATED') {
+            $user->tokens()->delete();
+        }
+
         return redirect()->route('users')->with('success', 'User updated successfully.');
     }
 
@@ -113,6 +117,14 @@ class UserController extends Controller
 
         $user->USR_STATUS = 'DEACTIVATED';
         $user->save();
+
+        // If a user is being deactivated, they must not stay signed in on any
+        // device. Setting USR_STATUS alone blocks the next login, but tokens
+        // issued before this call would still work — which is the exact reason
+        // the report action also revokes them.
+        if ($user->USR_STATUS === 'DEACTIVATED') {
+            $user->tokens()->delete();
+        }
 
         return redirect()->route('users')->with('success', 'User deactivated successfully.');
     }

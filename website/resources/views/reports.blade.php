@@ -62,6 +62,43 @@
 
 </div>
 
+{{-- What is being reported, not just how much. A queue full of spam messages
+     calls for a different response than one full of fake listings, and the
+     status cards above cannot tell them apart. --}}
+<div class="stat-grid">
+
+    <div class="stat-card">
+        <div class="stat-icon tint-green">
+            <i class="bi bi-basket"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $typeCounts['LISTING'] ?? 0 }}</div>
+            <div class="stat-label">Crop listings</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-amber">
+            <i class="bi bi-chat-dots"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $typeCounts['MESSAGE'] ?? 0 }}</div>
+            <div class="stat-label">Messages</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-slate">
+            <i class="bi bi-person-badge"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ ($typeCounts['FARMER'] ?? 0) + ($typeCounts['USER'] ?? 0) }}</div>
+            <div class="stat-label">Farmers &amp; users</div>
+        </div>
+    </div>
+
+</div>
+
 <div class="panel">
 
     <!-- Filters -->
@@ -77,11 +114,21 @@
                     name="search"
                     value="{{ request('search') }}"
                     class="form-control"
-                    placeholder="Search by reason, reporter or listing">
+                    placeholder="Search reason, details, reporter or reported id">
                 <button class="btn btn-farm" type="submit">
                     Search
                 </button>
             </div>
+        </div>
+
+        <div class="filter-auto">
+            <select name="type" class="form-select" onchange="this.form.submit()">
+                <option value="">All Types</option>
+                <option value="LISTING" {{ request('type') == 'LISTING' ? 'selected' : '' }}>Crop listing</option>
+                <option value="MESSAGE" {{ request('type') == 'MESSAGE' ? 'selected' : '' }}>Message</option>
+                <option value="FARMER" {{ request('type') == 'FARMER' ? 'selected' : '' }}>Farmer / seller</option>
+                <option value="USER" {{ request('type') == 'USER' ? 'selected' : '' }}>User</option>
+            </select>
         </div>
 
         <div class="filter-auto">
@@ -102,11 +149,13 @@
             <thead>
                 <tr>
                     <th>Report ID</th>
+                    <th>Type</th>
+                    <th>Reported</th>
                     <th>Reporter</th>
-                    <th>Reported Listing</th>
                     <th>Reason</th>
                     <th>Status</th>
                     <th>Date</th>
+                    <th>Action Taken</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -117,9 +166,22 @@
 
                 <tr>
                     <td><span class="id-cell">{{ $report->RPT_ID }}</span></td>
+                    <td>
+                        @php
+                            $typeLabels = [
+                                'LISTING' => 'Crop listing',
+                                'MESSAGE' => 'Message',
+                                'FARMER' => 'Farmer',
+                                'USER' => 'User',
+                            ];
+                        @endphp
+                        <span class="badge badge-soft-neutral">{{ $typeLabels[$report->RPT_TARGET_TYPE] ?? $report->RPT_TARGET_TYPE }}</span>
+                    </td>
+                    <td class="cell-secondary">
+                        {{ $report->targetLabel() ?? '-' }}
+                    </td>
                     <td class="cell-secondary">{{ $report->user?->USR_NAME ?? '-' }}</td>
-                    <td><span class="id-cell">{{ $report->listing?->LST_ID ?? '-' }}</span></td>
-                    <td class="cell-secondary">{{ \Illuminate\Support\Str::limit($report->RPT_REASON, 60) }}</td>
+                    <td class="cell-secondary">{{ \Illuminate\Support\Str::limit($report->reasonLabel(), 60) }}</td>
                     <td>
                         @if($report->RPT_STATUS == 'New')
                             <span class="badge badge-soft-danger">New</span>
@@ -132,6 +194,21 @@
                         @endif
                     </td>
                     <td class="cell-faint">{{ \Carbon\Carbon::parse($report->RPT_CREATED_AT)->format('M d, Y h:i A') }}</td>
+                    <td>
+                        {{-- Whether anything was actually done, visible from the
+                             list. A status of "Resolved" on its own does not
+                             tell a moderator whether the listing came down or
+                             the report was simply closed. --}}
+                        @php $live = $report->live_actions_count; @endphp
+                        @if($live > 0)
+                            <span class="badge badge-soft-danger">
+                                <i class="bi bi-shield-fill-exclamation"></i>
+                                {{ $live }} action{{ $live > 1 ? 's' : '' }} in force
+                            </span>
+                        @else
+                            <span class="cell-faint">-</span>
+                        @endif
+                    </td>
                     <td>
                         <div class="actions">
                             <a href="{{ route('reports.show', $report->RPT_ID) }}"
@@ -159,7 +236,7 @@
             @empty
 
                 <tr>
-                    <td colspan="7">
+                    <td colspan="8">
                         <div class="empty-state">
                             <i class="bi bi-flag empty-icon"></i>
                             <p>No reports found.</p>

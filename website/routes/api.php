@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\UserStatsController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ConversationController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
@@ -58,6 +59,18 @@ Route::delete('/farms/{farmId}', [FarmController::class, 'destroy']);
     Route::post('/conversations', [ConversationController::class, 'store']);
     Route::get('/conversations/{id}/messages', [ConversationController::class, 'messages']);
     Route::post('/conversations/{id}/messages', [ConversationController::class, 'sendMessage']);
+
+    // Reporting a listing, a chat message, a farmer/seller or another user.
+    // Throttled because a report is a moderation accusation: one client must
+    // not be able to fill a moderator's queue faster than it can be read. The
+    // controller also refuses an identical repeat within a day, so a retry on a
+    // dropped connection does not become a second row.
+    Route::post('/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
+    // What the reporter is told about the outcome. The app has no inbox screen
+    // yet, so nothing in the app calls this — it exists so the result of a report
+    // is readable rather than only visible to a moderator.
+    Route::get('/notifications', [ReportController::class, 'notifications']);
+    Route::post('/notifications/read', [ReportController::class, 'readNotifications']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

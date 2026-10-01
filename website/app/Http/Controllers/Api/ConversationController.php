@@ -123,6 +123,7 @@ class ConversationController extends Controller
 
         // Unread counts for every thread in one grouped query, not one per row.
         $unread = Message::whereIn('CONV_ID', $conversations->pluck('CONV_ID'))
+            ->visible()
             ->where('USR_ID', '!=', $user->USR_ID)
             ->where('MSG_IS_READ', 0)
             ->selectRaw('CONV_ID, COUNT(*) as unread_count')
@@ -167,6 +168,7 @@ class ConversationController extends Controller
         // messages share a timestamp. The client still sends a message id,
         // which is resolved to its sequence here.
         $query = Message::where('CONV_ID', $conversation->CONV_ID)
+            ->visible()
             ->orderBy('MSG_SEQ');
 
         if ($after) {
@@ -174,6 +176,7 @@ class ConversationController extends Controller
             // some other conversation must be treated as unknown rather than
             // silently skewing this thread's window.
             $cursor = Message::where('CONV_ID', $conversation->CONV_ID)
+                ->visible()
                 ->where('MSG_ID', $after)
                 ->first();
 
@@ -188,7 +191,11 @@ class ConversationController extends Controller
 
         // Reading the thread marks the other side's messages read, so the inbox
         // badge clears by simply opening the chat.
+        // Marked read here, but only what the reader can actually see: a hidden
+        // message is gone from the thread, so it must not clear the badge
+        // either.
         Message::where('CONV_ID', $conversation->CONV_ID)
+            ->visible()
             ->where('USR_ID', '!=', $request->user()->USR_ID)
             ->where('MSG_IS_READ', 0)
             ->update(['MSG_IS_READ' => 1]);
@@ -385,7 +392,7 @@ class ConversationController extends Controller
             'buyer_id' => $conversation->BUY_ID,
             'seller_farmer_id' => $conversation->FMR_ID,
             'farm_id' => $conversation->FRM_ID,
-            'last_message' => $conversation->CNV_LAST_MESSAGE,
+            'last_message' => $this->visiblePreviewFor($conversation->CONV_ID),
             'last_message_at' => $conversation->CNV_LAST_MESSAGE_AT,
             'created_at' => $conversation->CONV_CREATED_AT,
             'listing' => $listing ? $this->formatListing($listing) : null,
@@ -400,5 +407,41 @@ class ConversationController extends Controller
                 'photo' => $otherUser?->USR_PHOTO_PATH,
             ],
         ];
+    }
+
+    /**
+     * The newest message the viewer is allowed to see, for the thread preview.
+     *
+     * CNV_LAST_MESSAGE is a copy of the last message's text kept on the
+     * conversation row, and it is not touched when a message is hidden. So a
+     * moderator who hides the final message in a thread has taken it out of the
+     * message list and left it sitting in the conversation list — the app would
+     * still show the reported text, which is the whole thing the button was
+     * supposed to stop.
+     *
+     * Ordered by MSG_SEQ rather than the timestamp for the same reason the
+     * message history is: two messages in one thread can share a timestamp, and
+     * the sequence is monotonic.
+     *
+     * Null when every message in the thread is hidden. There is deliberately no
+     * fallback to CNV_LAST_MESSAGE: the stored copy is the text of whichever
+     * message came last, hidden or not, so falling back to it would put the
+     * reported text straight back into the list — the one thing the hidden
+     * button exists to prevent.
+     *
+     * @return string|null
+     */
+    private function visiblePreviewFor(string $conversationId): ?string
+    {
+        // Truncated to the same width the stored CNV_LAST_MESSAGE copy uses, so
+        // a preview is the same length whether it came from the row or from here.
+        return mb_substr(
+            Message::where('CONV_ID', $conversationId)
+                ->visible()
+                ->orderByDesc('MSG_SEQ')
+                ->value('MSG_CONTENT') ?? '',
+            0,
+            500
+        );
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Farmer;
 use App\Models\Farm;
 use App\Models\Listing;
 use App\Models\Message;
+use App\Models\Report;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -491,6 +492,61 @@ class ConversationMessagingTest extends TestCase
             ->json('conversations.0.last_message');
 
         $this->assertSame(500, mb_strlen($preview));
+    }
+
+    public function test_a_hidden_message_is_not_left_in_the_inbox_preview()
+    {
+        // CNV_LAST_MESSAGE is a copy of the last message kept on the
+        // conversation row, and hiding a message does not touch it. Without
+        // resolving the preview from the visible messages, a moderator who hid
+        // the final message in a thread would take it out of the message list
+        // and leave it sitting in the inbox — the reported text still on screen,
+        // which is the entire point of the button.
+        [$sellerUser, $listing] = $this->makeSeller();
+        [$buyerUser] = $this->makePlainBuyer();
+        $thread = $this->startThread($buyerUser, $listing);
+
+        $this->postMessage($buyerUser, $thread->CONV_ID, 'an honest question')->assertStatus(201);
+        $this->postMessage($sellerUser, $thread->CONV_ID, 'send money to this gcash number')
+            ->assertStatus(201);
+
+        $admin = $this->makeUser('Admin', 'admin@test.local');
+        $admin->update(['USR_ROLE' => 'ADMIN']);
+
+        $last = Message::where('CONV_ID', $thread->CONV_ID)
+            ->orderByDesc('MSG_SEQ')
+            ->firstOrFail();
+
+        $report = Report::create([
+            'RPT_ID' => Report::newId(),
+            'USR_ID' => $buyerUser->USR_ID,
+            'RPT_REASON' => Report::REASONS['FRAUD_OR_SCAM'],
+            'RPT_REASON_CODE' => 'FRAUD_OR_SCAM',
+            'RPT_TARGET_TYPE' => 'MESSAGE',
+            'RPT_TARGET_ID' => $last->MSG_ID,
+        ]);
+
+        $this->actingAs($admin)
+            ->post("/reports/{$report->RPT_ID}/action/MESSAGE_HIDDEN")
+            ->assertRedirect(route('reports.show', $report->RPT_ID));
+
+        // The thread itself no longer shows it.
+        $this->actingAs($buyerUser, 'sanctum')
+            ->getJson("/api/conversations/{$thread->CONV_ID}/messages")
+            ->assertOk()
+            ->assertJsonMissing(['content' => 'send money to this gcash number']);
+
+        // And the inbox preview does not either.
+        $this->actingAs($buyerUser, 'sanctum')
+            ->getJson('/api/conversations')
+            ->assertOk()
+            ->assertJsonPath('conversations.0.last_message', 'an honest question');
+
+        // The row is still there for the audit trail.
+        $this->assertDatabaseHas('message', [
+            'MSG_ID' => $last->MSG_ID,
+            'MSG_VISIBILITY' => 'HIDDEN',
+        ]);
     }
 
     public function test_conversation_and_message_routes_require_authentication()
