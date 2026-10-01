@@ -26,6 +26,11 @@ class CropListing {
   /// category; used by Home/Search category filters.
   final String? categoryId;
 
+  /// FMR_ID of the seller behind this listing, so the product detail screen can
+  /// offer "Report seller" as well as "Report listing" — two different
+  /// accusations that need two different ids.
+  final String? farmerId;
+
   const CropListing({
     required this.cropName,
     required this.farmName,
@@ -43,6 +48,7 @@ class CropListing {
     this.listingId,
     this.farmId,
     this.categoryId,
+    this.farmerId,
     this.placeholderIcon = Icons.eco,
   });
 
@@ -65,6 +71,7 @@ class CropListing {
         listingId: listingId,
         farmId: farmId,
         categoryId: categoryId,
+        farmerId: farmerId,
         placeholderIcon: placeholderIcon,
       );
 }

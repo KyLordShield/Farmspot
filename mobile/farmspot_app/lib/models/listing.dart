@@ -42,6 +42,11 @@ class Listing {
   final String? farmerName;
   final String? farmerMobileNumber;
 
+  /// FMR_ID of the farmer behind this listing. Needed to file a report against
+  /// the seller as a person, which is a different accusation from reporting
+  /// the crop. Null when the seller row is unlinked.
+  final String? farmerId;
+
   Listing({
     required this.id,
     this.cropIcon,
@@ -60,6 +65,7 @@ class Listing {
     this.barangay,
     this.farmerName,
     this.farmerMobileNumber,
+    this.farmerId,
   });
 
   factory Listing.fromJson(Map<String, dynamic> json) {
@@ -84,6 +90,7 @@ class Listing {
       barangay: (json['farm'] as Map?)?['barangay'] as String?,
       farmerName: (json['farmer'] as Map?)?['name'] as String?,
       farmerMobileNumber: (json['farmer'] as Map?)?['mobile_number'] as String?,
+      farmerId: (json['farmer'] as Map?)?['id'] as String?,
     );
   }
 
@@ -107,6 +114,9 @@ class Listing {
       // Category filtering keys off the real category, not the crop name.
       cropType: categoryName ?? 'Vegetable',
       categoryId: categoryId,
+      // Carried through so the product detail screen can report the seller
+      // as a person, not just the crop.
+      farmerId: farmerId,
       status: status,
       imageUrl: image,
       description: description,

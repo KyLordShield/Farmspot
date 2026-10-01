@@ -1,3 +1,5 @@
+import 'report.dart';
+
 /// A buyer <-> seller thread, as returned by GET /api/conversations and
 /// POST /api/conversations.
 ///
@@ -15,6 +17,15 @@ class Conversation {
   /// buyer for a seller.
   final String? otherPartyName;
   final String? otherPartyPhoto;
+
+  /// USR_ID of [otherPartyName]. Needed to report the person behind the
+  /// conversation; a name alone cannot be reported against.
+  final String? otherPartyId;
+
+  /// FMR_ID of the seller's farmer record on this thread, whichever side of
+  /// the thread the viewer is on. This is the id for a report against the
+  /// *seller* as a farmer, as opposed to against their user account.
+  final String? sellerFarmerId;
 
   /// The crop this thread is about.
   final String? cropName;
@@ -36,6 +47,8 @@ class Conversation {
     this.barangay,
     this.otherPartyName,
     this.otherPartyPhoto,
+    this.otherPartyId,
+    this.sellerFarmerId,
     this.cropName,
     this.cropImage,
     this.lastMessage,
@@ -45,6 +58,44 @@ class Conversation {
   });
 
   bool get isSellerSide => myRole == 'SELLER';
+
+  /// The report target for the other person in this thread, or null when the
+  /// server did not send a usable id.
+  ///
+  /// The two sides are not symmetric, and this is the one place that has to
+  /// know it. A buyer reporting a seller can accuse either the *account*
+  /// (USR_ID) or the *farmer* (FMR_ID) — a seller who is a scammer is a
+  /// different report from a seller account being compromised — so the farmer
+  /// id is preferred when it exists, because it is the accusation that a
+  /// moderator can act on for the person's whole selling history.
+  ///
+  /// A seller reporting a buyer has no such choice: a buyer has no farmer
+  /// record, so it is always the account.
+  CounterpartyReportTarget? get counterpartyReportTarget {
+    final userId = (otherPartyId ?? '').trim();
+    final name = (otherPartyName ?? '').trim().isNotEmpty
+        ? otherPartyName!.trim()
+        : (isSellerSide ? 'this buyer' : 'this seller');
+
+    if (!isSellerSide) {
+      final farmerId = (sellerFarmerId ?? '').trim();
+      if (farmerId.isNotEmpty) {
+        return CounterpartyReportTarget(
+          type: ReportTargetType.farmer,
+          id: farmerId,
+          name: name,
+        );
+      }
+    }
+
+    if (userId.isEmpty) return null;
+
+    return CounterpartyReportTarget(
+      type: ReportTargetType.user,
+      id: userId,
+      name: name,
+    );
+  }
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final listing = json['listing'] as Map?;
@@ -63,6 +114,8 @@ class Conversation {
       barangay: farm?['barangay'] as String?,
       otherPartyName: other?['name'] as String?,
       otherPartyPhoto: other?['photo'] as String?,
+      otherPartyId: other?['id'] as String?,
+      sellerFarmerId: json['seller_farmer_id'] as String?,
       cropName: (cropIcon != null && cropIcon.isNotEmpty) ? cropIcon : categoryName,
       cropImage: listing?['image'] as String?,
       lastMessage: json['last_message'] as String?,
@@ -76,6 +129,19 @@ class Conversation {
     if (value is! String || value.isEmpty) return null;
     return DateTime.tryParse(value);
   }
+}
+
+/// A resolved "who is being reported" for the other side of a conversation.
+class CounterpartyReportTarget {
+  final ReportTargetType type;
+  final String id;
+  final String name;
+
+  const CounterpartyReportTarget({
+    required this.type,
+    required this.id,
+    required this.name,
+  });
 }
 
 /// A single chat message. `isMine` is resolved by the server against the

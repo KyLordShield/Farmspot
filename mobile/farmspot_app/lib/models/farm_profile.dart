@@ -16,6 +16,16 @@ class FarmProfileData {
   final List<String> photos;
   final List<CropListing> listings;
 
+  /// The person who runs this farm, as returned by the backend's `owner` block.
+  ///
+  /// Null when the farm's farmer row is unlinked to an account. Both ids are
+  /// kept because they are different accusations: reporting the *seller* (their
+  /// repeated behaviour as a farmer) is not the same as reporting their
+  /// *account*, and the moderator queue stores them under separate target types.
+  final String? ownerFarmerId;
+  final String? ownerUserId;
+  final String? ownerName;
+
   FarmProfileData({
     required this.id,
     required this.name,
@@ -26,10 +36,22 @@ class FarmProfileData {
     this.status = 'APPROVED',
     this.photos = const [],
     this.listings = const [],
+    this.ownerFarmerId,
+    this.ownerUserId,
+    this.ownerName,
   });
+
+  /// Whether "Report this farm" can be offered at all. A farm with no resolvable
+  /// farmer id cannot be reported, and the entry point is hidden rather than
+  /// shown and failing on submit.
+  bool get canReportOwner => (ownerFarmerId ?? '').trim().isNotEmpty;
+
+  /// The farm, or the person behind it, as a name for a report sheet subtitle.
+  String get reportSubjectName => ownerName?.trim().isNotEmpty == true ? ownerName! : name;
 
   factory FarmProfileData.fromJson(Map<String, dynamic> json) {
     final farm = json['farm'] as Map? ?? const {};
+    final owner = json['owner'] as Map?;
     final rawListings = json['listings'] as List? ?? const [];
     return FarmProfileData(
       id: farm['id'] as String? ?? '',
@@ -41,6 +63,9 @@ class FarmProfileData {
       status: farm['status'] as String? ?? 'APPROVED',
       photos:
           (farm['photos'] as List? ?? const []).whereType<String>().toList(),
+      ownerFarmerId: owner?['farmer_id'] as String?,
+      ownerUserId: owner?['user_id'] as String?,
+      ownerName: owner?['name'] as String?,
       // The flat listing shape is the same contract the buyer feed uses, so
       // the profile screen reuses Listing.toCropListing() to build the exact
       // CropListing objects CropCardGrid renders.

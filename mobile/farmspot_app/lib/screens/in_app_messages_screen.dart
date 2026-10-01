@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/conversation.dart';
+import '../models/report.dart';
 import '../services/message_service.dart';
+import '../services/report_service.dart';
 import '../theme.dart';
+import '../widgets/app_feedback.dart';
+import '../widgets/report_sheet.dart';
 
 /// In-app buyer <-> seller chat.
 ///
@@ -21,14 +25,24 @@ class InAppMessagesScreen extends StatefulWidget {
   /// Injectable for tests; the real HTTP-backed service is used when omitted.
   final MessagesGateway? gateway;
 
+  /// Injectable for tests, same reason as [gateway].
+  final ReportsGateway? reportsGateway;
+
   const InAppMessagesScreen({
     super.key,
     required this.conversation,
     this.gateway,
+    this.reportsGateway,
   });
 
   @override
   State<InAppMessagesScreen> createState() => _InAppMessagesScreenState();
+
+  /// Header action to report the other person in the thread.
+  static const Key reportCounterpartyKey = Key('chat-report-counterparty');
+
+  /// Key of a message bubble, so tests can long-press a specific message.
+  static Key bubbleKey(String messageId) => Key('chat-bubble-$messageId');
 }
 
 class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
@@ -113,6 +127,53 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     } catch (_) {
       // Offline or server hiccup — retry on the next tick.
     }
+  }
+
+  /// Long-press on a message bubble.
+  ///
+  /// Only the other side's messages are reportable. Your own message is
+  /// silently ignored rather than offered-and-rejected: the server refuses it
+  /// ("You can only report a message that was sent to you"), so a menu item
+  /// there would only ever produce an error the user cannot act on.
+  Future<void> _onMessageLongPress(ChatMessage message) async {
+    if (message.isMine) return;
+
+    // Pre-selecting the scam reason is a judgement call, not a default: in a
+    // buyer<->seller harvest chat, the reason people reach for is almost
+    // always money, and the hint text makes it obvious they can pick another.
+    await showReportSheet(
+      context,
+      targetType: ReportTargetType.message,
+      targetId: message.id,
+      subjectName: 'this message',
+      initialReason: ReportReason.fraudOrScam,
+      gateway: widget.reportsGateway,
+    );
+  }
+
+  /// Report the other person in the thread, from the header.
+  ///
+  /// This is a separate action from reporting a single message on purpose. A
+  /// buyer who is being harassed wants the seller gone from their seller's
+  /// side entirely, and a queue entry against one message does not do that.
+  Future<void> _reportCounterparty() async {
+    final target = widget.conversation.counterpartyReportTarget;
+    if (target == null) {
+      showFarmSpotSnackBar(
+        context,
+        'This person cannot be reported right now.',
+        isError: true,
+      );
+      return;
+    }
+
+    await showReportSheet(
+      context,
+      targetType: target.type,
+      targetId: target.id,
+      subjectName: target.name,
+      gateway: widget.reportsGateway,
+    );
   }
 
   Future<void> _send() async {
@@ -239,11 +300,23 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                                 fontWeight: FontWeight.w600)),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            // Context pill: which crop this thread is about.
+                   ),
+                   // Report the other person. Not every thread needs it, but
+                   // when someone is being pressured, it's one tap away in the
+                   // header. Hidden entirely if there is no resolvable id.
+                   if (widget.conversation.counterpartyReportTarget != null)
+                     IconButton(
+                       key: InAppMessagesScreen.reportCounterpartyKey,
+                       onPressed: _reportCounterparty,
+                       icon: const Icon(Icons.flag_outlined),
+                       tooltip: 'Report this person',
+                       color: Colors.black54,
+                       iconSize: 20,
+                     ),
+                 ],
+               ),
+             ),
+             // Context pill: which crop this thread is about.
             if (thread.cropName != null || thread.barangay != null)
               Container(
                 width: double.infinity,
@@ -363,10 +436,20 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
         return Column(
           children: [
             if (showDate) _DayDivider(at: message.createdAt),
-            _MessageBubble(
-              text: message.content,
-              isMine: message.isMine,
-              time: _timeLabel(message.createdAt),
+            // Long-press is the gesture for acting on a message. Wrapped
+            // rather than added to the bubble itself so the key lands on the
+            // tappable region a test can target.
+            GestureDetector(
+              key: InAppMessagesScreen.bubbleKey(message.id),
+              // Own messages are inert: the server will not accept a report on
+              // them, so there is nothing to show.
+              onLongPress:
+                  message.isMine ? null : () => _onMessageLongPress(message),
+              child: _MessageBubble(
+                text: message.content,
+                isMine: message.isMine,
+                time: _timeLabel(message.createdAt),
+              ),
             ),
           ],
         );

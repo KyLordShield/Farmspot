@@ -3,13 +3,16 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/farm_pin.dart';
+import '../models/report.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
 import '../services/location_service.dart';
 import '../services/message_service.dart';
+import '../services/report_service.dart';
 import '../theme.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/report_sheet.dart';
 import 'farm_profile_screen.dart';
 import 'in_app_messages_screen.dart';
 
@@ -19,14 +22,21 @@ class ProductDetailScreen extends StatefulWidget {
   /// Injectable for tests; the real HTTP-backed service is used when omitted.
   final MessagesGateway? gateway;
 
+  /// Injectable for tests, same reason as [gateway].
+  final ReportsGateway? reportsGateway;
+
   const ProductDetailScreen({
     super.key,
     required this.listing,
     this.gateway,
+    this.reportsGateway,
   });
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+
+  /// Key for the "Report this listing" link, used by widget tests.
+  static const Key reportListingKey = Key('product-detail-report-listing');
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
@@ -101,8 +111,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  Future<void> _callSeller() async {
-    // Fire-and-forget analytics: never awaited, so the dialer opens the moment
+  Future<void> _callSeller() async {    // Fire-and-forget analytics: never awaited, so the dialer opens the moment
     // this handler runs regardless of logging success/network speed.
     ListingService.logContact(
       listingId: listing.listingId ?? '',
@@ -112,6 +121,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
+  }
+
+  /// Whether a report link is offered at all.
+  ///
+  /// A seeded or failed-to-load listing has no real LST_ID, and the server
+  /// validates `size:6`, so offering "Report" on one would guarantee a
+  /// validation error. Hidden beats a button that cannot work.
+  bool get _canReport => (listing.listingId ?? '').trim().isNotEmpty;
+
+  Future<void> _reportListing() async {
+    final listingId = listing.listingId;
+    if (listingId == null || listingId.trim().isEmpty) return;
+
+    await showReportSheet(
+      context,
+      targetType: ReportTargetType.listing,
+      targetId: listingId,
+      subjectName: 'this ${listing.cropName} listing',
+      gateway: widget.reportsGateway,
+    );
   }
 
   /// Opens the in-app conversation with the seller for this listing.
@@ -385,6 +414,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ),
                     ),
+                    // Reporting sits below the two things a buyer actually came
+                    // here to do, and is a plain text link rather than a third
+                    // button: it must be reachable but never compete with
+                    // "Call" and "Message".
+                    if (_canReport)
+                      Align(
+                        alignment: Alignment.center,
+                        child: TextButton.icon(
+                          key: ProductDetailScreen.reportListingKey,
+                          onPressed: _reportListing,
+                          icon: const Icon(
+                            Icons.flag_outlined,
+                            size: 16,
+                            color: Colors.black45,
+                          ),
+                          label: const Text(
+                            'Report this listing',
+                            style: TextStyle(fontSize: 13, color: Colors.black54),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(0, 36),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

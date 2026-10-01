@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/farm_profile.dart';
+import '../models/report.dart';
 import '../services/farm_service.dart';
 import '../services/location_service.dart';
+import '../services/report_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/farmspot_loader.dart';
+import '../widgets/report_sheet.dart';
 import 'farm_directions_screen.dart';
 import 'product_detail_screen.dart';
 
@@ -21,14 +24,21 @@ class FarmProfileScreen extends StatefulWidget {
   /// happened — skips the visit log too.
   final FarmProfileData? initialData;
 
+  /// Injectable for tests; the real HTTP-backed service is used when omitted.
+  final ReportsGateway? reportsGateway;
+
   const FarmProfileScreen({
     super.key,
     required this.farmId,
     this.initialData,
+    this.reportsGateway,
   });
 
   @override
   State<FarmProfileScreen> createState() => _FarmProfileScreenState();
+
+  /// Key for the "Report this farm" link, used by widget tests.
+  static const Key reportFarmKey = Key('farm-profile-report');
 }
 
 class _FarmProfileScreenState extends State<FarmProfileScreen> {
@@ -174,10 +184,11 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverToBoxAdapter(
             child: Column(
-              children: [
-                _buildHeader(profile),
-                _buildStats(profile),
-              ],
+                children: [
+                  _buildHeader(profile),
+                  _buildStats(profile),
+                  _buildReportRow(profile),
+                ],
             ),
           ),
         ],
@@ -348,6 +359,46 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Report the farmer who runs this farm.
+  ///
+  /// Reports the FMR_ID, not the farm and not the user account. A farm is a
+  /// place; a farmer is a person who has a selling history a moderator can act
+  /// on across every farm they run. The farm profile is the natural place to
+  /// raise it, since that is where a buyer forms a view of the seller.
+  Widget _buildReportRow(FarmProfileData profile) {
+    if (!profile.canReportOwner) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: FarmProfileScreen.reportFarmKey,
+          onPressed: () => showReportSheet(
+            context,
+            targetType: ReportTargetType.farmer,
+            targetId: profile.ownerFarmerId!,
+            subjectName: profile.reportSubjectName,
+            gateway: widget.reportsGateway,
+          ),
+          icon: const Icon(Icons.flag_outlined, size: 16, color: Colors.black45),
+          label: Text(
+            'Report this farm',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.black54,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            minimumSize: const Size(0, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
       ),
     );
   }
