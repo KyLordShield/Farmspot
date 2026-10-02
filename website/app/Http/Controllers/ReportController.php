@@ -8,7 +8,7 @@ use App\Models\Message;
 use App\Models\Report;
 use App\Models\ReportAction;
 use App\Models\User;
-use App\Notifications\ReportActioned;
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -565,13 +565,31 @@ class ReportController extends Controller
      *
      * Reporting used to be a one-way door: the buyer pressed submit and heard
      * nothing, so they could not tell whether a moderator looked at it or
-     * whether reporting was simply broken. The app has no inbox screen yet, but
-     * the record exists and is readable, which makes the screen a rendering job
-     * rather than a data-modelling one.
+     * whether reporting was simply broken. This used to go out through Laravel's
+     * own database-channel notification, but that table cannot be de-duplicated
+     * against and is served by a separate endpoint from the app's inbox. It now
+     * writes a REPORT_UPDATE row to NOTIFICATION like every other notification,
+     * so a reporter's updates and everything else land in one list.
      */
     private function notifyReporter(Report $report, ReportAction $record, bool $applied): void
     {
-        $report->user?->notify(new ReportActioned($report, $record, $applied));
+        $reporter = $report->user;
+
+        if (! $reporter) {
+            return;
+        }
+
+        app(NotificationService::class)->notify(
+            $reporter->USR_ID,
+            'REPORT_UPDATE',
+            $applied ? 'We took action on your report' : 'A decision on your report was reversed',
+            $applied
+                ? $record->label().'.'
+                : 'We undid '.$record->label().' after a second look.',
+            // The report, not the listing: a message report has a listing id
+            // only by accident, and the reporter wants to open the report.
+            $report->RPT_ID,
+        );
     }
 
     private function findWithSubjects($id): Report

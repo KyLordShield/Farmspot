@@ -54,4 +54,25 @@ return [
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | OneSignal (push notifications)
+    |--------------------------------------------------------------------------
+    |
+    | Credentials for the push half of the notification system. Like the Groq
+    | key above, these live on the server only — the Flutter app never sees
+    | either one, it just registers its push token with OneSignal and reads
+    | /api/notifications for the inbox.
+    |
+    | When either key is blank NotificationService skips the push and writes
+    | only the inbox row, so the site keeps working before OneSignal is set up.
+    |
+    */
+
+    'onesignal' => [
+        'app_id' => env('ONESIGNAL_APP_ID'),
+        'rest_api_key' => env('ONESIGNAL_REST_API_KEY'),
+        'base_url' => env('ONESIGNAL_BASE_URL', 'https://api.onesignal.com'),
+    ],
+
 ];

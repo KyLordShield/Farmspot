@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
@@ -65,12 +66,24 @@ Route::delete('/farms/{farmId}', [FarmController::class, 'destroy']);
     // not be able to fill a moderator's queue faster than it can be read. The
     // controller also refuses an identical repeat within a day, so a retry on a
     // dropped connection does not become a second row.
-    Route::post('/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
-    // What the reporter is told about the outcome. The app has no inbox screen
-    // yet, so nothing in the app calls this — it exists so the result of a report
-    // is readable rather than only visible to a moderator.
-    Route::get('/notifications', [ReportController::class, 'notifications']);
-    Route::post('/notifications/read', [ReportController::class, 'readNotifications']);
+Route::post('/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
+
+    // The notification inbox, served from the NOTIFICATION table.
+    //
+    // This replaces the two placeholder routes that used to sit here
+    // (GET /notifications and POST /notifications/read), which read Laravel's
+    // own `notifications` table. That table cannot be de-duplicated against and
+    // was a second, parallel inbox; report updates now land here as
+    // REPORT_UPDATE rows, so everything is in one list.
+    //
+    // The two static paths are declared before the {id} route on purpose. With
+    // the wildcard first, "unread-count" and "read-all" are just another id:
+    // Laravel would try to mark a notification whose id is the string
+    // "unread-count" read, find nothing, and answer 404 to both of them.
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

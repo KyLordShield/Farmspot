@@ -8,4 +8,13 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('listings:expire')->everyFifteenMinutes();
+// Listing expiry runs hourly. Both commands are idempotent — they only touch
+// rows that still need changing and skip any listing the user has already been
+// told about — so a missed hour costs a late warning rather than a duplicate.
+Schedule::command('listings:expire')->hourly();
+
+// The 24-hour-ahead warning. Hourly rather than daily because the window is a
+// fixed 24 hours: running it once a day would skip listings that entered the
+// window between two runs entirely, since the window advances faster than the
+// interval it is checked at.
+Schedule::command('listings:notify-expiring')->hourly();

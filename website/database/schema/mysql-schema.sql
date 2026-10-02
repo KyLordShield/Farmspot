@@ -133,7 +133,7 @@ CREATE TABLE `farm` (
   `FRM_LATITUDE` decimal(10,8) NOT NULL COMMENT 'GPS latitude coordinate',
   `FRM_LONGITUDE` decimal(11,8) NOT NULL COMMENT 'GPS longitude coordinate',
   `FRM_PIN_ACTIVE` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Map visibility flag (0 or 1)',
-  `FRM_STATUS` enum('PENDING_REVIEW','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING_REVIEW',
+  `FRM_STATUS` enum('PENDING_REVIEW','APPROVED','REJECTED','ARCHIVED') NOT NULL DEFAULT 'PENDING_REVIEW',
   `FRM_CREATED_AT` datetime NOT NULL COMMENT 'Farm creation timestamp',
   `FRM_VERIFICATION_DOC_PATH` varchar(500) DEFAULT NULL,
   `FRM_FARM_CERTIFICATE_PATH` varchar(500) DEFAULT NULL,
@@ -280,6 +280,8 @@ CREATE TABLE `message` (
   `MSG_ID` char(6) NOT NULL COMMENT 'Unique message ID',
   `MSG_SEQ` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
+  `MSG_VISIBILITY` enum('VISIBLE','HIDDEN') NOT NULL DEFAULT 'VISIBLE' COMMENT 'HIDDEN by a moderator after a report. Rows are kept so the action can be undone and the history stays auditable.',
+  `MSG_HIDDEN_AT` datetime DEFAULT NULL COMMENT 'When it was hidden, for the audit trail.',
   `MSG_IS_READ` tinyint(1) NOT NULL DEFAULT 0,
   `MSG_CREATED_AT` datetime NOT NULL COMMENT 'Timestamp message was sent',
   `CONV_ID` char(6) NOT NULL COMMENT 'Conversation this message belongs to',
@@ -301,6 +303,40 @@ CREATE TABLE `migrations` (
   `migration` varchar(255) NOT NULL,
   `batch` int(11) NOT NULL,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `notification` (
+  `NOTIF_ID` char(6) NOT NULL COMMENT 'Unique notification ID',
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'User the notification is addressed to',
+  `NOTIF_TYPE` enum('LISTING_EXPIRING_SOON','LISTING_EXPIRED','LISTING_REMOVED','SELLER_DEACTIVATED','ACCOUNT_SUSPENDED','ACCOUNT_REACTIVATED','REPORT_UPDATE','HARVEST_REMINDER','SETUP_COMPLETE') NOT NULL COMMENT 'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished',
+  `NOTIF_TITLE` varchar(150) NOT NULL COMMENT 'Short headline shown in the notification list',
+  `NOTIF_BODY` varchar(300) NOT NULL COMMENT 'One short sentence of plain language for the farmer or buyer',
+  `NOTIF_REF_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Related record id (e.g. LST_ID) used for deep-linking and to avoid telling the user twice',
+  `NOTIF_IS_READ` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Whether the user has opened it (0 or 1)',
+  `NOTIF_CREATED_AT` datetime NOT NULL COMMENT 'When the notification was created',
+  PRIMARY KEY (`NOTIF_ID`),
+  KEY `IDX_NOTIFICATION_USER_READ` (`USR_ID`,`NOTIF_IS_READ`),
+  KEY `IDX_NOTIFICATION_TYPE_REF` (`NOTIF_TYPE`,`NOTIF_REF_ID`),
+  CONSTRAINT `FK_NOTIFICATION_USER` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `notifications` (
+  `id` char(36) NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `notifiable_type` varchar(255) NOT NULL,
+  `notifiable_id` char(6) NOT NULL,
+  `data` text NOT NULL,
+  `read_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `notifications_notifiable_type_notifiable_id_index` (`notifiable_type`,`notifiable_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `personal_access_tokens`;
@@ -327,18 +363,49 @@ DROP TABLE IF EXISTS `report`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `report` (
-  `RPT_ID` int(11) NOT NULL AUTO_INCREMENT,
-  `LST_ID` char(6) NOT NULL,
+  `RPT_ID` char(6) NOT NULL,
+  `LST_ID` char(6) DEFAULT NULL,
   `USR_ID` char(6) NOT NULL,
   `RPT_REASON` varchar(255) NOT NULL,
   `RPT_STATUS` enum('New','Reviewing','Resolved','Dismissed') DEFAULT 'New',
   `RPT_CREATED_AT` datetime NOT NULL DEFAULT current_timestamp(),
+  `RPT_TARGET_TYPE` enum('LISTING','MESSAGE','FARMER','USER') NOT NULL DEFAULT 'LISTING' COMMENT 'What was reported: a crop listing, a chat message, a farmer/seller account, or a plain user account.',
+  `RPT_TARGET_ID` char(6) DEFAULT NULL COMMENT 'Primary key of the reported thing in its own table: LST_ID, MSG_ID, FMR_ID or USR_ID. No foreign key, since it spans four tables.',
+  `RPT_REASON_CODE` enum('MISLEADING_INFO','FAKE_LISTING','HARASSMENT','INAPPROPRIATE_CONTENT','FRAUD_OR_SCAM','SPAM','UNSAFE_BEHAVIOR','OTHER') NOT NULL DEFAULT 'OTHER' COMMENT 'The taxonomy value. RPT_REASON keeps the human-readable label for the existing admin search and tables.',
+  `RPT_DETAILS` text DEFAULT NULL COMMENT 'Optional free text the reporter typed in the app.',
+  `RPT_UPDATED_AT` datetime DEFAULT NULL COMMENT 'When a moderator last changed the status, for "how long has this been open".',
   PRIMARY KEY (`RPT_ID`),
   KEY `FK_REPORT_LISTING` (`LST_ID`),
   KEY `FK_REPORT_USER` (`USR_ID`),
+  KEY `FK_REPORT_TARGET_TYPE` (`RPT_TARGET_TYPE`),
+  KEY `FK_REPORT_TARGET_ID` (`RPT_TARGET_ID`),
+  KEY `IDX_REPORT_STATUS_CREATED` (`RPT_STATUS`,`RPT_CREATED_AT`),
   CONSTRAINT `FK_REPORT_LISTING` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `FK_REPORT_USER` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `report_action`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `report_action` (
+  `RAC_ID` char(6) NOT NULL,
+  `RAC_SEQ` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `RPT_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `RAC_ACTION` varchar(40) NOT NULL,
+  `RAC_SUBJECT_TYPE` varchar(20) NOT NULL DEFAULT 'LISTING',
+  `RAC_SUBJECT_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `RAC_PREV` text DEFAULT NULL,
+  `RAC_NOTE` text DEFAULT NULL,
+  `RAC_BY` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `RAC_APPLIED_AT` datetime(6) NOT NULL,
+  `RAC_REVERTED_AT` datetime(6) DEFAULT NULL,
+  `RAC_REVERTED_BY` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  PRIMARY KEY (`RAC_ID`),
+  KEY `report_action_rpt_id_index` (`RPT_ID`),
+  KEY `IDX_ACTION_LIVE` (`RPT_ID`,`RAC_REVERTED_AT`),
+  KEY `IDX_ACTION_SEQ` (`RAC_SEQ`),
+  CONSTRAINT `report_action_rpt_id_foreign` FOREIGN KEY (`RPT_ID`) REFERENCES `report` (`RPT_ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `search_log`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -429,3 +496,14 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2026_09_26_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2026_09_26_000002_add_messaging_fields_to_conversation_table',9);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2026_09_26_000003_add_messaging_fields_to_message_table',9);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_09_27_000004_add_msg_seq_to_message_table',10);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2026_09_30_000001_add_archived_to_frm_status_enum',11);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2026_09_30_000002_add_targets_to_report_table',11);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2026_10_01_000003_add_action_to_report_table',11);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2026_10_01_000004_change_report_id_to_six_digits',12);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (21,'2026_10_01_000005_create_report_action_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (22,'2026_10_01_000006_add_visibility_to_message_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (23,'2026_10_01_000007_create_notifications_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2026_10_01_000008_drop_action_columns_from_report_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_10_01_000009_add_microseconds_to_report_action_timestamps',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_10_01_000010_add_sequence_to_report_action_table',14);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_10_02_000001_create_notification_table',15);

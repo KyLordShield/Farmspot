@@ -35,32 +35,6 @@ use Illuminate\Http\Request;
 class ReportController extends Controller
 {
     /**
-     * What the signed-in user has been told about their own reports.
-     *
-     * Reporting used to be a one-way door: the buyer pressed submit and heard
-     * nothing, so a report that had been actioned and closed looked exactly like
-     * one that was ignored. The app's notification bell is still a placeholder,
-     * so this endpoint is the only way that reaches a user for now — which makes
-     * building the inbox screen a rendering job rather than a data one.
-     */
-    public function notifications(Request $request)
-    {
-        return response()->json([
-            'data' => $request->user()->notifications()->limit(50)->get(),
-        ]);
-    }
-
-    /**
-     * Mark them read. Nothing calls this until the inbox screen exists, but the
-     * read state should not have to be invented later.
-     */
-    public function readNotifications(Request $request)
-    {
-        $request->user()->unreadNotifications->markAsRead();
-
-        return response()->json(['message' => 'Notifications marked as read.']);
-    }
-    /**
      * File a report.
      *
      * 201 with the new report, 200 when an identical report from the same
