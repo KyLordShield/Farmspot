@@ -91,7 +91,11 @@ class NotificationService
 
         try {
             $response = Http::withHeaders([
-                'Authorization' => 'Basic '.$restKey,
+                // "Key", not the old v1 "Basic". Every key the dashboard issues
+                // today starts with os_v2_app_ and the v2 endpoint answers 401
+                // to a Basic header, which used to mean every push was
+                // swallowed with nothing but a log line to show for it.
+                'Authorization' => 'Key '.$restKey,
                 'Content-Type' => 'application/json',
             ])
                 ->timeout(5)
