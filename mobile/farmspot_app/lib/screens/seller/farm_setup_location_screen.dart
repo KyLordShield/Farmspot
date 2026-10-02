@@ -369,7 +369,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                                     urlTemplate:
                                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                     userAgentPackageName:
-                                        'com.example.farmspot_app',
+                                        'com.cloudsync.farmspot_app',
                                   ),
                                   MarkerLayer(
                                     markers: [

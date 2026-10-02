@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "416163984684",
+    "project_id": "farmspot-db63c",
+    "storage_bucket": "farmspot-db63c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:416163984684:android:99029c72a50a7f87296889",
+        "android_client_info": {
+          "package_name": "com.cloudsync.farmspot_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAL-moU3D8oagNNFGkJ2UdEqCo4DhpCfQc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

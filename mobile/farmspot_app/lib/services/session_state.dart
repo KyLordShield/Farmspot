@@ -53,8 +53,12 @@ class SessionState extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(userPrefsKey);
-    _user = _decode(raw);
     _initialised = true;
+    // Routed through applyUser so a listener that registered before this ran
+    // (push registers its subscription off the back of it) still hears about a
+    // signed-in user restored from disk. applyUser only notifies when the record
+    // actually changed, so a signed-out launch stays silent.
+    applyUser(_decode(raw));
   }
 
   /// Applies a user record fetched from, or written to, the cache.

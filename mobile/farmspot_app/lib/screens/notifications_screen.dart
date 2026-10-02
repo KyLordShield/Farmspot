@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/app_notification.dart';
 import '../services/listing_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_service.dart';
 import '../services/session_state.dart';
 import '../theme.dart';
 import '../utils/notification_icons.dart';
@@ -57,6 +58,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     super.initState();
     _scroll.addListener(_onScroll);
     _load();
+    // Opening the inbox is the first moment the user has seen something worth
+    // being interrupted for, so this is where the push permission is worth
+    // asking for. No-op unless push is actually configured.
+    unawaited(PushService.requestPermissionIfNeeded());
   }
 
   @override

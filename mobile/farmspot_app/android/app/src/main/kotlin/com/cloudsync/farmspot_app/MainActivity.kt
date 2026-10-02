@@ -1,4 +1,4 @@
-package com.example.farmspot_app
+package com.cloudsync.farmspot_app
 
 import io.flutter.embedding.android.FlutterActivity
 

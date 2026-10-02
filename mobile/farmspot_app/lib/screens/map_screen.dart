@@ -242,7 +242,7 @@ class _MapScreenState extends State<MapScreen> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.farmspot_app',
+                userAgentPackageName: 'com.cloudsync.farmspot_app',
               ),
               MarkerLayer(
                 markers: [_buildUserMarker(), ..._farms.map(_buildFarmMarker)],

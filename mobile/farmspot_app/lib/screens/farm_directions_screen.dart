@@ -852,7 +852,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.farmspot_app',
+                userAgentPackageName: 'com.cloudsync.farmspot_app',
               ),
               if (plan != null && plan.geometry.length >= 2)
                 PolylineLayer(
