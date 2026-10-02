@@ -11,6 +11,7 @@ import '../services/farm_service.dart';
 import '../services/location_service.dart';
 import '../services/session_state.dart';
 import '../services/message_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/farmspot_loader.dart';
 import 'product_detail_screen.dart';
 import 'map_screen.dart';
@@ -27,7 +28,13 @@ class HomeScreen extends StatefulWidget {
   /// Injectable for tests; the real HTTP-backed service is used when omitted.
   final MessagesGateway? gateway;
 
-  const HomeScreen({super.key, this.gateway});
+  /// Same seam for the notification bell's badge, so a header test can pin the
+  /// count without a server. Deliberately a separate field rather than a second
+  /// gateway on one param: the two inboxes are independent, and sharing a
+  /// field is what would tempt the badge to reuse the wrong count.
+  final NotificationsGateway? notificationGateway;
+
+  const HomeScreen({super.key, this.gateway, this.notificationGateway});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -50,12 +57,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// feed never blocks on it — a failure just leaves the badge hidden.
   int _unreadMessages = 0;
 
+  /// Unread notifications, for the bell. Kept apart from [_unreadMessages] on
+  /// purpose: chat and the notification inbox are different lists with
+  /// different endpoints, so one number cannot stand in for the other.
+  int _unreadNotifications = 0;
+
   @override
   void initState() {
     super.initState();
     _loadListings();
     _loadCategories();
     _loadUnreadMessages();
+    _loadUnreadNotifications();
   }
 
   /// Counts unread messages for the Messages entry. Deliberately failure
@@ -69,6 +82,21 @@ class _HomeScreenState extends State<HomeScreen> {
         () =>
             _unreadMessages = threads.fold(0, (sum, t) => sum + t.unreadCount),
       );
+    } catch (_) {
+      // Leave the badge hidden.
+    }
+  }
+
+  /// Counts unread notifications for the bell badge. Uses the dedicated
+  /// unread-count endpoint rather than paging the inbox, so opening Home costs
+  /// one small request instead of downloading 20 rows of text. Failure tolerant
+  /// for the same reason as the messages badge: the header must survive.
+  Future<void> _loadUnreadNotifications() async {
+    try {
+      final api = widget.notificationGateway ?? NotificationService.instance;
+      final count = await api.fetchUnreadCount();
+      if (!mounted) return;
+      setState(() => _unreadNotifications = count);
     } catch (_) {
       // Leave the badge hidden.
     }
@@ -151,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // flicker.
     await _loadCategories();
     await _loadUnreadMessages();
+    await _loadUnreadNotifications();
   }
 
   /// Swaps every listing's seeded "0.4 km away" for the real haversine
@@ -379,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: Icons.chat_bubble_outline_rounded,
       tooltip: 'Messages',
       onTap: _openInbox,
-      badge: _unreadMessages > 0 ? _buildUnreadBadge() : null,
+      badge: _unreadMessages > 0 ? _buildUnreadBadge(_unreadMessages) : null,
     );
   }
 
@@ -387,15 +416,29 @@ class _HomeScreenState extends State<HomeScreen> {
     return _buildHeaderButton(
       icon: Icons.notifications_none_rounded,
       tooltip: 'Notifications',
-      onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
-      },
+      onTap: _openNotifications,
+      badge: _unreadNotifications > 0
+          ? _buildUnreadBadge(_unreadNotifications)
+          : null,
     );
   }
 
-  Widget _buildUnreadBadge() {
+  /// Opens the inbox and recounts the badge on the way back: opening rows
+  /// marks them read, so the number the header is holding is already stale by
+  /// the time the screen pops.
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            NotificationsScreen(gateway: widget.notificationGateway),
+      ),
+    );
+    if (mounted) _loadUnreadNotifications();
+  }
+
+  /// Shared by both header badges, so the two buttons cannot drift apart in
+  /// size or in the 99+ cap.
+  Widget _buildUnreadBadge(int count) {
     return Container(
       constraints: const BoxConstraints(minWidth: 16),
       height: 16,
@@ -406,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Center(
         child: Text(
-          _unreadMessages > 99 ? '99+' : '$_unreadMessages',
+          count > 99 ? '99+' : '$count',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 9,
