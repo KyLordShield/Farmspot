@@ -18,3 +18,10 @@ Schedule::command('listings:expire')->hourly();
 // window between two runs entirely, since the window advances faster than the
 // interval it is checked at.
 Schedule::command('listings:notify-expiring')->hourly();
+
+// Harvest dates are set per listing by the farmer and checked against "today or
+// tomorrow", so this has the same reason to be hourly: a crop that entered the
+// two-day window between two daily runs would be missed entirely. It is
+// de-duplicated per listing per harvest date, so running it hourly is free -
+// the second and third runs find nothing new.
+Schedule::command('listings:remind-harvest')->hourly();

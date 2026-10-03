@@ -10,8 +10,10 @@ use App\Models\FarmPhoto;
 use App\Models\FarmVisitLog;
 use App\Models\Listing;
 use App\Models\Whitelist;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -166,6 +168,29 @@ class FarmController extends Controller
             ], 500);
         }
 
+        // Announced only after the transaction has committed, so a farm that
+        // failed to save can never produce a "your farm is live" notification.
+        // Wrapped because a notification is a courtesy: if the insert or the
+        // push fails, the farmer has a live farm they were not told about, which
+        // is a far better outcome than the request 500ing and them retrying a
+        // farm that already exists.
+        if ($isWhitelisted) {
+            try {
+                app(NotificationService::class)->notifyFarmLive(
+                    $user->USR_ID,
+                    $farmId,
+                    $validated['name'],
+                    $isFirstFarm,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('[notifications] farm-live notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'farm_id' => $farmId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return response()->json([
             'message' => 'Farm created successfully.',
             'farm_id' => $farmId,
@@ -244,6 +269,11 @@ class FarmController extends Controller
 
         $listings = Listing::with(['category', 'farm', 'photos'])
             ->where('FRM_ID', $farm->FRM_ID)
+            // NOT_AVAILABLE stays visible here on purpose (a sold-out crop is
+            // still this farm's story), but a REMOVED listing must not: it was
+            // taken down by a moderator, and this is a buyer-facing endpoint, so
+            // leaving it in exposed content a seller no longer controls.
+            ->where('LST_AVAILABILITY', '!=', Listing::AVAILABILITY_REMOVED)
             ->orderByRaw("FIELD(LST_STATUS, 'AVAILABLE_NOW', 'SOON_TO_HARVEST', 'NOT_AVAILABLE')")
             ->orderByDesc('LST_CREATED_AT')
             ->get()

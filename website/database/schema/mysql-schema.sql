@@ -311,7 +311,7 @@ DROP TABLE IF EXISTS `notification`;
 CREATE TABLE `notification` (
   `NOTIF_ID` char(6) NOT NULL COMMENT 'Unique notification ID',
   `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'User the notification is addressed to',
-  `NOTIF_TYPE` enum('LISTING_EXPIRING_SOON','LISTING_EXPIRED','LISTING_REMOVED','SELLER_DEACTIVATED','ACCOUNT_SUSPENDED','ACCOUNT_REACTIVATED','REPORT_UPDATE','HARVEST_REMINDER','SETUP_COMPLETE') NOT NULL COMMENT 'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished',
+  `NOTIF_TYPE` enum('LISTING_EXPIRING_SOON','LISTING_EXPIRED','LISTING_REMOVED','SELLER_DEACTIVATED','ACCOUNT_SUSPENDED','ACCOUNT_REACTIVATED','REPORT_UPDATE','HARVEST_REMINDER','SETUP_COMPLETE','WHITELIST_APPROVED','SELLER_REACTIVATED') NOT NULL COMMENT 'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished, whitelist approval, seller reactivation',
   `NOTIF_TITLE` varchar(150) NOT NULL COMMENT 'Short headline shown in the notification list',
   `NOTIF_BODY` varchar(300) NOT NULL COMMENT 'One short sentence of plain language for the farmer or buyer',
   `NOTIF_REF_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Related record id (e.g. LST_ID) used for deep-linking and to avoid telling the user twice',
@@ -507,3 +507,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2026_10_01_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_10_01_000009_add_microseconds_to_report_action_timestamps',14);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_10_01_000010_add_sequence_to_report_action_table',14);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_10_02_000001_create_notification_table',15);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_10_03_000001_add_whitelist_and_reactivation_notification_types',16);

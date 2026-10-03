@@ -6,6 +6,7 @@ use App\Models\CropCategory;
 use App\Models\Listing;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ListingController extends Controller
 {
@@ -136,13 +137,29 @@ class ListingController extends Controller
 
         $crop = $listing->category?->CAT_NAME ?? 'produce';
 
-        app(NotificationService::class)->notify(
-            $ownerId,
-            'LISTING_REMOVED',
-            'Listing taken down',
-            "Your {$crop} listing was taken down by our team. Open it to see the details.",
-            $listing->LST_ID,
-        );
+        // The listing is already saved as REMOVED by the time this runs, so the
+        // removal must not be reported as failed just because OneSignal or the
+        // notification insert had a bad moment.
+        try {
+            app(NotificationService::class)->notify(
+                $ownerId,
+                'LISTING_REMOVED',
+                'Listing no longer on sale',
+                // Deliberately says nothing about where to go. This type is
+                // non-tappable on purpose - the listing is gone from the feed
+                // AND from My Farm, so there is nowhere to open - and the old
+                // "Open it to see the details" pointed at a screen that cannot
+                // load and left farmers convinced the app was broken.
+                "Your {$crop} listing was taken down by our team and is no longer on sale.",
+                $listing->LST_ID,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[notifications] listing removed notification failed', [
+                'lst_id' => $listing->LST_ID,
+                'usr_id' => $ownerId,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

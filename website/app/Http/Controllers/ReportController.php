@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ReportController extends Controller
@@ -199,12 +200,33 @@ class ReportController extends Controller
 
         $report = Report::findOrFail($id);
 
-        $report->update([
-            'RPT_STATUS' => $validated['status'],
-            // Stamped so the queue can show how long a report has been open.
-            // The table predates Eloquent timestamps, so this is set by hand.
-            'RPT_UPDATED_AT' => now(),
-        ]);
+        // Read before the write. Without this, re-saving the status a moderator
+        // already set looks like a change and would tell the reporter their
+        // report was resolved every time anyone opened the dropdown.
+        $previousStatus = $report->RPT_STATUS;
+
+        // Compare-and-swap: the UPDATE only lands if the status is still what we
+        // read a moment ago. Two moderators on the same report is normal at
+        // shift change, and with a plain update() both would write, both would
+        // believe they had acted, and the reporter would get two notifications
+        // for one outcome. This is the difference between "notified once per
+        // status change" being true under concurrency rather than only when one
+        // person is clicking.
+        $updated = Report::where('RPT_ID', $report->RPT_ID)
+            ->where('RPT_STATUS', $previousStatus)
+            ->update([
+                'RPT_STATUS' => $validated['status'],
+                // Stamped so the queue can show how long a report has been open.
+                // The table predates Eloquent timestamps, so this is set by hand.
+                'RPT_UPDATED_AT' => now(),
+            ]);
+
+        if (! $updated) {
+            return redirect()->route('reports.show', $report->RPT_ID)
+                ->with('error', 'Someone else just changed this status. Reload and try again.');
+        }
+
+        $this->notifyReporterOfStatus($report, $previousStatus, $validated['status']);
 
         return redirect()->route('reports')->with('success', 'Report status updated successfully.');
     }
@@ -579,17 +601,83 @@ class ReportController extends Controller
             return;
         }
 
-        app(NotificationService::class)->notify(
-            $reporter->USR_ID,
-            'REPORT_UPDATE',
-            $applied ? 'We took action on your report' : 'A decision on your report was reversed',
-            $applied
-                ? $record->label().'.'
-                : 'We undid '.$record->label().' after a second look.',
-            // The report, not the listing: a message report has a listing id
-            // only by accident, and the reporter wants to open the report.
-            $report->RPT_ID,
-        );
+        // The action is already applied and recorded by the time this runs, so a
+        // failure to notify must not surface as an error to the moderator: they
+        // would see a failed request for work that genuinely succeeded, and be
+        // tempted to apply the action again.
+        try {
+            app(NotificationService::class)->notify(
+                $reporter->USR_ID,
+                'REPORT_UPDATE',
+                $applied ? 'We took action on your report' : 'A decision on your report was reversed',
+                $applied
+                    ? $record->label().'.'
+                    : 'We undid '.$record->label().' after a second look.',
+                // The report, not the listing: a message report has a listing id
+                // only by accident, and the reporter wants to open the report.
+                $report->RPT_ID,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[notifications] report action notification failed', [
+                'rpt_id' => $report->RPT_ID,
+                'usr_id' => $reporter->USR_ID,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Tell the reporter their report reached a decision.
+     *
+     * Only Resolved and Dismissed notify. Reviewing is the state a report passes
+     * through while a moderator reads it, and a buyer who filed a report and was
+     * told "we're reviewing it" has learned nothing they were not already
+     * waiting to hear - while an admin moving a report into Reviewing to clear
+     * the queue would otherwise generate a notification per report.
+     *
+     * A no-op change is not a change: the caller's compare-and-swap has already
+     * established that the status genuinely moved, so there is nothing left to
+     * re-test here.
+     */
+    private function notifyReporterOfStatus(Report $report, string $previousStatus, string $newStatus): void
+    {
+        if ($newStatus === $previousStatus) {
+            return;
+        }
+
+        $copy = match ($newStatus) {
+            'Resolved' => 'We resolved your report. Thanks for flagging it.',
+            'Dismissed' => 'We reviewed your report and did not act on it.',
+            default => null,
+        };
+
+        // null for New/Reviewing, which is the "do not notify" case.
+        if ($copy === null) {
+            return;
+        }
+
+        $reporter = $report->user;
+
+        if (! $reporter) {
+            return;
+        }
+
+        try {
+            app(NotificationService::class)->notify(
+                $reporter->USR_ID,
+                'REPORT_UPDATE',
+                $newStatus === 'Resolved' ? 'Your report was resolved' : 'Your report was dismissed',
+                $copy,
+                $report->RPT_ID,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[notifications] report status notification failed', [
+                'rpt_id' => $report->RPT_ID,
+                'usr_id' => $reporter->USR_ID,
+                'status' => $newStatus,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function findWithSubjects($id): Report

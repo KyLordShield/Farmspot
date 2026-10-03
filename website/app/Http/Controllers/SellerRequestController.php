@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Farm;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SellerRequestController extends Controller
 {
@@ -85,6 +87,40 @@ class SellerRequestController extends Controller
         } catch (\Throwable $e) {
             return redirect()->route('seller-requests')
                 ->with('error', 'Failed to approve seller request.');
+        }
+
+        // This is the path a moderator actually uses: the admin panel posts to
+        // the web route, not the API one. The approval had been happening here
+        // with no notification at all, so the seller was told they were a farmer
+        // by nothing - no inbox row, no push, and no way to find out.
+        //
+        // Routed through the same NotificationService::notifyFarmLive() the API
+        // controller uses, deliberately: the wording lives in one place, and the
+        // de-duplication is on the farm id, so even if both routes somehow ran
+        // for the same farm the farmer is told once rather than twice.
+        if ($user) {
+            try {
+                $isFirstFarm = $farmer->farms()
+                    ->orderBy('FRM_CREATED_AT')
+                    ->orderBy('FRM_ID')
+                    ->first()?->FRM_ID === $farm->FRM_ID;
+
+                app(NotificationService::class)->notifyFarmLive(
+                    $user->USR_ID,
+                    $farm->FRM_ID,
+                    $farm->FRM_NAME,
+                    $isFirstFarm,
+                );
+            } catch (\Throwable $e) {
+                // The approval is already committed. A moderator who sees this
+                // request fail would reasonably try approving again, and the
+                // second attempt would be rejected as "not pending review".
+                Log::warning('[notifications] farm-live notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'farm_id' => $farm->FRM_ID,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         return redirect()->route('seller-requests')

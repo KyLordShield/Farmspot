@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Farm;
 use App\Models\Farmer;
 use App\Models\User;
+use App\Models\UserNotification;
 use App\Models\Whitelist;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class WhitelistController extends Controller
@@ -65,6 +67,33 @@ class WhitelistController extends Controller
             'USR_DEACTIVATED_ID' => null,
         ]);
 
+        // The row above is new and active by construction - that is the only
+        // way store() ends - so the remaining question is whether anybody is
+        // actually behind the number. A number added for someone who has not
+        // signed up yet is the normal case here and has nobody to tell.
+        $user = $this->userForNumber($validated['WLST_MOBILE_NUMBER']);
+
+        if ($user) {
+            try {
+                app(NotificationService::class)->notify(
+                    $user->USR_ID,
+                    'WHITELIST_APPROVED',
+                    'You are whitelisted',
+                    'Your mobile number is now approved to sell. You can set up your farm and start posting produce.',
+                );
+            } catch (\Throwable $e) {
+                // The whitelist row is already saved, which is what actually
+                // unblocks them. Failing the redirect here would leave an admin
+                // re-submitting a number the validation then rejects as
+                // "already whitelisted".
+                Log::warning('[notifications] whitelist approval notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'wlst_id' => $id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return redirect()->route('whitelist')->with('success', 'Mobile number added to whitelist successfully.');
     }
 
@@ -93,9 +122,77 @@ class WhitelistController extends Controller
         // the one that turned it off.
         if ($wasActive) {
             $this->deactivateSellerFor($whitelist->WLST_MOBILE_NUMBER);
+        } else {
+            $this->reactivateSellerFor($whitelist->WLST_MOBILE_NUMBER);
         }
 
         return redirect()->route('whitelist')->with('success', $message);
+    }
+
+    /**
+     * Tell a previously de-activated seller that their access is back.
+     *
+     * This notifies, and nothing else. USR_IS_SELLER and FMR_SELLER_MODE_ACTIVE
+     * stay exactly as deactivation left them and the map pins stay hidden,
+     * because flipping those back on is a decision about their catalogue, not
+     * about their authorisation. Whitelisting someone makes them allowed to
+     * sell; it does not decide they have produce to sell today.
+     *
+     * "Previously de-activated" is taken from the SELLER_DEACTIVATED row this
+     * same controller wrote when it turned their seller mode off, which is the
+     * only record that they had it to lose. Without that row there is nothing
+     * to restore - a number whitelisted for someone who never sold anything
+     * should not be told their selling access was reinstated.
+     *
+     * The one gap this has is narrow: if the deactivation notification itself
+     * failed to write, there is no row to match and they are not told. The
+     * deactivation still happened, so they are still off; they just do not get
+     * the courtesy message.
+     */
+    private function reactivateSellerFor(string $mobileNumber): void
+    {
+        $user = $this->userForNumber($mobileNumber);
+
+        if (! $user) {
+            return;
+        }
+
+        $wasDeactivated = UserNotification::where('USR_ID', $user->USR_ID)
+            ->where('NOTIF_TYPE', 'SELLER_DEACTIVATED')
+            ->exists();
+
+        if (! $wasDeactivated) {
+            return;
+        }
+
+        try {
+            app(NotificationService::class)->notify(
+                $user->USR_ID,
+                'SELLER_REACTIVATED',
+                'Your seller access is restored',
+                'Your mobile number is approved again. Turn your seller mode back on when you are ready to post produce.',
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[notifications] seller reactivation notification failed', [
+                'usr_id' => $user->USR_ID,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * The user behind a whitelist mobile number, if there is one.
+     *
+     * Exact match on purpose, and shared by all three callers so the gate on
+     * becoming a seller cannot disagree with the notifications about it: if
+     * FarmController@store lets a number through this exact comparison, the
+     * person it belongs to is the person we tell. Normalising formats here
+     * would make this method find users the seller gate rejects, which is how
+     * you end up congratulating someone who still cannot list.
+     */
+    private function userForNumber(string $mobileNumber): ?User
+    {
+        return User::where('USR_MOBILE_NUMBER', $mobileNumber)->first();
     }
 
     /**
@@ -121,7 +218,7 @@ class WhitelistController extends Controller
      */
     private function deactivateSellerFor(string $mobileNumber): void
     {
-        $user = User::where('USR_MOBILE_NUMBER', $mobileNumber)->first();
+        $user = $this->userForNumber($mobileNumber);
 
         if (! $user) {
             return;
@@ -156,12 +253,23 @@ class WhitelistController extends Controller
             }
         });
 
-        app(NotificationService::class)->notify(
-            $user->USR_ID,
-            'SELLER_DEACTIVATED',
-            'Seller mode turned off',
-            'Your seller mode was turned off. Your listings are still saved. Contact the FarmSpot team if you think this is a mistake.',
-        );
+        // The flags are already off and saved at this point. Telling the person
+        // is a courtesy, so a failure here is logged and swallowed rather than
+        // allowed to escape - the deactivation must not be undone, and the
+        // admin must not see a 500 for work that succeeded.
+        try {
+            app(NotificationService::class)->notify(
+                $user->USR_ID,
+                'SELLER_DEACTIVATED',
+                'Seller mode turned off',
+                'Your seller mode was turned off. Your listings are still saved. Contact the FarmSpot team if you think this is a mistake.',
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[notifications] seller deactivation notification failed', [
+                'usr_id' => $user->USR_ID,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function show($id)

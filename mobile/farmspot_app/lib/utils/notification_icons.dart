@@ -38,11 +38,15 @@ enum NotificationTarget { listing, profile, myFarm, none }
         color: AppColors.errorTerracotta,
         target: NotificationTarget.listing,
       );
+    // The one LISTING_* type with no destination. The listing is gone from the
+    // feed AND from My Farm, so the product detail screen can only fail here —
+    // a dead tap that leaves the farmer wondering whether the app broke. Tapping
+    // it just marks it read, which is the receipt they actually need.
     case 'LISTING_REMOVED':
       return (
         icon: Icons.remove_circle_outline_rounded,
         color: AppColors.errorTerracotta,
-        target: NotificationTarget.listing,
+        target: NotificationTarget.none,
       );
 
     // Account state. These are about the person, not a record, so they open the
@@ -88,6 +92,26 @@ enum NotificationTarget { listing, profile, myFarm, none }
         icon: Icons.task_alt_rounded,
         color: AppColors.primaryGreen,
         target: NotificationTarget.myFarm,
+      );
+
+    // Whitelist gate. Both are about the person being allowed to sell, and both
+    // point at the profile, which is where seller mode is switched on — the
+    // backend deliberately does not flip those flags for them (see
+    // WhitelistController), so the profile is exactly where the next step is.
+    case 'WHITELIST_APPROVED':
+      return (
+        icon: Icons.verified_user_rounded,
+        color: AppColors.primaryGreen,
+        target: NotificationTarget.profile,
+      );
+    // Distinct icon from WHITELIST_APPROVED on purpose: both arrive green and
+    // both are about selling, and reusing one icon would make the pair read as
+    // the same event twice.
+    case 'SELLER_REACTIVATED':
+      return (
+        icon: Icons.storefront_rounded,
+        color: AppColors.infoSage,
+        target: NotificationTarget.profile,
       );
 
     default:

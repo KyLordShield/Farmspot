@@ -65,6 +65,8 @@ class UserNotification extends Model
         'REPORT_UPDATE',
         'HARVEST_REMINDER',
         'SETUP_COMPLETE',
+        'WHITELIST_APPROVED',
+        'SELLER_REACTIVATED',
     ];
 
     public function user()

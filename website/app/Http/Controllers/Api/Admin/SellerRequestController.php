@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Farm;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SellerRequestController extends Controller
 {
@@ -66,6 +68,35 @@ class SellerRequestController extends Controller
             return response()->json([
                 'message' => 'Failed to approve seller request.',
             ], 500);
+        }
+
+        // This is the second way a farm goes live: a non-whitelisted farmer submits
+        // PENDING_REVIEW and an admin approves it here. Same notification as the
+        // instant-approval path in FarmController@store, and the same
+        // first-vs-additional test — is this the farmer's earliest farm?
+        $isFirstFarm = $farmer->farms()
+            ->orderBy('FRM_CREATED_AT')
+            ->orderBy('FRM_ID')
+            ->first()?->FRM_ID === $farm->FRM_ID;
+
+        if ($user) {
+            try {
+                app(NotificationService::class)->notifyFarmLive(
+                    $user->USR_ID,
+                    $farm->FRM_ID,
+                    $farm->FRM_NAME,
+                    $isFirstFarm,
+                );
+            } catch (\Throwable $e) {
+                // The approval itself has already committed. Losing the
+                // notification is regrettable; unwinding the approval because
+                // OneSignal was down would leave a farm the admin rejected.
+                Log::warning('[notifications] farm-live notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'farm_id' => $farm->FRM_ID,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([

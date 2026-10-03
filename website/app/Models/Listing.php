@@ -63,4 +63,29 @@ class Listing extends Model
         return $this->hasOne(ListingPhoto::class, 'LST_ID', 'LST_ID')
             ->where('LPHOTO_IS_PRIMARY', 1);
     }
+
+    /**
+     * LST_AVAILABILITY = 'REMOVED' is a moderation verdict, not a seller state.
+     * Once set — by an admin in the web panel, or by a report taken down — the
+     * listing leaves the buyer feed and the seller's My Farm, and no seller-side
+     * action may bring it back. Note this is NOT the same as LST_STATUS:
+     * NOT_AVAILABLE is a farmer saying "this crop is gone", which is still
+     * shown on the public farm profile; REMOVED is us saying it cannot be
+     * edited, so it must not be.
+     */
+    public const AVAILABILITY_REMOVED = 'REMOVED';
+
+    /**
+     * The one piece of copy for every endpoint that refuses to act on a removed
+     * listing. Kept here rather than repeated per controller so the farmer sees
+     * the same sentence whichever route they hit, and cannot end up with two
+     * different explanations for the same state.
+     */
+    public const REMOVED_EDIT_MESSAGE =
+        'This listing was removed and can no longer be edited.';
+
+    public function isRemoved(): bool
+    {
+        return $this->LST_AVAILABILITY === self::AVAILABILITY_REMOVED;
+    }
 }

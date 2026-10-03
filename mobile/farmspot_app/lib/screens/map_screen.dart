@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/farmspot_loader.dart';
+import '../widgets/map_tile_layer.dart';
 import 'farm_directions_screen.dart';
 import 'farm_profile_screen.dart';
 import 'home_screen.dart';
@@ -233,21 +234,20 @@ class _MapScreenState extends State<MapScreen> {
     return Stack(
       children: [
         Positioned.fill(
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: _position,
-              initialZoom: _initialZoom,
-              onTap: (_, _) => setState(() => _selectedFarm = null),
+          child: MapLoadingBackground(
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: _position,
+                initialZoom: _initialZoom,
+                onTap: (_, _) => setState(() => _selectedFarm = null),
+              ),
+              children: [
+                const MapTileLayer(),
+                MarkerLayer(
+                  markers: [_buildUserMarker(), ..._farms.map(_buildFarmMarker)],
+                ),
+              ],
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.cloudsync.farmspot_app',
-              ),
-              MarkerLayer(
-                markers: [_buildUserMarker(), ..._farms.map(_buildFarmMarker)],
-              ),
-            ],
           ),
         ),
         if (_loadingFarms || _loadingPosition)

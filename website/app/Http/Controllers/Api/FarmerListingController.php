@@ -20,6 +20,12 @@ class FarmerListingController extends Controller
      * List ALL listings belonging to the authenticated farmer — any
      * LST_STATUS / LST_AVAILABILITY (unlike the buyer-facing feed which is
      * active-only). Includes the farm and category relations.
+     *
+     * REMOVED is the one exclusion, and it is the whole point of this endpoint
+     * after moderation: an admin-removed listing is not the farmer's to edit,
+     * so keeping it here only offers a dead row that fails on every action.
+     * The LISTING_REMOVED notification tells them what happened; the listing
+     * itself is no longer theirs to manage.
      */
     public function myListings(Request $request)
     {
@@ -35,6 +41,7 @@ class FarmerListingController extends Controller
 
         $listings = Listing::with(['farm', 'category', 'photos'])
             ->where('FMR_ID', $farmer->FMR_ID)
+            ->where('LST_AVAILABILITY', '!=', Listing::AVAILABILITY_REMOVED)
             ->orderByDesc('LST_CREATED_AT')
             ->get()
             ->map(fn ($listing) => $this->formatListing($listing));
@@ -68,6 +75,10 @@ class FarmerListingController extends Controller
             return response()->json([
                 'message' => 'Listing not found or does not belong to you.',
             ], 403);
+        }
+
+        if ($removed = $this->removedListingGuard($listing)) {
+            return $removed;
         }
 
         $validated = $request->validate([
@@ -116,6 +127,10 @@ class FarmerListingController extends Controller
             return response()->json([
                 'message' => 'You do not own this listing.',
             ], 403);
+        }
+
+        if ($removed = $this->removedListingGuard($listing)) {
+            return $removed;
         }
 
         $validated = $request->validate([
@@ -183,6 +198,10 @@ class FarmerListingController extends Controller
             return response()->json([
                 'message' => 'You do not own this listing.',
             ], 403);
+        }
+
+        if ($removed = $this->removedListingGuard($listing)) {
+            return $removed;
         }
 
         $request->validate([
@@ -263,6 +282,10 @@ class FarmerListingController extends Controller
             ], 403);
         }
 
+        if ($removed = $this->removedListingGuard($listing)) {
+            return $removed;
+        }
+
         if ($listing->photos->isNotEmpty()) {
             foreach ($listing->photos as $photo) {
                 CloudinaryImage::deleteByUrl($photo->LPHOTO_FILE_PATH);
@@ -277,6 +300,27 @@ class FarmerListingController extends Controller
             'message' => 'Listing deleted successfully.',
             'deleted_id' => $listing->LST_ID,
         ]);
+    }
+
+    /**
+     * Refuse to act on a listing a moderator removed. Returns null when the
+     * listing is still the farmer's to edit, or the ready-to-return 403 when it
+     * is not.
+     *
+     * 403 rather than 404 on purpose: the farmer already knows this listing
+     * exists, and a 404 would send them hunting for a bug. Every call site runs
+     * this AFTER the ownership check, so the guard can never be used to probe
+     * whether somebody else's removed listing exists.
+     */
+    private function removedListingGuard(Listing $listing)
+    {
+        if (! $listing->isRemoved()) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => Listing::REMOVED_EDIT_MESSAGE,
+        ], 403);
     }
 
     private function uniqueId($table, $column): string

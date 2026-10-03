@@ -15,6 +15,7 @@ import '../services/listing_service.dart';
 import '../services/routing_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/map_tile_layer.dart';
 
 /// Cebu City — the buyer position used whenever GPS is unavailable or denied.
 /// Never throws: any geolocator failure falls back to this center so routing
@@ -846,37 +847,36 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     return Stack(
       children: [
         Positioned.fill(
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(initialCenter: _current, initialZoom: 14),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.cloudsync.farmspot_app',
-              ),
-              if (plan != null && plan.geometry.length >= 2)
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: plan.geometry,
-                      strokeWidth: 5,
-                      color: AppColors.primaryGreen,
-                    ),
+          child: MapLoadingBackground(
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(initialCenter: _current, initialZoom: 14),
+              children: [
+                const MapTileLayer(),
+                if (plan != null && plan.geometry.length >= 2)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: plan.geometry,
+                        strokeWidth: 5,
+                        color: AppColors.primaryGreen,
+                      ),
+                    ],
+                  ),
+                MarkerLayer(
+                  // Counter-rotate markers so the arrow always faces "up" — the
+                  // travel direction, since the camera is rotated heading-up.
+                  rotate: true,
+                  markers: [
+                    if (_step == _Step.journey)
+                      _userMarker(_live)
+                    else
+                      _userMarker(_current),
+                    if (_farmPos != null) _destinationMarker(_farmPos!),
                   ],
                 ),
-              MarkerLayer(
-                // Counter-rotate markers so the arrow always faces "up" — the
-                // travel direction, since the camera is rotated heading-up.
-                rotate: true,
-                markers: [
-                  if (_step == _Step.journey)
-                    _userMarker(_live)
-                  else
-                    _userMarker(_current),
-                  if (_farmPos != null) _destinationMarker(_farmPos!),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (_loading)

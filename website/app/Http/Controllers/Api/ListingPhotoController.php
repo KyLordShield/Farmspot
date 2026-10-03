@@ -173,6 +173,11 @@ class ListingPhotoController extends Controller
     /**
      * Resolve the listing and enforce that the authenticated seller owns it.
      * Returns [Listing, null] on success or [null, JsonResponse] on failure.
+     *
+     * Also refuses a listing a moderator removed. A gallery is still an edit to
+     * the listing, so leaving photos editable on a REMOVED listing would let a
+     * farmer keep re-decorating something they no longer own — and, because the
+     * thumbnail write below touches LST_IMAGE, quietly mutate it too.
      */
     private function resolveOwnedListing(Request $request, $listingId): array
     {
@@ -186,6 +191,12 @@ class ListingPhotoController extends Controller
 
         if (! $farmer || $listing->FMR_ID !== $farmer->FMR_ID) {
             return [null, response()->json(['message' => 'You do not own this listing.'], 403)];
+        }
+
+        if ($listing->isRemoved()) {
+            return [null, response()->json([
+                'message' => Listing::REMOVED_EDIT_MESSAGE,
+            ], 403)];
         }
 
         return [$listing, null];

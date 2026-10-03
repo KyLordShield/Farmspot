@@ -10,6 +10,7 @@ import '../../../services/farm_service.dart';
 import '../../../services/geocoding_service.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
+import '../../../widgets/map_tile_layer.dart';
 import 'farm_setup_complete_screen.dart';
 
 class FarmSetupLocationScreen extends StatefulWidget {
@@ -354,44 +355,41 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                         child: Stack(
                           children: [
                             Positioned.fill(
-                              child: FlutterMap(
-                                mapController: _mapController,
-                                options: MapOptions(
-                                  initialCenter: _fallbackCenter,
-                                  initialZoom: _initialZoom,
-                                  onTap: _onMapTapped,
-                                  interactionOptions: InteractionOptions(
-                                    flags: _interactionFlags,
+                              child: MapLoadingBackground(
+                                child: FlutterMap(
+                                  mapController: _mapController,
+                                  options: MapOptions(
+                                    initialCenter: _fallbackCenter,
+                                    initialZoom: _initialZoom,
+                                    onTap: _onMapTapped,
+                                    interactionOptions: InteractionOptions(
+                                      flags: _interactionFlags,
+                                    ),
                                   ),
-                                ),
-                                children: [
-                                  TileLayer(
-                                    urlTemplate:
-                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                    userAgentPackageName:
-                                        'com.cloudsync.farmspot_app',
-                                  ),
-                                  MarkerLayer(
-                                    markers: [
-                                      Marker(
-                                        point: _markerPosition,
-                                        width: 44,
-                                        height: 44,
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onPanStart: _onMarkerDragStart,
-                                          onPanUpdate: _onMarkerDragUpdate,
-                                          onPanEnd: _onMarkerDragEnd,
-                                          child: const Icon(
-                                            Icons.location_pin,
-                                            color: Colors.redAccent,
-                                            size: 44,
+                                  children: [
+                                    const MapTileLayer(),
+                                    MarkerLayer(
+                                      markers: [
+                                        Marker(
+                                          point: _markerPosition,
+                                          width: 44,
+                                          height: 44,
+                                          child: GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onPanStart: _onMarkerDragStart,
+                                            onPanUpdate: _onMarkerDragUpdate,
+                                            onPanEnd: _onMarkerDragEnd,
+                                            child: const Icon(
+                                              Icons.location_pin,
+                                              color: Colors.redAccent,
+                                              size: 44,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             if (_isLocating)
