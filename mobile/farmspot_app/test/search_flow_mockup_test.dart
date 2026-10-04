@@ -219,8 +219,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     }
 
-    testWidgets('image-search groups merge alias terms (kamatis + tomato) '
-        'into one deduped section', (tester) async {
+    testWidgets('image-search merges alias terms (kamatis + tomato) into one '
+        'mixed list', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -231,6 +231,7 @@ void main() {
             groups: const [
               SearchCropGroup(title: 'Tomato', terms: ['kamatis', 'tomato']),
             ],
+            detectionConfidences: const [('Tomato', 0.88)],
             loadResults: (term) async => [
               _listing('L1', 'Kamatis', 'Bayan Farm', farmId: 'F1'),
               if (term == 'tomato')
@@ -238,16 +239,21 @@ void main() {
             ],
             loadPosition: () async => _userPos,
             loadFarms: () async => [_pin('F1', 10.3178, 123.8742), _pin('F2', 10.3178, 123.8742)],
+            loadBuyerPosition: () async => _userPos,
           ),
         ),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      // English section title, and BOTH spellings show together.
-      expect(find.text('Tomato'), findsOneWidget);
+      // BOTH spellings show together in the single mixed list. Confidence is
+      // deliberately NOT surfaced: buyers cannot act on it, so it stays
+      // internal to ranking.
       expect(find.text('Bayan Farm'), findsOneWidget);
       expect(find.text('Upland Farm'), findsOneWidget);
+      expect(find.textContaining('88%'), findsNothing);
+      // No per-crop section header in the mixed list.
+      expect(find.text('Near you'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -437,6 +443,67 @@ void main() {
         }
       }
     });
+
+    testWidgets('image-search cards with an availability badge never overflow',
+        (tester) async {
+      // The badge sits over the photo, so the multi-crop card layout gets the
+      // same overflow sweep as the plain text-search card above.
+      const groups = [
+        SearchCropGroup(title: 'Cabbage', terms: ['cabbage']),
+      ];
+      for (final width in [360.0, 1280.0]) {
+        for (final scale in [1.0, 1.3]) {
+          await tester.binding.setSurfaceSize(Size(width, 900));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: SearchResultsScreen(
+                query: 'Cabbage',
+                groups: groups,
+                loadResults: (term) async => [
+                  _listing(
+                    'L1',
+                    'Cabbage',
+                    "Little A's Farm",
+                    status: 'AVAILABLE_NOW',
+                    farmId: 'F1',
+                  ),
+                  _listing(
+                    'L2',
+                    'Cabbage',
+                    'Big Ben Farm',
+                    status: 'SOON_TO_HARVEST',
+                    farmId: 'F2',
+                  ),
+                ],
+                loadPosition: () async => _userPos,
+                loadFarms: () async => [
+                  _pin('F1', _userPos.latitude, _userPos.longitude),
+                  _pin('F2', _userPos.latitude + 0.01, _userPos.longitude),
+                ],
+                loadBuyerPosition: () async => _userPos,
+              ),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'width $width, text scale $scale must not overflow',
+          );
+          // Same labels Home shows, in the same place.
+          expect(find.text('Available Now'), findsOneWidget);
+          expect(find.text('Soon to Harvest'), findsOneWidget);
+          // Confidence stays out of the UI entirely.
+          expect(find.textContaining('%'), findsNothing);
+        }
+      }
+    });
   });
 
   group('ImageSearchScreen (Screen 3) — capture -> identify -> results', () {
@@ -479,24 +546,23 @@ void main() {
           },
           loadPosition: () async => _userPos,
           loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
+          // Injected because the real one calls geolocator, whose platform
+          // channel never answers under the test's fake clock. Without this
+          // the results screen would sit on the loader forever.
+          loadBuyerPosition: () async => _userPos,
         ),
       ));
 
       await tester.tap(find.text('Camera'));
       await tester.pump();
-      expect(find.text('AI identifying crop...'), findsOneWidget);
+      expect(find.text('Scanning image...'), findsOneWidget);
 
       // Scan completes -> live results screen (no "detected" interstitial).
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byType(SearchResultsScreen), findsOneWidget);
-      // Multi-crop header + one section per detected crop.
+      // ONE summary line for the whole photo, not a section per crop.
       expect(find.text('2 crops found in your photo'), findsOneWidget);
-
-      // One section header per crop, titled from the group rather than from
-      // whatever casing the model happened to emit.
-      expect(find.text('Carrots'), findsOneWidget);
-      expect(find.text('Lettuce'), findsOneWidget);
 
       // "Lettuce" fans out over its aliases; "Carrots" is an unknown label so
       // it is searched verbatim. Three searches, three cards rendered.
@@ -504,6 +570,12 @@ void main() {
       expect(find.text('Seller Carrots'), findsOneWidget);
       expect(find.text('Seller lettuce'), findsOneWidget);
       expect(find.text('Seller letchuce'), findsOneWidget);
+
+      // All three listings render as separate cards (the fixture gives each alias
+      // its own listing id) and none of them leak a confidence percentage,
+      // which is for ranking only.
+      expect(find.byType(SearchResultCard), findsNWidgets(3));
+      expect(find.textContaining('%'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 

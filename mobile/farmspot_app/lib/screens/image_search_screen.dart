@@ -33,6 +33,11 @@ class ImageSearchScreen extends StatefulWidget {
   final Future<LatLng> Function()? loadPosition;
   final Future<List<FarmPin>> Function()? loadFarms;
 
+  /// Real GPS fix for the distance sort, or null when location is
+  /// unavailable (image search then falls back to confidence order).
+  /// Test seam; defaults to LocationService.tryBuyerPosition.
+  final Future<LatLng?> Function()? loadBuyerPosition;
+
   const ImageSearchScreen({
     super.key,
     this.pickImage,
@@ -40,6 +45,7 @@ class ImageSearchScreen extends StatefulWidget {
     this.loadResults,
     this.loadPosition,
     this.loadFarms,
+    this.loadBuyerPosition,
   });
 
   @override
@@ -182,7 +188,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                 ),
                 const SizedBox(height: 14),
                 const Text(
-                  'AI identifying crop...',
+                  'Scanning image...',
                   style: TextStyle(
                     color: Colors.black87,
                     fontSize: 15,
@@ -252,18 +258,26 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
       return;
     }
 
-    // Every found crop becomes a results section (with its alias terms so a
-    // "kamatis" also surfaces listings titled "Tomato"), each section sorted
-    // nearest-first inside SearchResultsScreen.
+    // Every found crop contributes to ONE mixed results list (with its alias
+    // terms so a "kamatis" also surfaces listings titled "Tomato"), sorted
+    // nearest-farm-first inside SearchResultsScreen. Detection confidences
+    // ride along so each card can show which crop matched and how sure the
+    // model was.
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SearchResultsScreen(
           query: crops.first.name,
           groups: [for (final crop in crops) SearchCropGroup.resolve(crop.name)],
+          detectionConfidences: [
+            for (final crop in crops)
+              (SearchCropGroup.resolve(crop.name).title, crop.confidence),
+          ],
           loadResults:
               widget.loadResults ?? (t) => ListingService.fetchListings(search: t),
           loadPosition: widget.loadPosition ?? LocationService.defaultBuyerPosition,
           loadFarms: widget.loadFarms ?? FarmService.fetchPublicFarms,
+          loadBuyerPosition: widget.loadBuyerPosition ??
+              LocationService.tryBuyerPosition,
         ),
       ),
     );

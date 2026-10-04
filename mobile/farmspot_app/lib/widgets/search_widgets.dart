@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import 'home_widgets.dart' show cropStatusData;
 
 /// A single search result card payload. Used both by the image-search mockup
 /// (placeholder-only entries) and — for the live Search screen — built from a
@@ -13,6 +14,10 @@ class SearchResultItem {
 
   /// Pre-formatted distance label, e.g. "0.4 km away".
   final String distance;
+
+  /// Listing status, used for the availability badge on the card. Null hides
+  /// the badge, which is how the text/category search behaves today.
+  final String? status;
 
   final IconData icon;
 
@@ -28,6 +33,7 @@ class SearchResultItem {
     required this.crop,
     required this.seller,
     required this.distance,
+    this.status,
     this.icon = Icons.eco,
     this.imageUrl,
     this.listingId,
@@ -106,10 +112,20 @@ class SearchResultGrid extends StatelessWidget {
   final List<SearchResultItem> items;
   final void Function(SearchResultItem)? onTap;
 
+  /// Gap between cards. Image search tightens this so photos fill the screen;
+  /// text search keeps the roomier default so its sparser cards breathe.
+  final double gap;
+
+  /// Width/height of each cell. Smaller means taller, so a bigger photo for
+  /// the same footer text.
+  final double cardAspectRatio;
+
   const SearchResultGrid({
     super.key,
     required this.items,
     this.onTap,
+    this.gap = 12,
+    this.cardAspectRatio = 0.78,
   });
 
   @override
@@ -118,11 +134,11 @@ class SearchResultGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.88,
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
+        childAspectRatio: cardAspectRatio,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -211,6 +227,14 @@ class SearchResultCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    // Availability badge, same top-left pill Home uses on its
+                    // crop cards so the two grids read identically.
+                    if (item.status != null)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: _StatusBadge(status: item.status!),
+                      ),
                     Positioned(
                       right: 8,
                       bottom: 8,
@@ -294,7 +318,10 @@ class SearchResultCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                ],
+                  // Detection confidence chip, image search only. Sits under
+                  // the farm name so the buyer can see which detected crop
+                  // pulled this listing in and how sure the model was.
+                  ],
               ),
             ),
           ],
@@ -415,6 +442,37 @@ class _SegmentedSort extends StatelessWidget {
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Availability pill overlaid on a result card's photo. Delegates the
+/// label + colour mapping to [cropStatusData] so the badge matches Home and
+/// the seller flow exactly rather than restating the three cases here.
+class _StatusBadge extends StatelessWidget {
+  final String status;
+
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = cropStatusData(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: data.color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        data.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
