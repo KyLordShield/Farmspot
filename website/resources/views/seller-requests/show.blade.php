@@ -123,11 +123,17 @@
         <div class="row g-3 photo-grid">
             @foreach($farm->photos as $photo)
                 <div class="col-6 col-md-3">
-                    <a href="{{ $photo->FPHOTO_FILE_PATH }}" target="_blank">
+                    <button type="button"
+                            class="btn-photo"
+                            data-bs-toggle="modal"
+                            data-bs-target="#documentModal"
+                            data-document-url="{{ $photo->FPHOTO_FILE_PATH }}"
+                            data-document-title="Farm photo"
+                            data-document-kind="image">
                         <img src="{{ $photo->FPHOTO_FILE_PATH }}"
                              alt="Farm photo"
                              class="photo-thumb">
-                    </a>
+                    </button>
                 </div>
             @endforeach
         </div>
@@ -135,37 +141,48 @@
 </div>
 @endif
 
-@if($farm->FRM_VERIFICATION_DOC_PATH)
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-file-earmark-check"></i>
-            Valid ID Document
-        </h5>
-    </div>
-    <div class="panel-body">
-        <a href="{{ $farm->FRM_VERIFICATION_DOC_PATH }}" target="_blank" class="btn btn-ghost">
-            <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
-        </a>
-    </div>
-</div>
-@endif
+@php
+    $viewerDocuments = [];
 
-@if($farm->FRM_FARM_CERTIFICATE_PATH)
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-file-earmark-check"></i>
-            Farm Permit / Certificate
-        </h5>
+    if ($farm->FRM_VERIFICATION_DOC_PATH) {
+        $viewerDocuments[] = [
+            'label' => 'Valid ID Document',
+            'url'   => $farm->FRM_VERIFICATION_DOC_PATH,
+        ];
+    }
+
+    if ($farm->FRM_FARM_CERTIFICATE_PATH) {
+        $viewerDocuments[] = [
+            'label' => 'Farm Permit / Certificate',
+            'url'   => $farm->FRM_FARM_CERTIFICATE_PATH,
+        ];
+    }
+@endphp
+
+@foreach($viewerDocuments as $document)
+    @php
+        $documentExtension = strtolower(pathinfo(parse_url($document['url'], PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+    @endphp
+    <div class="panel">
+        <div class="panel-header">
+            <h5 class="panel-title">
+                <i class="bi bi-file-earmark-check"></i>
+                {{ $document['label'] }}
+            </h5>
+        </div>
+        <div class="panel-body">
+            <button type="button"
+                    class="btn btn-ghost"
+                    data-bs-toggle="modal"
+                    data-bs-target="#documentModal"
+                    data-document-url="{{ $document['url'] }}"
+                    data-document-title="{{ $document['label'] }}"
+                    data-document-kind="{{ in_array($documentExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? 'image' : 'file' }}">
+                <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
+            </button>
+        </div>
     </div>
-    <div class="panel-body">
-        <a href="{{ $farm->FRM_FARM_CERTIFICATE_PATH }}" target="_blank" class="btn btn-ghost">
-            <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
-        </a>
-    </div>
-</div>
-@endif
+@endforeach
 
 @if($farm->FRM_STATUS == 'PENDING_REVIEW')
 <div class="panel">
@@ -176,10 +193,9 @@
         </h5>
     </div>
     <div class="panel-body">
-        <div class="detail-actions">
+        <div class="decision-grid">
 
             <form method="POST" action="{{ route('seller-requests.approve', $farm->FRM_ID) }}"
-                  class="d-inline"
                   onsubmit="return confirm('Are you sure you want to approve this seller request?');">
                 @csrf
                 <button type="submit" class="btn btn-farm">
@@ -188,14 +204,10 @@
             </form>
 
             <form method="POST" action="{{ route('seller-requests.reject', $farm->FRM_ID) }}"
-                  class="d-inline-block"
-                  style="max-width: 420px;"
                   onsubmit="return confirm('Are you sure you want to reject this seller request?');">
                 @csrf
-                <div class="mb-2">
-                    <textarea name="reason" class="form-control" rows="2"
-                              placeholder="Reason (optional)">{{ old('reason') }}</textarea>
-                </div>
+                <textarea name="reason" class="form-control mb-2" rows="2"
+                          placeholder="Reason for rejection (optional)">{{ old('reason') }}</textarea>
                 <button type="submit" class="btn btn-danger">
                     <i class="bi bi-x-circle me-1"></i> Reject
                 </button>
@@ -205,5 +217,7 @@
     </div>
 </div>
 @endif
+
+@include('partials._media-modal')
 
 @endsection

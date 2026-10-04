@@ -115,8 +115,12 @@
                     <td><span class="id-cell">{{ $report->listing?->LST_ID ?? 'Deleted since' }}</span></td>
                 </tr>
                 <tr>
-                    <th>Crop</th>
+                    <th>Categories</th>
                     <td>{{ $report->listing?->category?->CAT_NAME ?? '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Crop Name</th>
+                    <td>{{ $report->listing?->LST_CROP_ICON ?: '-' }}</td>
                 </tr>
                 <tr>
                     <th>Status</th>

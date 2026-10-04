@@ -100,13 +100,23 @@ a {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    background: var(--brand-500);
+    /* The logo artwork is dark on a transparent background, so it needs a
+       light tile to read against the dark green sidebar. */
+    background: #ffffff;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 16px;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.brand-mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
 }
 
 .brand-name {
@@ -799,6 +809,16 @@ a {
     display: block;
 }
 
+/* Resets the <button> defaults so the thumbnail crops sit flush in the grid. */
+.photo-grid .btn-photo {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
 .detail-actions {
     display: flex;
     flex-wrap: wrap;
@@ -808,6 +828,56 @@ a {
 
 .reason-box {
     padding: 6px 0 0;
+}
+
+/* ==========================================================================
+   Decision panel
+   ========================================================================== */
+
+/* Both buttons sit on the same baseline: the reject column is taller because
+   of its reason box, so every column is bottom-aligned inside the same row. */
+.decision-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 18px;
+    align-items: stretch;
+}
+
+.decision-grid > form {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.decision-grid .btn {
+    width: 100%;
+}
+
+/* ==========================================================================
+   In-page document viewer
+   ========================================================================== */
+
+.document-modal-body {
+    padding: 0;
+    background: #f4f6f5;
+}
+
+.document-modal-image,
+.document-modal-frame {
+    display: block;
+    width: 100%;
+    height: 70vh;
+    border: 0;
+}
+
+.document-modal-image {
+    object-fit: contain;
+}
+
+/* A class selector beats the user-agent [hidden] rule, so restate it. */
+.document-modal-image[hidden],
+.document-modal-frame[hidden] {
+    display: none;
 }
 
 /* ==========================================================================
@@ -852,5 +922,14 @@ a {
 
     .sidebar-footer {
         padding: 10px;
+    }
+
+    .decision-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .document-modal-image,
+    .document-modal-frame {
+        height: 60vh;
     }
 }

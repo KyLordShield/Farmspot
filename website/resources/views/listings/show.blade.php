@@ -30,12 +30,12 @@
         <table class="detail-table">
 
             <tr>
-                <th>Crop</th>
+                <th>Categories</th>
                 <td>{{ $listing->category?->CAT_NAME ?? '-' }}</td>
             </tr>
 
             <tr>
-                <th>Crop Icon</th>
+                <th>Crop Name</th>
                 <td>{{ $listing->LST_CROP_ICON ?: '-' }}</td>
             </tr>
 
@@ -83,11 +83,6 @@
             </tr>
 
             <tr>
-                <th>Image</th>
-                <td class="cell-faint">{{ $listing->LST_IMAGE ?: '-' }}</td>
-            </tr>
-
-            <tr>
                 <th>Created</th>
                 <td class="cell-secondary">{{ $listing->LST_CREATED_AT ?: '-' }}</td>
             </tr>
@@ -100,5 +95,53 @@
         </table>
     </div>
 </div>
+
+@php
+    // LST_IMAGE is only a cached copy of the primary photo, so the gallery is
+    // built from the listing_photo rows. Older listings predate that table and
+    // carry nothing but LST_IMAGE, which is still worth showing.
+    $photoUrls = $listing->photos->pluck('LPHOTO_FILE_PATH');
+
+    if ($photoUrls->isEmpty() && $listing->LST_IMAGE) {
+        $photoUrls = collect([$listing->LST_IMAGE]);
+    }
+@endphp
+
+@if($photoUrls->isNotEmpty())
+<div class="panel">
+    <div class="panel-header">
+        <h5 class="panel-title">
+            <i class="bi bi-images"></i>
+            Photos
+            <span class="badge badge-soft-neutral ms-1">{{ $photoUrls->count() }}</span>
+        </h5>
+    </div>
+    <div class="panel-body">
+        <div class="row g-3 photo-grid">
+            @foreach($photoUrls as $photoUrl)
+                @php
+                    $photoExtension = strtolower(pathinfo((string) parse_url($photoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
+                @endphp
+                <div class="col-6 col-md-3">
+                    <button type="button"
+                            class="btn-photo"
+                            data-bs-toggle="modal"
+                            data-bs-target="#documentModal"
+                            data-document-url="{{ $photoUrl }}"
+                            data-document-title="{{ $listing->LST_CROP_ICON ?: 'Listing photo' }} — photo {{ $loop->iteration }}"
+                            data-document-kind="{{ in_array($photoExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? 'image' : 'file' }}">
+                        <img src="{{ $photoUrl }}"
+                             alt="Listing photo {{ $loop->iteration }}"
+                             class="photo-thumb"
+                             loading="lazy">
+                    </button>
+                </div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
+
+@include('partials._media-modal')
 
 @endsection

@@ -456,6 +456,10 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
+      // Records the terms the screen actually searches for, so alias fan-out
+      // is verified rather than assumed.
+      final searched = <String>[];
+
       await tester.pumpWidget(MaterialApp(
         home: ImageSearchScreen(
           pickImage: (_) async => XFile('/tmp/crop.jpg'),
@@ -463,9 +467,16 @@ void main() {
             DetectedCrop(name: 'Carrots', confidence: 0.94),
             DetectedCrop(name: 'Lettuce', confidence: 0.77),
           ],
-          loadResults: (term) async => [
-            _listing('L1', term, 'Little A\'s Farm', farmId: 'F1'),
-          ],
+          // A real listing carries the SELLER's own spelling, which is
+          // independent of the search term. Distinct ids keep the per-alias
+          // dedup in the screen from collapsing these into one card.
+          loadResults: (term) async {
+            searched.add(term);
+            return [
+              _listing('L-$term', 'Seller $term', "Little A's Farm",
+                  farmId: 'F1'),
+            ];
+          },
           loadPosition: () async => _userPos,
           loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
         ),
@@ -481,9 +492,18 @@ void main() {
       expect(find.byType(SearchResultsScreen), findsOneWidget);
       // Multi-crop header + one section per detected crop.
       expect(find.text('2 crops found in your photo'), findsOneWidget);
-      // Section header + the result card inside that section, per crop.
-      expect(find.text('Carrots'), findsNWidgets(2));
-      expect(find.text('Lettuce'), findsNWidgets(2));
+
+      // One section header per crop, titled from the group rather than from
+      // whatever casing the model happened to emit.
+      expect(find.text('Carrots'), findsOneWidget);
+      expect(find.text('Lettuce'), findsOneWidget);
+
+      // "Lettuce" fans out over its aliases; "Carrots" is an unknown label so
+      // it is searched verbatim. Three searches, three cards rendered.
+      expect(searched, containsAll(<String>['Carrots', 'lettuce', 'letchuce']));
+      expect(find.text('Seller Carrots'), findsOneWidget);
+      expect(find.text('Seller lettuce'), findsOneWidget);
+      expect(find.text('Seller letchuce'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../services/ai_chat_service.dart';
 import '../theme.dart';
@@ -34,6 +36,11 @@ class AiChatScreen extends StatefulWidget {
   /// question, so a test that wants the pill alone needs to target this rather
   /// than searching the whole screen for the string.
   static const Key topicPillKey = Key('ai-topic-pill');
+
+  /// Finds the pending-reply bubble. A test that wants to assert the
+  /// assistant is still working has to target this: the dots are plain
+  /// Containers, so there is no text to search for.
+  static const Key typingDotsKey = Key('ai-typing-dots');
 
   @override
   State<AiChatScreen> createState() => _AiChatScreenState();
@@ -419,10 +426,84 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 }
 
+/// The three dots shown in the assistant bubble while a reply is pending.
+///
+/// A wave rather than a blink. All three dots run the same sine cycle, each a
+/// fixed fraction of a phase ahead of the one before it, so they rise and fall
+/// in sequence. Fading them together in unison instead reads as a spinner, not
+/// as somebody typing.
+///
+/// One controller drives all three so the offsets cannot drift apart over a
+/// long wait. The phase is taken modulo one rather than through an `Interval`,
+/// because sine is continuous as it wraps: the cycle joins up seamlessly and
+/// there is no snap back to the start on every pass.
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  /// Slow enough to read as deliberate typing. Faster than this and the wave
+  /// looks like a glitch rather than a person.
+  static const Duration _cycle = Duration(milliseconds: 1000);
+
+  /// How far ahead of the previous dot each one sits, as a fraction of the
+  /// cycle. Roughly a fifth of a cycle, which splits the three dots evenly
+  /// around the wave instead of bunching two of them together.
+  static const double _phaseStep = 0.22;
+
+  late final AnimationController _wave =
+      AnimationController(vsync: this, duration: _cycle)..repeat();
+
+  @override
+  void dispose() {
+    _wave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _wave,
+      builder: (context, _) {
+        return Row(
+          key: AiChatScreen.typingDotsKey,
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            final phase = (_wave.value + i * _phaseStep) % 1.0;
+            // -1 at the bottom of the dip, 1 at the top of the rise.
+            final rise = math.sin(phase * 2 * math.pi);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2.5),
+              child: Transform.translate(
+                offset: Offset(0, -3 * rise),
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    // Brighter at the top of the wave, so the leading dot leads
+                    // the eye as well as the movement.
+                    color: AppColors.mutedGreen
+                        .withValues(alpha: 0.45 + 0.55 * ((rise + 1) / 2)),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
 /// Rounded chat bubble. Assistant = white (left), user = green (right).
-/// `dots: true` renders the three-dot "typing" indicator instead of text.
-/// [isError] tints the bubble red and makes it tappable, which is how a failed
-/// turn is retried.
+/// `dots: true` renders the animated three-dot typing indicator instead of
+/// text. [isError] tints the bubble red and makes it tappable, which is how a
+/// failed turn is retried.
 class _Bubble extends StatelessWidget {
   const _Bubble({
     this.text,
@@ -463,20 +544,7 @@ class _Bubble extends StatelessWidget {
               border: isError ? Border.all(color: const Color(0xFFF0B7B1)) : null,
             ),
             child: dots
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(
-                      3,
-                      (i) => Container(
-                        width: 7,
-                        height: 7,
-                        margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                        decoration: const BoxDecoration(
-                            color: AppColors.mutedGreen,
-                            shape: BoxShape.circle),
-                      ),
-                    ),
-                  )
+                ? const _TypingDots()
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,

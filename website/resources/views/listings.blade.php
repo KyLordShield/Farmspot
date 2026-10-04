@@ -67,7 +67,7 @@
                     name="search"
                     value="{{ request('search') }}"
                     class="form-control"
-                    placeholder="Search listing">
+                    placeholder="Search ID, crop name, category or farm">
                 <button class="btn btn-farm" type="submit">
                     Search
                 </button>
@@ -103,7 +103,8 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Crop</th>
+                    <th>Crop Name</th>
+                    <th>Categories</th>
                     <th>Farmer</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -116,6 +117,7 @@
 
                 <tr>
                     <td><span class="id-cell">{{ $listing->LST_ID }}</span></td>
+                    <td>{{ $listing->LST_CROP_ICON ?: '-' }}</td>
                     <td>{{ $listing->category?->CAT_NAME ?? '-' }}</td>
                     <td class="cell-secondary">{{ $listing->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
                     <td>
@@ -155,7 +157,7 @@
             @empty
 
                 <tr>
-                    <td colspan="5">
+                    <td colspan="6">
                         <div class="empty-state">
                             <i class="bi bi-basket empty-icon"></i>
                             <p>No listings found.</p>

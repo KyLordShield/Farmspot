@@ -16,6 +16,7 @@ class ListingController extends Controller
             ->when($request->filled('search'), function ($query) use ($request) {
                 $query->where(function ($q) use ($request) {
                     $q->where('LST_ID', 'like', '%' . $request->search . '%')
+                      ->orWhere('LST_CROP_ICON', 'like', '%' . $request->search . '%')
                       ->orWhereHas('category', function ($cq) use ($request) {
                           $cq->where('CAT_NAME', 'like', '%' . $request->search . '%');
                       })
@@ -41,7 +42,7 @@ class ListingController extends Controller
 
     public function show($id)
     {
-        $listing = Listing::with(['farmer.buyer.user', 'farm', 'category'])
+        $listing = Listing::with(['farmer.buyer.user', 'farm', 'category', 'photos'])
             ->where('LST_ID', $id)
             ->firstOrFail();
 

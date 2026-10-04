@@ -120,14 +120,45 @@ void main() {
     await ask(tester, 'Kumusta ang kamatis?');
     await tester.pump();
 
-    expect(find.text('Kumusta ang kamatis?'), findsOneWidget);
+expect(find.text('Kumusta ang kamatis?'), findsOneWidget);
     // Still working: the three-dot indicator stands in for the reply.
     expect(find.text('Ang kamatis, puno na.'), findsNothing);
+    expect(find.byKey(AiChatScreen.typingDotsKey), findsOneWidget);
 
     gateway.gate!.complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Ang kamatis, puno na.'), findsOneWidget);
+    // The indicator makes way for the reply rather than sitting under it.
+    expect(find.byKey(AiChatScreen.typingDotsKey), findsNothing);
+  });
+
+  testWidgets('the pending dots actually move while the assistant works',
+      (tester) async {
+    gateway.gate = Completer<void>();
+    await pumpChat(tester);
+
+    await ask(tester, 'Kumusta ang kamatis?');
+
+    final dots = find.descendant(
+      of: find.byKey(AiChatScreen.typingDotsKey),
+      matching: find.byType(Container),
+    );
+    expect(dots, findsNWidgets(3));
+
+    // Walk a full cycle and collect where the leading dot lands each step.
+    // Sampling every step and comparing the set, rather than pinning an exact
+    // offset, keeps this honest about the only thing that matters: the dots are
+    // not three static circles.
+    final heights = <double>{};
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 125));
+      heights.add(tester.getCenter(dots.first).dy);
+    }
+    expect(heights.length, greaterThan(1));
+
+    gateway.gate!.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('forwards the question and the conversation so far',

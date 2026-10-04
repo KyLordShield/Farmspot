@@ -40,7 +40,7 @@
             @method('PUT')
 
             <div class="mb-3">
-                <label for="LST_CROP_ICON" class="form-label">Crop Icon</label>
+                <label for="LST_CROP_ICON" class="form-label">Crop Name</label>
                 <input type="text" class="form-control @error('LST_CROP_ICON') is-invalid @enderror"
                        id="LST_CROP_ICON" name="LST_CROP_ICON"
                        value="{{ old('LST_CROP_ICON', $listing->LST_CROP_ICON) }}">
