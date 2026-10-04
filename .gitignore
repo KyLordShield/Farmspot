@@ -11,6 +11,14 @@ ml_service/uploads/
 # YOLO training outputs -- weights, curves, predictions (big binaries)
 runs/
 
+# Service runtime artifacts -- uvicorn output and the per-request detection log
+ml_service/detect_log.txt
+ml_service/uvicorn_*.log
+
+# Annotated debug images produced by annotate.py
+ml_service/ANNOTATED_*.jpg
+ml_service/annotated_*.jpg
+
 # Curated training dataset (third-party images). Keep on disk, not in git.
 ml_service/dataset/
 
