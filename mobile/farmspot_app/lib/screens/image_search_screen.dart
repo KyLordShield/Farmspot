@@ -30,7 +30,6 @@ class ImageSearchScreen extends StatefulWidget {
 
   /// Forwarded to [SearchResultsScreen] so tests can inject fake loaders.
   final Future<List<Listing>> Function(String term)? loadResults;
-  final Future<LatLng> Function()? loadPosition;
   final Future<List<FarmPin>> Function()? loadFarms;
 
   /// Real GPS fix for the distance sort, or null when location is
@@ -43,7 +42,6 @@ class ImageSearchScreen extends StatefulWidget {
     this.pickImage,
     this.detect,
     this.loadResults,
-    this.loadPosition,
     this.loadFarms,
     this.loadBuyerPosition,
   });
@@ -224,8 +222,10 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
           ),
           const Spacer(),
           if (_step == _ImageSearchStep.capture)
-            const Icon(Icons.photo_camera_outlined,
-                color: AppColors.primaryGreen),
+            const Icon(
+              Icons.photo_camera_outlined,
+              color: AppColors.primaryGreen,
+            ),
         ],
       ),
     );
@@ -237,7 +237,8 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
   /// was confidently identified.
   Future<void> _identify({required ImageSource source}) async {
     final pick =
-        widget.pickImage ?? (s) => ImagePicker().pickImage(source: s, imageQuality: 85);
+        widget.pickImage ??
+        (s) => ImagePicker().pickImage(source: s, imageQuality: 85);
     final picked = await pick(source);
     if (picked == null || !mounted) return;
 
@@ -267,17 +268,19 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
       MaterialPageRoute(
         builder: (_) => SearchResultsScreen(
           query: crops.first.name,
-          groups: [for (final crop in crops) SearchCropGroup.resolve(crop.name)],
+          groups: [
+            for (final crop in crops) SearchCropGroup.resolve(crop.name),
+          ],
           detectionConfidences: [
             for (final crop in crops)
               (SearchCropGroup.resolve(crop.name).title, crop.confidence),
           ],
           loadResults:
-              widget.loadResults ?? (t) => ListingService.fetchListings(search: t),
-          loadPosition: widget.loadPosition ?? LocationService.defaultBuyerPosition,
+              widget.loadResults ??
+              (t) => ListingService.fetchListings(search: t),
           loadFarms: widget.loadFarms ?? FarmService.fetchPublicFarms,
-          loadBuyerPosition: widget.loadBuyerPosition ??
-              LocationService.tryBuyerPosition,
+          loadBuyerPosition:
+              widget.loadBuyerPosition ?? LocationService.tryBuyerPosition,
         ),
       ),
     );

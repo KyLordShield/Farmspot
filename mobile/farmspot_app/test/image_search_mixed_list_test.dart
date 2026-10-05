@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'dart:async';
 
 import 'package:latlong2/latlong.dart';
 
@@ -32,12 +31,7 @@ Listing _listing(
 }
 
 FarmPin _pin(String id, double lat, double lon) {
-  return FarmPin(
-    id: id,
-    name: 'Farm $id',
-    latitude: lat,
-    longitude: lon,
-  );
+  return FarmPin(id: id, name: 'Farm $id', latitude: lat, longitude: lon);
 }
 
 /// Puts [result] on a farm [kmDueNorth] of the buyer. Used to build a set of
@@ -101,7 +95,6 @@ void main() {
             groups: groups,
             detectionConfidences: confidences,
             loadResults: loadResults,
-            loadPosition: () async => _userPos,
             loadFarms: () async => farms,
             loadBuyerPosition: () async => hasLocation ? location : null,
           ),
@@ -111,16 +104,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     }
 
-    const chayoteGroup =
-        SearchCropGroup(title: 'Chayote', terms: ['chayote', 'sayote']);
-    const cabbageGroup =
-        SearchCropGroup(title: 'Cabbage', terms: ['cabbage', 'repolyo']);
+    const chayoteGroup = SearchCropGroup(
+      title: 'Chayote',
+      terms: ['chayote', 'sayote'],
+    );
+    const cabbageGroup = SearchCropGroup(
+      title: 'Cabbage',
+      terms: ['cabbage', 'repolyo'],
+    );
     const bokChoyGroup = SearchCropGroup(
-        title: 'Bok choy',
-        terms: ['bok choy', 'pechay']);
+      title: 'Bok choy',
+      terms: ['bok choy', 'pechay'],
+    );
 
-    testWidgets('mixes every detected crop into one list, no crop headers',
-        (tester) async {
+    testWidgets('mixes every detected crop into one list, no crop headers', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup, cabbageGroup, bokChoyGroup],
@@ -166,8 +165,9 @@ void main() {
       return at.dy.round() * 10000 + at.dx.round();
     }
 
-    testWidgets('orders nearest farm first and shows the distance',
-        (tester) async {
+    testWidgets('orders nearest farm first and shows the distance', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup, cabbageGroup],
@@ -194,16 +194,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a listing matched by two crops appears only once',
-        (tester) async {
+    testWidgets('a listing matched by two crops appears only once', (
+      tester,
+    ) async {
       // L1 comes back for BOTH groups' alias terms. It must render exactly
       // once even though two crops matched it.
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup, cabbageGroup],
         confidences: const [('Chayote', 0.4), ('Cabbage', 0.9)],
-        loadResults: (term) async =>
-            [_listing('L1', 'Chayote', 'Shared Farm', farmId: 'F1')],
+        loadResults: (term) async => [
+          _listing('L1', 'Chayote', 'Shared Farm', farmId: 'F1'),
+        ],
         farms: [_pinKmNorth('F1', 1.0)],
       );
 
@@ -214,17 +216,28 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('cards show the availability badge, never a confidence chip',
-        (tester) async {
+    testWidgets('cards show the availability badge, never a confidence chip', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup],
         confidences: const [('Chayote', 0.86)],
         loadResults: (term) async => [
-          _listing('L1', 'Chayote', 'Ready Farm',
-              status: 'AVAILABLE_NOW', farmId: 'F1'),
-          _listing('L2', 'Chayote', 'Later Farm',
-              status: 'SOON_TO_HARVEST', farmId: 'F2'),
+          _listing(
+            'L1',
+            'Chayote',
+            'Ready Farm',
+            status: 'AVAILABLE_NOW',
+            farmId: 'F1',
+          ),
+          _listing(
+            'L2',
+            'Chayote',
+            'Later Farm',
+            status: 'SOON_TO_HARVEST',
+            farmId: 'F2',
+          ),
         ],
         farms: [_pinKmNorth('F1', 1.0), _pinKmNorth('F2', 2.0)],
       );
@@ -238,54 +251,63 @@ void main() {
         ('Soon to Harvest', 'Later Farm', 1),
       ]) {
         final badgeTopLeft = tester.getTopLeft(find.text(label));
-        final cardTopLeft =
-            tester.getTopLeft(find.byType(SearchResultCard).at(index));
-        final cardBottomRight =
-            tester.getBottomRight(find.byType(SearchResultCard).at(index));
+        final cardTopLeft = tester.getTopLeft(
+          find.byType(SearchResultCard).at(index),
+        );
+        final cardBottomRight = tester.getBottomRight(
+          find.byType(SearchResultCard).at(index),
+        );
 
         // Top-left of the photo area, same as the Home grid badge.
         expect(badgeTopLeft.dy, greaterThan(cardTopLeft.dy));
         // Inside the photo and left-aligned, matching the Home grid badge.
         expect(badgeTopLeft.dx, greaterThan(cardTopLeft.dx));
-        expect(badgeTopLeft.dx,
-            lessThan((cardTopLeft.dx + cardBottomRight.dx) / 2));
+        expect(
+          badgeTopLeft.dx,
+          lessThan((cardTopLeft.dx + cardBottomRight.dx) / 2),
+        );
         // Sits above the crop/farm text rather than in the footer.
-        expect(badgeTopLeft.dy,
-            lessThan(tester.getTopLeft(find.text(farm)).dy));
+        expect(
+          badgeTopLeft.dy,
+          lessThan(tester.getTopLeft(find.text(farm)).dy),
+        );
       }
       expect(find.textContaining('%'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the count line uses the image range, not the text-search one',
-        (tester) async {
-      await pumpImageSearch(
-        tester,
-        groups: const [chayoteGroup],
-        confidences: const [('Chayote', 0.8)],
-        loadResults: (term) async => [
-          _listing('L1', 'Chayote', 'Near Farm', farmId: 'F1'),
-        ],
-        farms: [_pinKmNorth('F1', 1.0)],
-      );
+    testWidgets(
+      'the count line uses the image range, not the text-search one',
+      (tester) async {
+        await pumpImageSearch(
+          tester,
+          groups: const [chayoteGroup],
+          confidences: const [('Chayote', 0.8)],
+          loadResults: (term) async => [
+            _listing('L1', 'Chayote', 'Near Farm', farmId: 'F1'),
+          ],
+          farms: [_pinKmNorth('F1', 1.0)],
+        );
 
-      // It must not contradict the 10 km divider sitting below it.
-      expect(find.textContaining('within 10 km of you'), findsOneWidget);
-      expect(find.textContaining('within 15 km of you'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
+        // It must not contradict the 10 km divider sitting below it.
+        expect(find.textContaining('within 10 km of you'), findsOneWidget);
+        expect(find.textContaining('within 15 km of you'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('places the range divider after the last in-range result',
-        (tester) async {
+    testWidgets('places the range divider after the last in-range result', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup],
         confidences: const [('Chayote', 0.8)],
         loadResults: (term) async => switch (term) {
           'chayote' => [
-              _listing('L1', 'Chayote', 'Near Farm', farmId: 'F1'),
-              _listing('L2', 'Chayote', 'Far Farm', farmId: 'F9'),
-            ],
+            _listing('L1', 'Chayote', 'Near Farm', farmId: 'F1'),
+            _listing('L2', 'Chayote', 'Far Farm', farmId: 'F9'),
+          ],
           _ => const [],
         },
         // 2 km is inside the 10 km range; 40 km is well outside it.
@@ -298,8 +320,9 @@ void main() {
         findsOneWidget,
       );
 
-      final dividerY =
-          tester.getTopLeft(find.textContaining('Farms beyond this point')).dy;
+      final dividerY = tester
+          .getTopLeft(find.textContaining('Farms beyond this point'))
+          .dy;
       expect(tester.getTopLeft(find.text('Near Farm')).dy, lessThan(dividerY));
       expect(dividerY, lessThan(tester.getTopLeft(find.text('Far Farm')).dy));
       expect(tester.takeException(), isNull);
@@ -313,18 +336,18 @@ void main() {
         confidences: const [('Chayote', 0.8)],
         loadResults: (term) async => switch (term) {
           'chayote' => [
-              _listing('L1', 'Chayote', 'Far One', farmId: 'F8'),
-              _listing('L2', 'Chayote', 'Far Two', farmId: 'F9'),
-            ],
+            _listing('L1', 'Chayote', 'Far One', farmId: 'F8'),
+            _listing('L2', 'Chayote', 'Far Two', farmId: 'F9'),
+          ],
           _ => const [],
         },
         farms: [_pinKmNorth('F8', 30.0), _pinKmNorth('F9', 50.0)],
       );
 
-      final dividerY =
-          tester.getTopLeft(find.textContaining('Farms beyond this point')).dy;
-      expect(dividerY,
-          lessThan(tester.getTopLeft(find.text('Far One')).dy));
+      final dividerY = tester
+          .getTopLeft(find.textContaining('Farms beyond this point'))
+          .dy;
+      expect(dividerY, lessThan(tester.getTopLeft(find.text('Far One')).dy));
       // Still sorted nearest-first, and still shown.
       expect(
         orderingOf(tester, 'Far One'),
@@ -335,8 +358,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('without location: confidence order, note shown, no divider',
-        (tester) async {
+    testWidgets('without location: confidence order, note shown, no divider', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup, cabbageGroup],
@@ -370,8 +394,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('cards run nearly edge to edge with a tight gap',
-        (tester) async {
+    testWidgets('cards run nearly edge to edge with a tight gap', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup],
@@ -397,13 +422,15 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a dead GPS does not leave the results on the loader',
-        (tester) async {
+    testWidgets('a dead GPS does not leave the results on the loader', (
+      tester,
+    ) async {
       // Regression: when tryBuyerPosition() returns null the screen used to
-      // await loadPosition() as a "fallback", whose production default calls
-      // geolocator again. Under a wedged platform channel that future never
-      // completes and the buyer stares at a spinner forever. A loadPosition
-      // that never completes reproduces exactly that.
+      // await a second geolocator call as a "fallback". Under a wedged platform
+      // channel that future never completes and the buyer stares at a spinner
+      // forever. There is no longer any fallback callback to hand it a hanging
+      // one, so the hang is now impossible by construction — this test pins the
+      // behaviour that survives: results still load, with no distances.
       await tester.binding.setSurfaceSize(const Size(390, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -412,9 +439,9 @@ void main() {
           home: SearchResultsScreen(
             query: 'Chayote',
             groups: const [chayoteGroup],
-            loadResults: (term) async =>
-                [_listing('L1', 'Chayote', 'A Farm', farmId: 'F1')],
-            loadPosition: () => Completer<LatLng>().future,
+            loadResults: (term) async => [
+              _listing('L1', 'Chayote', 'A Farm', farmId: 'F1'),
+            ],
             loadFarms: () async => [_pinKmNorth('F1', 1.0)],
             loadBuyerPosition: () async => null,
           ),
@@ -434,21 +461,28 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('equal distances are broken by detection confidence',
-        (tester) async {
+    testWidgets('equal distances are broken by detection confidence', (
+      tester,
+    ) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup, cabbageGroup],
         confidences: const [('Chayote', 0.2), ('Cabbage', 0.99)],
         loadResults: (term) async => switch (term) {
-          'chayote' => [_listing('L1', 'Chayote', 'Low Conf Farm', farmId: 'F1')],
+          'chayote' => [
+            _listing('L1', 'Chayote', 'Low Conf Farm', farmId: 'F1'),
+          ],
           'sayote' => const [],
-          'cabbage' =>
-              [_listing('L2', 'Cabbage', 'High Conf Farm', farmId: 'F2')],
+          'cabbage' => [
+            _listing('L2', 'Cabbage', 'High Conf Farm', farmId: 'F2'),
+          ],
           _ => const [],
         },
         // Both farms at the SAME point, so only confidence can order them.
-        farms: [_pin('F1', _userPos.latitude, _userPos.longitude), _pin('F2', _userPos.latitude, _userPos.longitude)],
+        farms: [
+          _pin('F1', _userPos.latitude, _userPos.longitude),
+          _pin('F2', _userPos.latitude, _userPos.longitude),
+        ],
       );
 
       expect(
@@ -458,8 +492,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('no results keeps an empty state, no divider',
-        (tester) async {
+    testWidgets('no results keeps an empty state, no divider', (tester) async {
       await pumpImageSearch(
         tester,
         groups: const [chayoteGroup],

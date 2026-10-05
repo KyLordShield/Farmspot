@@ -67,8 +67,9 @@ String get _imageSearchRangeLabel => imageSearchRangeKm.toStringAsFixed(0);
 /// Available just bumps AVAILABLE_NOW listings to the front. No new backend
 /// call is made when a chip is toggled.
 ///
-/// The [loadResults] / [loadPosition] / [loadFarms] callbacks are injectable
-/// for tests, mirroring the MapScreen pattern. Defaults hit the real endpoints.
+/// The [loadResults] / [loadBuyerPosition] / [loadFarms] callbacks are
+/// injectable for tests, mirroring the MapScreen pattern. Defaults hit the real
+/// endpoints.
 class SearchResultsScreen extends StatefulWidget {
   /// The raw term submitted by the buyer (what gets searched AND logged).
   /// Used when [groups] is empty (single-crop search).
@@ -87,14 +88,16 @@ class SearchResultsScreen extends StatefulWidget {
 
   final Future<List<Listing>> Function(String term) loadResults;
 
-  final Future<LatLng> Function() loadPosition;
-
   final Future<List<FarmPin>> Function() loadFarms;
 
-  /// Real GPS fix for image search, or null when unavailable. Separate from
-  /// [loadPosition] (which always returns the Cebu fallback) so image search
-  /// can tell "no location" from "user is in Cebu" and drop the distances
-  /// instead of showing wrong ones. Test seam.
+  /// Real GPS fix, or null when location permission was denied or the fix
+  /// failed. Every distance on this screen is measured from it, for text search
+  /// as well as image search.
+  ///
+  /// Null has to be answerable, because the alternative is measuring from a
+  /// hardcoded anchor: "Distance unavailable" on every card is honest and
+  /// fixable by the buyer, where a confident "12 km away" measured from a point
+  /// that is not them is neither. Test seam.
   final Future<LatLng?> Function() loadBuyerPosition;
 
   const SearchResultsScreen({
@@ -103,7 +106,6 @@ class SearchResultsScreen extends StatefulWidget {
     this.groups = const [],
     this.detectionConfidences = const [],
     this.loadResults = _defaultLoadResults,
-    this.loadPosition = LocationService.defaultBuyerPosition,
     this.loadFarms = FarmService.fetchPublicFarms,
     this.loadBuyerPosition = LocationService.tryBuyerPosition,
   });
@@ -119,10 +121,9 @@ Future<List<Listing>> _defaultLoadResults(String term) {
 }
 
 class _ResultRow {
-  final SearchResultItem item;
   final CropListing listing;
 
-  const _ResultRow({required this.item, required this.listing});
+  const _ResultRow({required this.listing});
 }
 
 /// One flattened entry in the mixed image-search list.
@@ -184,7 +185,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// True when the buyer's position is a real GPS fix. False means
   /// permission was denied or GPS failed, so distances are omitted and the
   /// list falls back to detection confidence.
-  bool _imageHasLocation = false;
+  bool _hasLocation = false;
 
   bool _loading = true;
   String? _error;
@@ -273,50 +274,38 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         imageResults = bestByListingId.values.toList();
       } else {
         final listings = await widget.loadResults(widget.query);
-        rows = listings.map((listing) {
-          final crop = listing.toCropListing();
-          return _ResultRow(
-            item: SearchResultItem(
-              crop: crop.cropName,
-              seller: crop.farmName,
-              distance: 'Distance unavailable',
-              icon: cropIconForCrop(crop.cropName, crop.cropType),
-              imageUrl: crop.imageUrl,
-              listingId: crop.listingId,
-              farmId: crop.farmId,
-              ratings: crop.ratings,
-            ),
-            listing: crop,
-          );
-        }).toList();
+        // Only the listing is kept. The card payload is built at render time by
+        // [_itemFor], because the distance on it is not knowable until the farms
+        // endpoint has answered — a card built here had nothing to show but a
+        // placeholder.
+        rows = listings
+            .map((listing) => _ResultRow(listing: listing.toCropListing()))
+            .toList();
       }
 
-      // Image search asks for a REAL fix (null when unavailable) so it can show
-      // no distances rather than distances measured from the Cebu fallback.
-      // Text search keeps the old always-position behaviour untouched.
-      final LatLng position;
-      var imageHasLocation = false;
-      if (_multi) {
-        final fix = await widget.loadBuyerPosition();
-        imageHasLocation = fix != null;
-        // When there is no real fix, do NOT await loadPosition() here: its
-        // production default hits geolocator again and can hang, which is the
-        // exact stall tryBuyerPosition()'s timeout exists to avoid. The
-        // distances it produces are discarded anyway (no distances are shown
-        // without a location), so a synchronous anchor is enough.
-        position = fix ?? LocationService.fallbackPosition;
-      } else {
-        position = await widget.loadPosition();
-      }
+      // Both lists ask for a REAL fix, so neither measures from the Cebu
+      // fallback anchor. Image search worked this way already; text search used
+      // to resolve a position that always came back as that fallback, so a buyer
+      // with GPS off was shown a confident "12 km away" measured from a point
+      // that is not them.
+      final fix = await widget.loadBuyerPosition();
+      final hasLocation = fix != null;
 
       final farms = await widget.loadFarms();
+      // With no real fix there is nothing to measure from, so nothing is
+      // measured. Leaving the map empty rather than filling it from the fallback
+      // anchor matters: the anchor is a real coordinate, so a farm sitting on top
+      // of it would otherwise come back as "0 m away" — the most confident wrong
+      // answer available. Every consumer treats a missing entry as unknown.
       final distances = <String, double>{
-        for (final farm in farms)
-          if (farm.id.isNotEmpty && (farm.latitude != 0 || farm.longitude != 0))
-            farm.id: LocationService.distanceKm(
-              position,
-              LatLng(farm.latitude, farm.longitude),
-            ),
+        if (hasLocation)
+          for (final farm in farms)
+            if (farm.id.isNotEmpty &&
+                (farm.latitude != 0 || farm.longitude != 0))
+              farm.id: LocationService.distanceKm(
+                fix,
+                LatLng(farm.latitude, farm.longitude),
+              ),
       };
 
       if (!mounted) return;
@@ -324,9 +313,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         _rows = rows;
         if (_multi) {
           _imageResults = imageResults;
-          _imageHasLocation = imageHasLocation;
         }
         _distances = distances;
+        _hasLocation = hasLocation;
         _categories = categories;
         if (_activeCategoryId != null &&
             !_categories.any((c) => c.id == _activeCategoryId)) {
@@ -382,6 +371,36 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     return _distances[farmId] ?? double.infinity;
   }
 
+  /// The card payload for a text-search row, built at render time.
+  ///
+  /// Distance and status were the two fields this used to get wrong. The row is
+  /// created the moment listings arrive, which is before any farm coordinate is
+  /// known, so a card built then had nothing to print but "Distance
+  /// unavailable" — permanently, on every text search result, while image search
+  /// (which builds its cards after the same lookup) showed real numbers. The
+  /// status was simply never copied across, so text results had no "Available
+  /// now" pill while image results did, from the identical card widget.
+  ///
+  /// Deriving the item here means the card always reflects what the screen
+  /// currently knows, including a rating that came back from a review written
+  /// on the detail screen.
+  SearchResultItem _itemFor(_ResultRow row) {
+    final crop = row.listing;
+    final km = _kmFor(row);
+
+    return SearchResultItem(
+      crop: crop.cropName,
+      seller: crop.farmName,
+      distance: km.isFinite ? _formatDistanceKm(km) : 'Distance unavailable',
+      status: crop.status,
+      icon: cropIconForCrop(crop.cropName, crop.cropType),
+      imageUrl: crop.imageUrl,
+      listingId: crop.listingId,
+      farmId: crop.farmId,
+      ratings: crop.ratings,
+    );
+  }
+
   static int _statusRank(String status) {
     return switch (status) {
       'AVAILABLE_NOW' => 2,
@@ -408,7 +427,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// Without a fix: confidence order, no split, so the caller knows to omit
   /// the divider entirely.
   _ImageOrdering _orderImageResults() {
-    if (!_imageHasLocation) {
+    if (!_hasLocation) {
       final byConfidence = List<_ImageResult>.of(_imageResults)
         ..sort((a, b) => b.confidence.compareTo(a.confidence));
       return _ImageOrdering(
@@ -464,8 +483,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       }
     } else {
       for (final row in _rows) {
-        if (row.item.listingId != null &&
-            row.item.listingId == item.listingId) {
+        if (row.listing.listingId != null &&
+            row.listing.listingId == item.listingId) {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ProductDetailScreen(
@@ -492,12 +511,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// Same reasoning as the home feed: these rows were built from the search
   /// response and kept their copy of the average, so a review written on the
   /// detail screen left the result card reading the old score until the buyer
-  /// searched again. Both the card's own item and the CropListing behind it are
-  /// patched, because a card draws the item while the detail screen is opened
-  /// from the listing.
+  /// searched again.
   ///
-  /// Image-search rows hold no item of their own — their cards are built by
-  /// [_imageItems] from the listing — so patching the listing is enough there.
+  /// Only the [CropListing] needs patching now. The card payload is derived from
+  /// it by [_itemFor] on every build, so the text-search card and the image-search
+  /// card both follow from this one copy.
   void _applyRating(CropListing listing, RatingSummary summary) {
     final listingId = listing.listingId;
     if (!mounted || listingId == null || listingId.isEmpty) return;
@@ -506,10 +524,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       _rows = [
         for (final row in _rows)
           if (row.listing.listingId == listingId)
-            _ResultRow(
-              item: row.item.withRatings(summary),
-              listing: row.listing.withRatings(summary),
-            )
+            _ResultRow(listing: row.listing.withRatings(summary))
           else
             row,
       ];
@@ -685,7 +700,23 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           .where((r) => !(_kmFor(r).isFinite && _kmFor(r) <= searchRadiusKm))
           .toList();
 
-      if (near.isEmpty && other.isNotEmpty) {
+      if (!_hasLocation && other.isNotEmpty) {
+        // No GPS fix, so every distance is unknown. Splitting on an unknown
+        // radius would put everything under "Other farms" and print "no farms
+        // within 15 km of you" — a claim about the buyer's location that was
+        // never established. Say what is actually true and show the results.
+        children.add(
+          const Text(
+            'Distances need location access, which is off — showing every '
+            'result instead.',
+            style: TextStyle(color: Colors.black54, fontSize: 13),
+          ),
+        );
+        children.add(const SizedBox(height: 14));
+        children.add(_buildSectionHeader('All results'));
+        children.add(const SizedBox(height: 10));
+        children.add(_resultGrid(rows.map(_itemFor).toList(growable: false)));
+      } else if (near.isEmpty && other.isNotEmpty) {
         children.add(
           Text(
             'No farms selling $_displayTitle within $_searchRadiusLabel of you',
@@ -695,44 +726,26 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         children.add(const SizedBox(height: 14));
         children.add(_buildSectionHeader('All results'));
         children.add(const SizedBox(height: 10));
-        children.add(
-          SearchResultGrid(
-            items: rows.map((r) => r.item).toList(growable: false),
-            onTap: _onCardTap,
-          ),
-        );
+        children.add(_resultGrid(rows.map(_itemFor).toList(growable: false)));
       } else {
         children.add(_buildCountLine(near.length, within: true));
         children.add(const SizedBox(height: 14));
         children.add(_buildSectionHeader('Near you'));
         children.add(const SizedBox(height: 10));
-        children.add(
-          SearchResultGrid(
-            items: near.map((r) => r.item).toList(growable: false),
-            onTap: _onCardTap,
-          ),
-        );
+        children.add(_resultGrid(near.map(_itemFor).toList(growable: false)));
         if (other.isNotEmpty) {
           children.add(const SizedBox(height: 22));
           children.add(_buildSectionHeader('Other farms'));
           children.add(const SizedBox(height: 10));
           children.add(
-            SearchResultGrid(
-              items: other.map((r) => r.item).toList(growable: false),
-              onTap: _onCardTap,
-            ),
+            _resultGrid(other.map(_itemFor).toList(growable: false)),
           );
         }
       }
     } else {
       children.add(_buildCountLine(rows.length));
       children.add(const SizedBox(height: 14));
-      children.add(
-        SearchResultGrid(
-          items: rows.map((r) => r.item).toList(growable: false),
-          onTap: _onCardTap,
-        ),
-      );
+      children.add(_resultGrid(rows.map(_itemFor).toList(growable: false)));
     }
 
     return ListView(
@@ -817,6 +830,19 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// One image-search grid, always with the same density. Every grid in
   /// [_buildMultiBody] goes through here so they cannot drift apart.
   SearchResultGrid _imageGrid(List<SearchResultItem> items) {
+    return SearchResultGrid(
+      items: items,
+      onTap: _onCardTap,
+      gap: _imageGridGap,
+      cardAspectRatio: _imageGridAspectRatio,
+    );
+  }
+
+  /// One text-search grid, same density as [_imageGrid]. The card is the same
+  /// widget on both screens, so matching gap and aspect ratio is what makes the
+  /// thumbnail and the status pill land in the same spot with the same size
+  /// instead of only looking alike.
+  SearchResultGrid _resultGrid(List<SearchResultItem> items) {
     return SearchResultGrid(
       items: items,
       onTap: _onCardTap,

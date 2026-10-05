@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmspot_app/models/crop_suggestion.dart';
 import 'package:farmspot_app/models/farm_pin.dart';
 import 'package:farmspot_app/models/listing.dart';
+import 'package:farmspot_app/models/listing_review.dart';
 import 'package:farmspot_app/models/search_crop_group.dart';
 import 'package:farmspot_app/screens/home_screen.dart';
 import 'package:farmspot_app/screens/image_search_screen.dart';
@@ -25,6 +26,7 @@ Listing _listing(
   String farm, {
   String status = 'AVAILABLE_NOW',
   String? farmId,
+  RatingSummary ratings = const RatingSummary.none(),
 }) {
   return Listing(
     id: id,
@@ -33,16 +35,12 @@ Listing _listing(
     farmId: farmId,
     status: status,
     categoryName: 'Vegetables',
+    ratings: ratings,
   );
 }
 
 FarmPin _pin(String id, double lat, double lon) {
-  return FarmPin(
-    id: id,
-    name: 'Farm $id',
-    latitude: lat,
-    longitude: lon,
-  );
+  return FarmPin(id: id, name: 'Farm $id', latitude: lat, longitude: lon);
 }
 
 void main() {
@@ -63,8 +61,9 @@ void main() {
       await tester.pump(); // resolve the recents load
     }
 
-    testWidgets('shows RECENT SEARCHES from local storage before typing',
-        (tester) async {
+    testWidgets('shows RECENT SEARCHES from local storage before typing', (
+      tester,
+    ) async {
       await pumpSearch(tester, recents: ['Eggplant', 'Cabbage', 'Tomatoes']);
 
       expect(find.text('RECENT SEARCHES'), findsOneWidget);
@@ -78,19 +77,26 @@ void main() {
       await pumpSearch(tester);
 
       expect(find.text('RECENT SEARCHES'), findsOneWidget);
-      expect(find.text('Your recent searches will appear here.'), findsOneWidget);
+      expect(
+        find.text('Your recent searches will appear here.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('typing debounces 450ms then shows live suggestion rows',
-        (tester) async {
+    testWidgets('typing debounces 450ms then shows live suggestion rows', (
+      tester,
+    ) async {
       var calls = 0;
-      await pumpSearch(tester, loadSuggestions: (term) async {
-        calls++;
-        return [
-          const CropSuggestion(name: 'Tomato', count: 4),
-          const CropSuggestion(name: 'Tomato Ridge', count: 1),
-        ];
-      });
+      await pumpSearch(
+        tester,
+        loadSuggestions: (term) async {
+          calls++;
+          return [
+            const CropSuggestion(name: 'Tomato', count: 4),
+            const CropSuggestion(name: 'Tomato Ridge', count: 1),
+          ];
+        },
+      );
 
       await tester.enterText(find.byType(TextField), 'tomato');
       await tester.pump();
@@ -115,8 +121,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('clearing the field returns to recent searches',
-        (tester) async {
+    testWidgets('clearing the field returns to recent searches', (
+      tester,
+    ) async {
       await pumpSearch(tester, recents: ['Eggplant']);
 
       await tester.enterText(find.byType(TextField), 'tomato');
@@ -130,20 +137,23 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('submitting navigates to the real results screen with the term',
-        (tester) async {
-      await pumpSearch(tester);
+    testWidgets(
+      'submitting navigates to the real results screen with the term',
+      (tester) async {
+        await pumpSearch(tester);
 
-      await tester.enterText(find.byType(TextField), 'tomato');
-      await tester.testTextInput.receiveAction(TextInputAction.search);
-      await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'tomato');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
 
-      expect(find.byType(SearchResultsScreen), findsOneWidget);
-      expect(find.text('Tomato'), findsOneWidget); // results header title
-    });
+        expect(find.byType(SearchResultsScreen), findsOneWidget);
+        expect(find.text('Tomato'), findsOneWidget); // results header title
+      },
+    );
 
-    testWidgets('tapping a recent term navigates with that term',
-        (tester) async {
+    testWidgets('tapping a recent term navigates with that term', (
+      tester,
+    ) async {
       await pumpSearch(tester, recents: ['Eggplant']);
 
       await tester.tap(find.text('Eggplant'));
@@ -154,9 +164,12 @@ void main() {
     });
 
     testWidgets('tapping a suggestion submits that crop name', (tester) async {
-      await pumpSearch(tester, loadSuggestions: (term) async {
-        return [const CropSuggestion(name: 'Carrots', count: 3)];
-      });
+      await pumpSearch(
+        tester,
+        loadSuggestions: (term) async {
+          return [const CropSuggestion(name: 'Carrots', count: 3)];
+        },
+      );
 
       await tester.enterText(find.byType(TextField), 'car');
       await tester.pump(const Duration(milliseconds: 500));
@@ -171,23 +184,26 @@ void main() {
   });
 
   group('RecentSearches (local storage)', () {
-    test('stores most-recent-first, deduped (case-insensitive), capped', () async {
-      SharedPreferences.setMockInitialValues({});
-      await RecentSearches.add('Tomato');
-      await RecentSearches.add('Eggplant');
-      await RecentSearches.add('tomato'); // newer casing wins, dup removed
-      await RecentSearches.add('Cabbage');
-      await RecentSearches.add('Rice');
-      await RecentSearches.add('Pepper');
+    test(
+      'stores most-recent-first, deduped (case-insensitive), capped',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        await RecentSearches.add('Tomato');
+        await RecentSearches.add('Eggplant');
+        await RecentSearches.add('tomato'); // newer casing wins, dup removed
+        await RecentSearches.add('Cabbage');
+        await RecentSearches.add('Rice');
+        await RecentSearches.add('Pepper');
 
-      expect(await RecentSearches.load(), [
-        'Pepper',
-        'Rice',
-        'Cabbage',
-        'tomato',
-        'Eggplant',
-      ]);
-    });
+        expect(await RecentSearches.load(), [
+          'Pepper',
+          'Rice',
+          'Cabbage',
+          'tomato',
+          'Eggplant',
+        ]);
+      },
+    );
 
     test('ignores blank terms and starts empty', () async {
       SharedPreferences.setMockInitialValues({});
@@ -208,9 +224,8 @@ void main() {
         MaterialApp(
           home: SearchResultsScreen(
             query: 'Carrots',
-            loadResults:
-                loadResults ?? (term) async => listings,
-            loadPosition: () async => _userPos,
+            loadResults: loadResults ?? (term) async => listings,
+            loadBuyerPosition: () async => _userPos,
             loadFarms: () async => farms,
           ),
         ),
@@ -218,6 +233,106 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
     }
+
+    // Both text and image search draw the same card widget, so a buyer moving
+    // between the two should not see the card change shape. It did: text search
+    // built its card payload before any farm coordinate was known, so every
+    // card permanently read "Distance unavailable", and the status was never
+    // copied across, so no "Available now" pill appeared — while image search,
+    // building the same payload after the same lookup, showed both.
+
+    testWidgets('text search cards show a real distance and a status pill', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpResults(
+        tester,
+        listings: [
+          _listing('L1', 'Carrots', 'Bayan Farm', farmId: 'F1'),
+          _listing(
+            'L2',
+            'Carrots',
+            'Upland Farm',
+            status: 'SOON_TO_HARVEST',
+            farmId: 'F2',
+          ),
+        ],
+        farms: [
+          // ~1.1 km north of the buyer, and one unknown farm to prove the
+          // "unavailable" wording is reserved for farms that really have no
+          // coordinates rather than shown for every result.
+          _pin('F1', _userPos.latitude + 0.01, _userPos.longitude),
+        ],
+      );
+
+      expect(find.text('1.0 km away'), findsOneWidget);
+      expect(find.text('Available Now'), findsOneWidget);
+      expect(find.text('Soon to Harvest'), findsOneWidget);
+      // The farm with no pin is the only one allowed to say so.
+      expect(find.text('Distance unavailable'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('text search cards show the rating, hidden when unrated', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpResults(
+        tester,
+        listings: [
+          _listing(
+            'L1',
+            'Carrots',
+            'Bayan Farm',
+            farmId: 'F1',
+            ratings: const RatingSummary(average: 4.5, count: 12),
+          ),
+          // Same crop, nobody has reviewed it: the label has to collapse rather
+          // than print a 0.0 that reads like a verdict nobody wrote.
+          _listing('L2', 'Carrots', 'Upland Farm', farmId: 'F2'),
+        ],
+        farms: [_pin('F1', _userPos.latitude, _userPos.longitude)],
+      );
+
+      expect(find.text('4.5'), findsOneWidget);
+      expect(find.text('(12)'), findsOneWidget);
+      expect(find.text('0.0'), findsNothing);
+    });
+
+    testWidgets(
+      'no location shows every result instead of a false radius claim',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 1200));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SearchResultsScreen(
+              query: 'Carrots',
+              loadResults: (_) async => [
+                _listing('L1', 'Carrots', 'Bayan Farm', farmId: 'F1'),
+              ],
+              loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
+              loadBuyerPosition: () async => null,
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        // Splitting an unknown radius would put everything under "Other farms" and
+        // claim no farm is within 15 km — a statement about a location never
+        // established.
+        expect(find.text('Bayan Farm'), findsOneWidget);
+        expect(find.textContaining('within'), findsNothing);
+        expect(find.text('Near you'), findsNothing);
+        expect(find.text('Distance unavailable'), findsOneWidget);
+      },
+    );
 
     testWidgets('image-search merges alias terms (kamatis + tomato) into one '
         'mixed list', (tester) async {
@@ -237,8 +352,10 @@ void main() {
               if (term == 'tomato')
                 _listing('L2', 'tomato', 'Upland Farm', farmId: 'F2'),
             ],
-            loadPosition: () async => _userPos,
-            loadFarms: () async => [_pin('F1', 10.3178, 123.8742), _pin('F2', 10.3178, 123.8742)],
+            loadFarms: () async => [
+              _pin('F1', 10.3178, 123.8742),
+              _pin('F2', 10.3178, 123.8742),
+            ],
             loadBuyerPosition: () async => _userPos,
           ),
         ),
@@ -257,7 +374,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('shows real count line, sort toolbar, and grid', (tester) async {
+    testWidgets('shows real count line, sort toolbar, and grid', (
+      tester,
+    ) async {
       await pumpResults(
         tester,
         listings: [
@@ -279,7 +398,10 @@ void main() {
       expect(find.text('Filters'), findsOneWidget);
       // F1 is at the buyer (0 km -> near), F2 is ~12 km away (near),
       // L3 has no farm/position (grouped under "Other farms").
-      expect(find.text('2 farms selling Carrots within 15 km of you'), findsOneWidget);
+      expect(
+        find.text('2 farms selling Carrots within 15 km of you'),
+        findsOneWidget,
+      );
       expect(find.text('Near you'), findsOneWidget);
       expect(find.text("Little A's Farm"), findsOneWidget);
       expect(find.text('Big Ben Farm'), findsOneWidget);
@@ -337,7 +459,10 @@ void main() {
         farms: [_pin('F1', 10.80, 124.50)], // hugely far from the buyer
       );
 
-      expect(find.textContaining('No farms selling Carrots within'), findsOneWidget);
+      expect(
+        find.textContaining('No farms selling Carrots within'),
+        findsOneWidget,
+      );
       expect(find.text('All results'), findsOneWidget);
       expect(find.text('Far Far Away Farm'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -382,8 +507,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('tapping a card opens the real ProductDetailScreen',
-        (tester) async {
+    testWidgets('tapping a card opens the real ProductDetailScreen', (
+      tester,
+    ) async {
       await pumpResults(
         tester,
         listings: [_listing('L1', 'Carrots', "Little A's Farm", farmId: 'F1')],
@@ -409,7 +535,8 @@ void main() {
       await pumpResults(
         tester,
         listings: const [],
-        loadResults: (term) async => throw Exception('Could not reach the server.'),
+        loadResults: (term) async =>
+            throw Exception('Could not reach the server.'),
       );
 
       expect(find.text('Could not reach the server.'), findsOneWidget);
@@ -444,71 +571,73 @@ void main() {
       }
     });
 
-    testWidgets('image-search cards with an availability badge never overflow',
-        (tester) async {
-      // The badge sits over the photo, so the multi-crop card layout gets the
-      // same overflow sweep as the plain text-search card above.
-      const groups = [
-        SearchCropGroup(title: 'Cabbage', terms: ['cabbage']),
-      ];
-      for (final width in [360.0, 1280.0]) {
-        for (final scale in [1.0, 1.3]) {
-          await tester.binding.setSurfaceSize(Size(width, 900));
-          addTearDown(() => tester.binding.setSurfaceSize(null));
-          tester.platformDispatcher.textScaleFactorTestValue = scale;
-          addTearDown(tester.platformDispatcher.clearAllTestValues);
+    testWidgets(
+      'image-search cards with an availability badge never overflow',
+      (tester) async {
+        // The badge sits over the photo, so the multi-crop card layout gets the
+        // same overflow sweep as the plain text-search card above.
+        const groups = [
+          SearchCropGroup(title: 'Cabbage', terms: ['cabbage']),
+        ];
+        for (final width in [360.0, 1280.0]) {
+          for (final scale in [1.0, 1.3]) {
+            await tester.binding.setSurfaceSize(Size(width, 900));
+            addTearDown(() => tester.binding.setSurfaceSize(null));
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(tester.platformDispatcher.clearAllTestValues);
 
-          await tester.pumpWidget(
-            MaterialApp(
-              home: SearchResultsScreen(
-                query: 'Cabbage',
-                groups: groups,
-                loadResults: (term) async => [
-                  _listing(
-                    'L1',
-                    'Cabbage',
-                    "Little A's Farm",
-                    status: 'AVAILABLE_NOW',
-                    farmId: 'F1',
-                  ),
-                  _listing(
-                    'L2',
-                    'Cabbage',
-                    'Big Ben Farm',
-                    status: 'SOON_TO_HARVEST',
-                    farmId: 'F2',
-                  ),
-                ],
-                loadPosition: () async => _userPos,
-                loadFarms: () async => [
-                  _pin('F1', _userPos.latitude, _userPos.longitude),
-                  _pin('F2', _userPos.latitude + 0.01, _userPos.longitude),
-                ],
-                loadBuyerPosition: () async => _userPos,
+            await tester.pumpWidget(
+              MaterialApp(
+                home: SearchResultsScreen(
+                  query: 'Cabbage',
+                  groups: groups,
+                  loadResults: (term) async => [
+                    _listing(
+                      'L1',
+                      'Cabbage',
+                      "Little A's Farm",
+                      status: 'AVAILABLE_NOW',
+                      farmId: 'F1',
+                    ),
+                    _listing(
+                      'L2',
+                      'Cabbage',
+                      'Big Ben Farm',
+                      status: 'SOON_TO_HARVEST',
+                      farmId: 'F2',
+                    ),
+                  ],
+                  loadBuyerPosition: () async => _userPos,
+                  loadFarms: () async => [
+                    _pin('F1', _userPos.latitude, _userPos.longitude),
+                    _pin('F2', _userPos.latitude + 0.01, _userPos.longitude),
+                  ],
+                ),
               ),
-            ),
-          );
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 200));
+            );
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 200));
 
-          expect(
-            tester.takeException(),
-            isNull,
-            reason: 'width $width, text scale $scale must not overflow',
-          );
-          // Same labels Home shows, in the same place.
-          expect(find.text('Available Now'), findsOneWidget);
-          expect(find.text('Soon to Harvest'), findsOneWidget);
-          // Confidence stays out of the UI entirely.
-          expect(find.textContaining('%'), findsNothing);
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: 'width $width, text scale $scale must not overflow',
+            );
+            // Same labels Home shows, in the same place.
+            expect(find.text('Available Now'), findsOneWidget);
+            expect(find.text('Soon to Harvest'), findsOneWidget);
+            // Confidence stays out of the UI entirely.
+            expect(find.textContaining('%'), findsNothing);
+          }
         }
-      }
-    });
+      },
+    );
   });
 
   group('ImageSearchScreen (Screen 3) — capture -> identify -> results', () {
-    testWidgets('capture step shows viewfinder and Camera/Gallery',
-        (tester) async {
+    testWidgets('capture step shows viewfinder and Camera/Gallery', (
+      tester,
+    ) async {
       await tester.pumpWidget(const MaterialApp(home: ImageSearchScreen()));
 
       expect(find.text('Identify crop'), findsOneWidget);
@@ -527,31 +656,33 @@ void main() {
       // is verified rather than assumed.
       final searched = <String>[];
 
-      await tester.pumpWidget(MaterialApp(
-        home: ImageSearchScreen(
-          pickImage: (_) async => XFile('/tmp/crop.jpg'),
-          detect: (_) async => [
-            DetectedCrop(name: 'Carrots', confidence: 0.94),
-            DetectedCrop(name: 'Lettuce', confidence: 0.77),
-          ],
-          // A real listing carries the SELLER's own spelling, which is
-          // independent of the search term. Distinct ids keep the per-alias
-          // dedup in the screen from collapsing these into one card.
-          loadResults: (term) async {
-            searched.add(term);
-            return [
-              _listing('L-$term', 'Seller $term', "Little A's Farm",
-                  farmId: 'F1'),
-            ];
-          },
-          loadPosition: () async => _userPos,
-          loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
-          // Injected because the real one calls geolocator, whose platform
-          // channel never answers under the test's fake clock. Without this
-          // the results screen would sit on the loader forever.
-          loadBuyerPosition: () async => _userPos,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ImageSearchScreen(
+            pickImage: (_) async => XFile('/tmp/crop.jpg'),
+            detect: (_) async => [
+              DetectedCrop(name: 'Carrots', confidence: 0.94),
+              DetectedCrop(name: 'Lettuce', confidence: 0.77),
+            ],
+            // A real listing carries the SELLER's own spelling, which is
+            // independent of the search term. Distinct ids keep the per-alias
+            // dedup in the screen from collapsing these into one card.
+            loadResults: (term) async {
+              searched.add(term);
+              return [
+                _listing(
+                  'L-$term',
+                  'Seller $term',
+                  "Little A's Farm",
+                  farmId: 'F1',
+                ),
+              ];
+            },
+            loadBuyerPosition: () async => _userPos,
+            loadFarms: () async => [_pin('F1', 10.3178, 123.8742)],
+          ),
         ),
-      ));
+      );
 
       await tester.tap(find.text('Camera'));
       await tester.pump();
@@ -579,30 +710,38 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('detecting nothing bounces back to capture with an error toast',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: ImageSearchScreen(
-          pickImage: (_) async => XFile('/tmp/crop.jpg'),
-          detect: (_) async => <DetectedCrop>[],
-        ),
-      ));
+    testWidgets(
+      'detecting nothing bounces back to capture with an error toast',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ImageSearchScreen(
+              pickImage: (_) async => XFile('/tmp/crop.jpg'),
+              detect: (_) async => <DetectedCrop>[],
+            ),
+          ),
+        );
 
-      await tester.tap(find.text('Camera'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Camera'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Identify crop'), findsOneWidget);
-      expect(find.byType(SearchResultsScreen), findsNothing);
-      expect(find.textContaining('Could not identify the crop'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('Identify crop'), findsOneWidget);
+        expect(find.byType(SearchResultsScreen), findsNothing);
+        expect(
+          find.textContaining('Could not identify the crop'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('HomeScreen search bar entry', () {
     Future<void> pumpHome(WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({
         'auth_token': 'some-token',
-        'user_data': '{"USR_ID":"TTTTTT","USR_NAME":"Tester",'
+        'user_data':
+            '{"USR_ID":"TTTTTT","USR_NAME":"Tester",'
             '"USR_MOBILE_NUMBER":"09170000000","USR_IS_SELLER":0}',
       });
       await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
@@ -611,8 +750,9 @@ void main() {
       }
     }
 
-    testWidgets('tapping the empty hint area opens the SearchScreen',
-        (tester) async {
+    testWidgets('tapping the empty hint area opens the SearchScreen', (
+      tester,
+    ) async {
       await pumpHome(tester);
 
       // Tap the bar BODY (the hint text), not the magnifier icon — this used to
@@ -623,8 +763,9 @@ void main() {
       expect(find.byType(SearchScreen), findsOneWidget);
     });
 
-    testWidgets('tapping the camera icon opens the ImageSearchScreen',
-        (tester) async {
+    testWidgets('tapping the camera icon opens the ImageSearchScreen', (
+      tester,
+    ) async {
       await pumpHome(tester);
 
       await tester.tap(find.byIcon(Icons.camera_alt_outlined));
