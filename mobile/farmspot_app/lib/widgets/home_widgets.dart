@@ -352,7 +352,7 @@ class CropCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              Positioned(
+                Positioned(
                   bottom: 8,
                   right: 8,
                   // Distance sits on the image rather than in the text block:
@@ -491,63 +491,242 @@ class CropLadderGrid extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 430),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            const gap = 8.0;
-            const rowShift = 4.0;
-            const rowGap = 10.0;
-
-            final rows = <Widget>[];
-            for (var i = 0; i < listings.length; i += 2) {
-              final left = listings[i];
-              final hasRight = i + 1 < listings.length;
-              final right = hasRight ? listings[i + 1] : null;
-              final isFirstRow = i == 0;
-
-              // Each card gets a fixed fraction of the *indent-adjusted* width.
-              // Fixed (not Expanded) so a lone leftover card can never stretch
-              // across the whole row.
-              final cardWidth = (width - (isFirstRow ? 0 : rowShift) - gap) / 2;
-
-              rows.add(
-                // Each pair is a "rung". Rows after the first sit one step
-                // further right and one step lower — the ladder descent.
-                // Inside each rung the two cards stay perfectly aligned.
-                Padding(
-                  padding: EdgeInsets.only(
-                    left: isFirstRow ? 0 : rowShift,
-                    top: isFirstRow ? 0 : rowGap,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: cardWidth,
-                        child: CropCard(
-                          listing: left,
-                          onTap: () => onTap(left),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (right != null)
-                        SizedBox(
-                          width: cardWidth,
-                          child: CropCard(
-                            listing: right,
-                            onTap: () => onTap(right),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: rows,
+              children: [
+                for (var i = 0; i < listings.length; i += 2)
+                  buildLadderRung(
+                    left: listings[i],
+                    right: i + 1 < listings.length ? listings[i + 1] : null,
+                    width: constraints.maxWidth,
+                    isFirstRung: i == 0,
+                    onTap: onTap,
+                  ),
+              ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// One rung of the ladder: two cards side by side, or a lone card.
+///
+/// Shared by the eager grid and the paged feed so the geometry cannot drift.
+/// [width] is the indent-adjusted width the two cards must share; [right] is
+/// null for the odd card out, which stays at the same width as any other rather
+/// than stretching across the rung.
+Widget buildLadderRung({
+  required CropListing left,
+  required CropListing? right,
+  required double width,
+  required bool isFirstRung,
+  required ValueChanged<CropListing> onTap,
+}) {
+  // Each card gets a fixed fraction of the *indent-adjusted* width. Fixed (not
+  // Expanded) so a lone leftover card can never stretch across the whole row.
+  final cardWidth =
+      (width - (isFirstRung ? 0 : _kLadderRowShift) - _kLadderGap) / 2;
+
+  return Padding(
+    padding: EdgeInsets.only(
+      left: isFirstRung ? 0 : _kLadderRowShift,
+      top: isFirstRung ? 0 : _kLadderRowGap,
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: cardWidth,
+          child: CropCard(listing: left, onTap: () => onTap(left)),
+        ),
+        const SizedBox(width: 8),
+        if (right != null)
+          SizedBox(
+            width: cardWidth,
+            child: CropCard(listing: right, onTap: () => onTap(right)),
+          ),
+      ],
+    ),
+  );
+}
+
+const double _kLadderGap = 8.0;
+const double _kLadderRowShift = 4.0;
+const double _kLadderRowGap = 10.0;
+
+/// The ladder as a sliver, so a long feed builds only what is on screen.
+///
+/// [CropLadderGrid] is a Column of rungs inside a scroll view, which means the
+/// whole feed is laid out the moment it arrives: every card's image, text and
+/// shadow, for every listing, before the first frame with real content. On a
+/// feed of a few dozen rows that is a visible stall, and it grows with the
+/// feed instead of staying flat.
+///
+/// A sliver per rung is the coarse unit — two cards at a time — but it is the
+/// unit that has to move. Flattening to one card per sliver would need a
+/// different descent to keep the stepped look, and the rungs are what make the
+/// layout recognisable.
+class CropLadderSliver extends StatelessWidget {
+  final List<CropListing> listings;
+  final ValueChanged<CropListing> onTap;
+
+  /// Horizontal inset. Vertical spacing is the ladder's own job.
+  final double horizontalPadding;
+
+  const CropLadderSliver({
+    super.key,
+    required this.listings,
+    required this.onTap,
+    this.horizontalPadding = 16,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      sliver: SliverList.builder(
+        itemCount: (listings.length / 2).ceil(),
+        itemBuilder: (context, index) {
+          final first = index * 2;
+          final second = first + 1;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              // Per-rung rather than once for the list: a rung's card width
+              // depends on the width it was actually given, which is only known
+              // here.
+              child: LayoutBuilder(
+                builder: (context, constraints) => buildLadderRung(
+                  left: listings[first],
+                  right: second < listings.length ? listings[second] : null,
+                  width: constraints.maxWidth,
+                  isFirstRung: index == 0,
+                  onTap: onTap,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Placeholder cards in the ladder's own shape, for the first page load.
+///
+/// The blocks mirror [CropCard]'s structure — square image, then a bold name
+/// line, a lighter farm line and a short rating line — so the feed arrives at
+/// the same height it will settle at. A generic centred spinner replaced the
+/// whole feed with nothing, which is why every refresh re-collapsed the layout.
+///
+/// Deliberately static. A shimmer would mean a repeating animation, and an
+/// animation that never ends is a permanent `pumpAndSettle` timeout in widget
+/// tests, which is a bad trade for a first-load flourish.
+class CropCardSkeleton extends StatelessWidget {
+  const CropCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.fieldBorder.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 1,
+            child: ColoredBox(color: _kSkeletonFill),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _SkeletonBar(widthFactor: 0.85, height: 12),
+                SizedBox(height: 6),
+                _SkeletonBar(widthFactor: 0.6, height: 10),
+                SizedBox(height: 8),
+                _SkeletonBar(widthFactor: 0.3, height: 10),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The ladder's first [rungCount] rungs, as skeletons.
+class CropLadderSkeleton extends StatelessWidget {
+  final int rungCount;
+  final double horizontalPadding;
+
+  const CropLadderSkeleton({
+    super.key,
+    this.rungCount = 4,
+    this.horizontalPadding = 16,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 430),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < rungCount; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: i == 0 ? 0 : _kLadderRowShift,
+                      top: i == 0 ? 0 : _kLadderRowGap,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: const CropCardSkeleton()),
+                        const SizedBox(width: 8),
+                        Expanded(child: const CropCardSkeleton()),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const Color _kSkeletonFill = Color(0xFFEFF1F0);
+
+class _SkeletonBar extends StatelessWidget {
+  final double widthFactor;
+  final double height;
+
+  const _SkeletonBar({required this.widthFactor, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      alignment: Alignment.centerLeft,
+      widthFactor: widthFactor,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: _kSkeletonFill,
+          borderRadius: BorderRadius.circular(4),
         ),
       ),
     );

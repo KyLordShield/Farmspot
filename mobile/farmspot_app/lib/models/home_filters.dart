@@ -88,12 +88,16 @@ class HomeFilters {
 
   /// Whether the *server* has to be asked again.
   ///
-  /// Availability and sort go to the backend as query params. Category does
-  /// NOT: the feed already holds every listing the backend returned, so
-  /// sending `?category=` as well would filter the same set twice over.
-  /// Keeping category local is what lets applying it return immediately —
-  /// no spinner, no round trip.
-  bool get needsRefetch => availability != null;
+  /// Category and availability both go to the backend as query params. Sort is
+  /// left out on purpose because [HomeScreen] compares the sort itself: it has
+  /// to decide whether switching to `latest` counts as leaving the ranked
+  /// default, which is a question about two filters rather than one.
+  ///
+  /// Category stopped being client-side when the feed was paged. Filtering a
+  /// page of ten ranked listings locally works only if every page happens to
+  /// contain the chosen category; one that does not renders as an empty feed
+  /// that reads as broken rather than filtered.
+  bool get needsRefetch => categoryId != null || availability != null;
 
   /// Whether the shown set of listings changes, ignoring order.
   ///

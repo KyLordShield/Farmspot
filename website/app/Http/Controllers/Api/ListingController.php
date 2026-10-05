@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\FormatsListings;
+use App\Http\Controllers\Api\Concerns\RanksFeedListings;
 use App\Http\Controllers\Controller;
 use App\Models\ContactLog;
 use App\Models\CropCategory;
@@ -14,6 +15,7 @@ use Illuminate\Support\Str;
 class ListingController extends Controller
 {
     use FormatsListings;
+    use RanksFeedListings;
 
     /**
      * Catalog of all crop categories. Simple, unfiltered list — no farmer
@@ -39,6 +41,15 @@ class ListingController extends Controller
      * authenticated user. Plain feed loads (no keyword) and unauthenticated
      * browsing are NOT logged, so guest browsing keeps working with zero
      * side effects.
+     *
+     * Two opt-in parameters, independent of each other and both off by default:
+     *
+     *   ?page / ?per_page   return one page instead of the whole active set
+     *   ?personalized=1     order the page by rating, discovery and history
+     *
+     * Neither is sent by the app's search or suggestion requests, so those keep
+     * receiving exactly the response they received before — see RanksFeedListings
+     * for why the ordering lives on the server.
      */
     public function index(Request $request)
     {
@@ -58,6 +69,20 @@ class ListingController extends Controller
         $sort = in_array($request->query('sort'), $allowedSorts, true)
             ? $request->query('sort')
             : 'latest';
+
+        // Paging and ranking are separate decisions, and they are read BEFORE the
+        // query runs because both of them change how that query is built and
+        // executed. A request that sends neither is the shape every existing
+        // caller already depends on, and it falls through to the original path
+        // below untouched.
+        $paging = $this->readFeedPaging($request);
+        $personalized = $request->query('personalized') === '1';
+
+        // /listings is a PUBLIC route (no auth middleware), so the optional
+        // Sanctum user is resolved explicitly: a valid Bearer token present on
+        // the request gets resolved, guests stay null. This has to happen before
+        // the query is built, because ranking reads this user's search history.
+        $user = $request->user('sanctum');
 
         // withRatingSummary() folds the average + count into this same query as
         // two subqueries, so rating_average / rating_count reach every card on
@@ -86,27 +111,91 @@ class ListingController extends Controller
         // a join, so the three are built separately rather than through one
         // switch. Contacts are counted in a subquery instead of an eager load,
         // which keeps this to a single query.
-        if ($sort === 'popular') {
-            $listings = $query
-                ->withCount('contacts')
-                ->orderByDesc('contacts_count')
-                // A tie should not shuffle between refreshes, and neither
-                // should two listings that nobody has contacted yet.
-                ->orderByDesc('LST_CREATED_AT')
-                ->get();
-        } elseif ($sort === 'date') {
-            // Soonest harvest first. NULLS LAST is spelled out because a
-            // seller who has not set a harvest date should sink to the bottom
-            // rather than lead the feed on a NULL.
-            $listings = $query
-                ->orderByRaw('LST_HARVEST_DATE IS NULL, LST_HARVEST_DATE ASC')
-                ->orderByDesc('LST_CREATED_AT')
-                ->get();
-        } else {
-            $listings = $query->orderByDesc('LST_CREATED_AT')->get();
-        }
+        //
+        // This is a closure rather than inline ordering because the same three
+        // orders have to be reusable: whole feed when nothing is paged, one page
+        // when it is. LST_ID is the last key on all of them so that two pages of
+        // one sort can never hand the same listing to both — without a total
+        // tiebreaker, MySQL is free to return equal rows in a different order
+        // per query, and a listing would be skipped or duplicated across pages.
+        $order = function ($builder) use ($sort) {
+            if ($sort === 'popular') {
+                return $builder
+                    ->withCount('contacts')
+                    ->orderByDesc('contacts_count')
+                    // A tie should not shuffle between refreshes, and neither
+                    // should two listings that nobody has contacted yet.
+                    ->orderByDesc('LST_CREATED_AT')
+                    ->orderBy('LST_ID');
+            }
 
-        $listings = $listings->map(fn ($listing) => $this->formatListing($listing));
+            if ($sort === 'date') {
+                // Soonest harvest first. NULLS LAST is spelled out because a
+                // seller who has not set a harvest date should sink to the bottom
+                // rather than lead the feed on a NULL.
+                return $builder
+                    ->orderByRaw('LST_HARVEST_DATE IS NULL, LST_HARVEST_DATE ASC')
+                    ->orderByDesc('LST_CREATED_AT')
+                    ->orderBy('LST_ID');
+            }
+
+            return $builder->orderByDesc('LST_CREATED_AT')->orderBy('LST_ID');
+        };
+
+        $pagination = null;
+
+        if ($personalized) {
+            // Ranked feed. An explicit ?sort= is deliberately NOT applied here:
+            // asking for the ranked feed and asking for "soonest harvest first"
+            // are different requests, and the app only sends both on purpose when
+            // the buyer has not chosen a sort.
+            [$rows, $lastPage, $poolTotal] = $this->rankAndSliceFeed(
+                $query,
+                $this->categoryAffinities($user),
+                $paging['page'],
+                $paging['perPage']
+            );
+
+            $listings = $rows->map(fn ($listing) => $this->formatListing($listing));
+
+            // Pagination over a ranked feed describes the ranked candidate pool,
+            // not every matching row in the table: the pool is what the page is
+            // actually sliced from, so total and last_page have to agree with it
+            // or the app computes a page count that does not exist.
+            if ($paging['page'] !== null) {
+                $pagination = [
+                    'current_page' => $paging['page'],
+                    'last_page' => $lastPage,
+                    'per_page' => $paging['perPage'],
+                    'total' => $poolTotal,
+                ];
+            }
+        } elseif ($paging['page'] !== null) {
+            // Paged but explicitly ordered — the buyer's chosen sort wins, and it
+            // wins in SQL: count and slice both happen there, so the database
+            // never sends rows the app is about to throw away.
+            $paginator = $order(clone $query)->paginate(
+                $paging['perPage'],
+                ['*'],
+                'page',
+                $paging['page']
+            );
+
+            $listings = $paginator->getCollection()
+                ->map(fn ($listing) => $this->formatListing($listing));
+
+            $pagination = [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ];
+        } else {
+            // The original path, unchanged: every active listing, ordered, no
+            // pagination metadata.
+            $listings = $order($query)->get()
+                ->map(fn ($listing) => $this->formatListing($listing));
+        }
 
         // The applied filters go into the analytics slot that already exists on
         // search_log, so "what do people actually filter by" is answerable
@@ -116,12 +205,6 @@ class ListingController extends Controller
             'status' => $status,
             'sort' => $sort !== 'latest' ? $sort : null,
         ]);
-
-        // Only real searches by logged-in users count toward the stats.
-        // /listings is a PUBLIC route (no auth middleware), so resolve the
-        // optional Sanctum user explicitly — a valid Bearer token present on
-        // the request gets resolved, guests stay null and skip logging.
-        $user = $request->user('sanctum');
 
         // Pure opt-out for ONE extra caller: the app's live "as you type"
         // suggestion requests send ?suggest=1, and those must NOT pollute the
@@ -146,9 +229,13 @@ class ListingController extends Controller
             ]);
         }
 
-        return response()->json([
-            'listings' => $listings,
-        ]);
+        $body = ['listings' => $listings];
+
+        if ($pagination !== null) {
+            $body['pagination'] = $pagination;
+        }
+
+        return response()->json($body);
     }
 
     /**

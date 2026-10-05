@@ -371,10 +371,12 @@ void main() {
       expect(const HomeFilters(sort: HomeSortMode.popular).isActive, isTrue);
     });
 
-    test('only availability needs a refetch', () {
-      // Category is filtered locally by the chips, so sending it to the server
-      // would narrow the same feed twice.
-      expect(const HomeFilters(categoryId: 'LEAFVG').needsRefetch, isFalse);
+    test('narrowing needs a refetch because the server owns it', () {
+      // Category used to be filtered on the client, which worked only while the
+      // feed held every listing at once. Paged, a page of ten ranked listings can
+      // legitimately hold none of the chosen category, so filtering locally
+      // would show an empty feed. Availability was always server-side.
+      expect(const HomeFilters(categoryId: 'LEAFVG').needsRefetch, isTrue);
       expect(const HomeFilters(sort: HomeSortMode.date).needsRefetch, isFalse);
       expect(
         const HomeFilters(

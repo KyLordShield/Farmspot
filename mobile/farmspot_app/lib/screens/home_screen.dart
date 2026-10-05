@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../theme.dart';
 import '../models/crop_category.dart';
+import '../models/farm_pin.dart';
 import '../models/home_filters.dart';
 import '../models/listing_review.dart';
 import '../widgets/home_filter_sheet.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import '../services/home_feed_gateway.dart';
 import '../services/listing_service.dart';
 import '../services/farm_service.dart';
 import '../services/location_service.dart';
@@ -35,7 +37,21 @@ class HomeScreen extends StatefulWidget {
   /// field is what would tempt the badge to reuse the wrong count.
   final NotificationsGateway? notificationGateway;
 
-  const HomeScreen({super.key, this.gateway, this.notificationGateway});
+  /// The paged feed's data source.
+  ///
+  /// Separate from [gateway] on purpose. This screen talks to three unrelated
+  /// backends — listings, conversations, notifications — and folding them into
+  /// one injectable object would make every test that cares about the header
+  /// badge also stand up a fake feed, and every feed test care about message
+  /// counts.
+  final HomeFeedGateway? feedGateway;
+
+  const HomeScreen({
+    super.key,
+    this.gateway,
+    this.notificationGateway,
+    this.feedGateway,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -50,9 +66,54 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<CropCategory> _categories = [];
 
+  /// Everything the buyer has seen so far, oldest page first.
+  ///
+  /// One list, not a list of pages: the ladder renders a flat sequence of
+  /// rungs, so a page boundary is a network concern and has no business being
+  /// visible in the widget tree.
   List<CropListing> _listings = [];
+
+  /// True only for the first page. Pages after it append under a footer so the
+  /// cards already on screen never flash away to a spinner.
   bool _isLoading = true;
+
+  /// A page request that failed. Split in two because the two are shown in
+  /// different places and mean different things: [_errorMessage] replaces the
+  /// whole feed, [_loadMoreError] sits under it.
   String? _errorMessage;
+  String? _loadMoreError;
+
+  /// Whether a page request is in flight for page [_page] + 1.
+  bool _isLoadingMore = false;
+
+  /// The last page fetched, and the last page the server says exists.
+  ///
+  /// Both are needed. Trusting only the server's number means a dropped final
+  /// page leaves the feed permanently "one scroll away" from a request that
+  /// always returns nothing.
+  int _page = 0;
+  int _lastPage = 1;
+
+  static const int _pageSize = 10;
+
+  /// How close to the bottom the feed gets before the next page is asked for.
+  ///
+  /// Half a screen's worth of cards early. Starting the request only when the
+  /// last card is already visible guarantees the buyer sees the spinner at the
+  /// bottom before they see content, which is the thing paging is supposed to
+  /// stop.
+  static const double _loadMoreThreshold = 600;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// Public farm pins and the buyer's position, resolved once per feed load.
+  ///
+  /// Both are per-session constants, not per-listing: the same farm list and
+  /// the same GPS fix serve every card in every page. Resolving them inside the
+  /// per-page loop is what would turn one request into one request per page.
+  List<FarmPin> _farms = [];
+  LatLng? _buyerPosition;
+  bool _distanceLookupDone = false;
 
   /// Total unread across every thread, for the Messages entry badge. The home
   /// feed never blocks on it — a failure just leaves the badge hidden.
@@ -66,10 +127,40 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadListings();
     _loadCategories();
     _loadUnreadMessages();
     _loadUnreadNotifications();
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  HomeFeedGateway get _feed => widget.feedGateway ?? const ListingFeedGateway();
+
+  /// Asks for the next page once the buyer is close enough to the bottom.
+  ///
+  /// The guards live here and not only at the call site because a scroll
+  /// listener fires on every frame of a fling: without them one flick would
+  /// start a dozen requests and append the same page a dozen times.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    // A failed page stays failed until it is asked for again. Without this the
+    // error footer itself is the trigger: it appears, it makes the feed taller,
+    // the scroll listener fires, and the same failing page is requested again
+    // and again for as long as the buyer sits there.
+    if (_loadMoreError != null) return;
+
+    final position = _scrollController.position;
+    if (position.maxScrollExtent - position.pixels > _loadMoreThreshold) return;
+    _loadMore();
   }
 
   /// Counts unread messages for the Messages entry. Deliberately failure
@@ -117,10 +208,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<CropListing> get _filteredListings {
-    // Availability and sort are already applied by the server, so this only
-    // has to narrow by category. Comparing the id directly (rather than an
-    // index into _categories) also means a category whose row has not loaded
-    // yet cannot throw here.
+    // The server now owns the category filter, because a page cannot be filtered
+    // by the client: a page of ten ranked listings legitimately holds none of
+    // the chosen category, and narrowing those ten locally shows an empty feed
+    // that looks broken rather than filtered. This remains as a cheap guard for
+    // a listing whose category arrives after the filter was applied.
     final categoryId = _filters.categoryId;
     if (categoryId == null) return _listings;
     return _listings.where((l) => l.categoryId == categoryId).toList();
@@ -155,36 +247,46 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Whether another page is worth asking for.
+  bool get _hasMore => _page > 0 && _page < _lastPage;
+
   Future<void> _loadListings({String? search, bool showLoading = true}) async {
     if (showLoading) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
+        _loadMoreError = null;
       });
     }
 
     try {
-      // Only the two groups the server owns are sent. Category is deliberately
-      // not: it is applied locally by _filteredListings, so sending it too
-      // would narrow the feed twice over.
-      final listings = await ListingService.fetchListings(
+      final page = await _feed.fetchFeedPage(
+        page: 1,
+        perPage: _pageSize,
         search: search,
+        category: _filters.categoryId,
         availability: _filters.availability?.wireValue,
         sort: _filters.sort,
+        // Ranking replaces the explicit ordering, so asking for both would
+        // leave the sheet showing an order the feed is not in.
+        personalized: _filters.sort == HomeSortMode.latest,
       );
-      if (!mounted) return;
-      // Resolve the real distance BEFORE the grid renders (the existing load
-      // spinner covers the wait): one fetch of the public farm pins + one buyer
-      // GPS lookup services the whole feed, so the seeded "0.4 km away" never
-      // flashes on screen. Cards whose farm can't be matched keep the seed
-      // label rather than hiding the line (same fallback as the detail screen).
+
+      // Resolve the real distance BEFORE the feed renders: one fetch of the
+      // public farm pins + one buyer GPS lookup services every page, so the
+      // seeded "0.4 km away" never flashes on screen. Cards whose farm can't be
+      // matched keep the seed label rather than hiding the line (same fallback
+      // as the detail screen).
       final crops = await _resolveDistances(
-        listings.map((l) => l.toCropListing()).toList(),
+        page.listings.map((l) => l.toCropListing()).toList(),
       );
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _listings = crops;
+        _page = page.currentPage < 1 ? 1 : page.currentPage;
+        _lastPage = page.lastPage < _page ? _page : page.lastPage;
+        _loadMoreError = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -195,8 +297,92 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Pull-to-refresh: reload the feed while keeping current content on screen.
+  /// Appends the next page under the cards already on screen.
+  ///
+  /// Never touches [_isLoading]: a spinner over the whole feed while page two
+  /// arrives is the exact behaviour paging was added to remove.
+  Future<void> _loadMore() async {
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreError = null;
+    });
+
+    final nextPage = _page + 1;
+
+    try {
+      final page = await _feed.fetchFeedPage(
+        page: nextPage,
+        perPage: _pageSize,
+        category: _filters.categoryId,
+        availability: _filters.availability?.wireValue,
+sort: _filters.sort,
+        // Ranking and an explicit ordering are two answers to the same
+        // question, and the backend can only give one. Asking for the ranked
+        // feed when the buyer picked "soonest harvest" would leave the sheet
+        // showing an order the feed is not in, so the chosen sort wins and the
+        // ranking is simply not asked for.
+        personalized: _filters.sort == HomeSortMode.latest,
+      );
+
+      final crops = await _resolveDistances(
+        page.listings.map((l) => l.toCropListing()).toList(),
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _listings = _appendWithoutDuplicates(_listings, crops);
+        // Trust the page that actually came back, not the one that was asked
+        // for: a server that clamps the request would otherwise advance the
+        // counter past content it never sent.
+        _page = page.currentPage < nextPage ? nextPage : page.currentPage;
+        _lastPage = page.lastPage < _page ? _page : page.lastPage;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMore = false;
+        _loadMoreError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  /// Concatenates two pages, dropping anything already on screen.
+  ///
+  /// Ranking is not stable across requests — a contact or a review between two
+  /// page fetches moves a listing up one — so the same row can legitimately
+  /// appear on two pages. Appending it would render the same card twice, and
+  /// the duplicate would carry the same listing id, so tapping either opens the
+  /// same thing twice. Rows without an id cannot be compared and are kept.
+  static List<CropListing> _appendWithoutDuplicates(
+    List<CropListing> existing,
+    List<CropListing> incoming,
+  ) {
+    if (incoming.isEmpty) return existing;
+
+    final seen = <String>{
+      for (final l in existing)
+        if (l.listingId != null && l.listingId!.isNotEmpty) l.listingId!,
+    };
+
+    final fresh = incoming.where((l) {
+      final id = l.listingId;
+      if (id == null || id.isEmpty) return true;
+      return seen.add(id);
+    }).toList();
+
+    if (fresh.isEmpty) return existing;
+    return [...existing, ...fresh];
+  }
+
+  /// Pull-to-refresh: reload page one while keeping current content on screen.
   Future<void> _refresh() async {
+    // Farms and the buyer's position are re-read: a pull-to-refresh is also the
+    // buyer saying "something changed", and a farm that moved or appeared since
+    // the last load is exactly the kind of change it should pick up.
+    _distanceLookupDone = false;
     await _loadListings(showLoading: false);
     // The role is not refetched here. It is shared session state that survives
     // navigation, so re-deriving it on refresh is what used to make the nav
@@ -210,27 +396,37 @@ class _HomeScreenState extends State<HomeScreen> {
   /// distance to its farm, computing buyer GPS + the public pin list once for
   /// the whole feed. Silent on failure: unresolvable cards keep their current
   /// label (matching what the profile/detail screens show while unresolvable).
+  ///
+  /// The lookup is remembered for the life of one feed load, including when it
+  /// fails. Retrying on every page would mean every appended page re-asks a
+  /// question that just came back "no", on a screen that has already moved on.
   Future<List<CropListing>> _resolveDistances(
     List<CropListing> listings,
   ) async {
-    try {
-      final farms = await FarmService.fetchPublicFarms();
-      if (farms.isEmpty) return listings;
-      final you = await LocationService.defaultBuyerPosition();
-      final byId = {for (final f in farms) f.id: f};
-      return listings.map((l) {
-        final farm = l.farmId == null ? null : byId[l.farmId];
-        if (farm == null) return l;
-        final km = LocationService.distanceKm(
-          you,
-          LatLng(farm.latitude, farm.longitude),
-        );
-        return l.withDistance(LocationService.distanceLabel(km));
-      }).toList();
-    } catch (_) {
-      // Offline / no pins: keep the seeded labels rather than crash the feed.
-      return listings;
+    if (!_distanceLookupDone) {
+      _distanceLookupDone = true;
+      try {
+        _farms = await FarmService.fetchPublicFarms();
+        _buyerPosition = await LocationService.defaultBuyerPosition();
+      } catch (_) {
+        _farms = [];
+        _buyerPosition = null;
+      }
     }
+
+    final you = _buyerPosition;
+    if (_farms.isEmpty || you == null) return listings;
+
+    final byId = {for (final f in _farms) f.id: f};
+    return listings.map((l) {
+      final farm = l.farmId == null ? null : byId[l.farmId];
+      if (farm == null) return l;
+      final km = LocationService.distanceKm(
+        you,
+        LatLng(farm.latitude, farm.longitude),
+      );
+      return l.withDistance(LocationService.distanceLabel(km));
+    }).toList();
   }
 
   void _handleNavTap(int i) {
@@ -296,17 +492,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _refresh,
-                    child: SingleChildScrollView(
+                    // A CustomScrollView rather than a scroll view around a
+                    // Column: the Column lays out and builds every card the
+                    // moment the feed arrives, which is the cost paging exists
+                    // to remove. Slivers build what is on screen.
+                    child: CustomScrollView(
+                      controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionTitle(),
-                          const SizedBox(height: 12),
-                          _buildListingsSection(),
-                        ],
-                      ),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                          sliver: SliverToBoxAdapter(
+                            child: _buildSectionTitle(),
+                          ),
+                        ),
+                        ..._buildFeedSlivers(),
+                      ],
                     ),
                   ),
                 ),
@@ -515,11 +716,16 @@ class _HomeScreenState extends State<HomeScreen> {
     // Dismissed, or applied without changing anything.
     if (picked == null || !mounted || picked == _filters) return;
 
-    // Availability is the server's half, so it needs a refetch. Category alone
-    // does not, and neither does a re-sort on its own — but a re-sort the
-    // server did not perform has to be asked for, or the order on screen would
-    // silently stay whatever the last request returned.
-    final mustRefetch = picked.needsRefetch || picked.sort != _filters.sort;
+    // Category and availability are the server's job now, so either one
+    // changing means the whole feed has to come back. Sort alone does not —
+    // except for `latest`, which is the ranked default rather than a real
+    // ordering, so moving off it (or back onto it) changes what the server
+    // ranks and does need a fresh request.
+    final mustRefetch =
+        picked.needsRefetch ||
+        picked.sort != _filters.sort ||
+        (picked.sort == HomeSortMode.latest) !=
+            (_filters.sort == HomeSortMode.latest);
 
     setState(() => _filters = picked);
     if (mustRefetch) {
@@ -580,32 +786,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildListingsSection() {
+  /// The feed itself, in whichever of its four states it currently is.
+  ///
+  /// Returning a list rather than one widget is what lets the cards and the
+  /// "loading more" footer be siblings in the same viewport — the footer has to
+  /// sit below the last card, not inside a column that the cards also live in.
+  List<Widget> _buildFeedSlivers() {
+    // First load. Skeletons rather than a spinner: the feed keeps its shape,
+    // so when the real cards replace them nothing jumps.
     if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 120),
-        child: FarmSpotLoader(),
-      );
+      return const [
+        SliverToBoxAdapter(child: CropLadderSkeleton()),
+        SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ];
     }
 
     if (_errorMessage != null) {
+      return [
+        SliverToBoxAdapter(child: _buildFeedError()),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ];
+    }
+
+    final listings = _filteredListings;
+
+    if (listings.isEmpty) {
+      return const [
+        SliverToBoxAdapter(child: SizedBox(height: 120)),
+        SliverToBoxAdapter(child: _EmptyFeedState()),
+        SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ];
+    }
+
+    return [
+      CropLadderSliver(listings: listings, onTap: _openDetail),
+      SliverToBoxAdapter(child: _buildFeedFooter()),
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+    ];
+  }
+
+  /// Below the cards: the append spinner, a retry after a failed page, or
+  /// nothing at all.
+  ///
+  /// Silence when idle is deliberate. A persistent "no more posts" line costs a
+  /// row of screen for information the buyer learns by scrolling.
+  Widget _buildFeedFooter() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: FarmSpotLoader(size: 28)),
+      );
+    }
+
+    if (_loadMoreError != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 120),
-        child: Center(
-          child: Column(
-            children: [
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black54),
-              ),
-              TextButton(onPressed: _loadListings, child: const Text('Retry')),
-            ],
-          ),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          children: [
+            Text(
+              _loadMoreError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            TextButton(onPressed: _loadMore, child: const Text('Try again')),
+          ],
         ),
       );
     }
 
-    return CropLadderGrid(listings: _filteredListings, onTap: _openDetail);
+    return const SizedBox(height: 8);
+  }
+
+  Widget _buildFeedError() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 120),
+      child: Center(
+        child: Column(
+          children: [
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            TextButton(onPressed: _loadListings, child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Says the feed is empty rather than leaving a blank screen below the
+/// heading, which is indistinguishable from a still-loading feed once the
+/// spinner is gone.
+class _EmptyFeedState extends StatelessWidget {
+  const _EmptyFeedState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          'No crops match these filters yet.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.black54),
+        ),
+      ),
+    );
   }
 }

@@ -151,10 +151,7 @@ void main() {
         .getTopLeft(find.byIcon(Icons.notifications_none_rounded))
         .dy;
 
-    await tester.drag(
-      find.byType(SingleChildScrollView),
-      const Offset(0, -600),
-    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
     await tester.pump();
 
     expect(

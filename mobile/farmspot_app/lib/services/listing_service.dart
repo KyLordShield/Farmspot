@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/crop_category.dart';
 import '../models/crop_suggestion.dart';
+import '../models/home_feed_page.dart';
 import '../models/home_filters.dart';
 import '../models/listing.dart';
 import 'auth_service.dart';
@@ -48,27 +49,19 @@ class ListingService {
     HomeSortMode sort = HomeSortMode.latest,
     bool suggest = false,
   }) async {
+    final params = _feedQueryParams(
+      search: search,
+      category: category,
+      availability: availability,
+      sort: sort,
+      suggest: suggest,
+    );
+
     try {
       final token = await AuthService.getToken();
-      final params = <String, String>{};
-      if (search != null && search.trim().isNotEmpty) {
-        params['search'] = search.trim();
-        if (suggest) params['suggest'] = '1';
-      }
-      if (category != null && category.trim().isNotEmpty) {
-        params['category'] = category.trim();
-      }
-      if (availability != null && availability.trim().isNotEmpty) {
-        params['status'] = availability.trim();
-      }
-      // "latest" is the backend default, so sending it would be noise on the
-      // one call that happens most often: the plain home feed.
-      if (sort != HomeSortMode.latest) {
-        params['sort'] = sort.wireValue;
-      }
-      final uri = Uri.parse('$baseUrl/listings').replace(
-        queryParameters: params.isEmpty ? null : params,
-      );
+      final uri = Uri.parse(
+        '$baseUrl/listings',
+      ).replace(queryParameters: params.isEmpty ? null : params);
       final response = await http.get(
         uri,
         headers: {
@@ -91,6 +84,129 @@ class ListingService {
     }
   }
 
+  /// The query params every /listings request shares.
+  ///
+  /// Extracted because there are now two ways to call this endpoint — the whole
+  /// feed and one page of it — and the filters have to be spelled identically in
+  /// both. Duplicating this block is how a category filter ends up applied to
+  /// page one and silently dropped from page two.
+  ///
+  /// Empty values are omitted rather than sent blank, so an unset filter does
+  /// not become `?category=` on the wire.
+  static Map<String, String> _feedQueryParams({
+    String? search,
+    String? category,
+    String? availability,
+    HomeSortMode sort = HomeSortMode.latest,
+    bool suggest = false,
+  }) {
+    final params = <String, String>{};
+    if (search != null && search.trim().isNotEmpty) {
+      params['search'] = search.trim();
+      if (suggest) params['suggest'] = '1';
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      params['category'] = category.trim();
+    }
+    if (availability != null && availability.trim().isNotEmpty) {
+      params['status'] = availability.trim();
+    }
+    // "latest" is the backend default, so sending it would be noise on the
+    // one call that happens most often: the plain home feed.
+    if (sort != HomeSortMode.latest) {
+      params['sort'] = sort.wireValue;
+    }
+    return params;
+  }
+
+  /// One page of the browse feed (GET /api/listings?page=&per_page=).
+  ///
+  /// The feed used to ask for the whole active set on every load, every refresh
+  /// and every scroll-back-to-top. This asks for a page and reports whether
+  /// there is another one, which is what lets the screen append instead of
+  /// refetching — and what keeps a feed of several hundred listings from
+  /// building every card up front.
+  ///
+  /// [personalized] asks the server to rank by rating, contact activity,
+  /// freshness and the buyer's own search history. The backend reads it as
+  /// replacing [sort] rather than as an extra layer on top of it, so this is
+  /// sent only when the caller has NOT chosen an explicit ordering — otherwise
+  /// the filter sheet would name an order the feed is not in.
+  ///
+  /// [perPage] is clamped server-side to 1..30, so an off-by-one here costs a
+  /// truncated page rather than a failed request.
+  static Future<HomeFeedPage> fetchListingsPage({
+    required int page,
+    int perPage = 10,
+    String? search,
+    String? category,
+    String? availability,
+    HomeSortMode sort = HomeSortMode.latest,
+    bool personalized = true,
+  }) async {
+    final params = _feedQueryParams(
+      search: search,
+      category: category,
+      availability: availability,
+      sort: sort,
+    );
+    params['page'] = '$page';
+    params['per_page'] = '$perPage';
+    if (personalized) params['personalized'] = '1';
+
+    try {
+      final token = await AuthService.getToken();
+      final uri = Uri.parse(
+        '$baseUrl/listings',
+      ).replace(queryParameters: params);
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final rows = (data['listings'] as List)
+            .map((json) => Listing.fromJson(json as Map<String, dynamic>))
+            .toList();
+
+        final pagination = data['pagination'];
+        if (pagination is Map) {
+          return HomeFeedPage(
+            listings: rows,
+            currentPage: _readInt(pagination['current_page'], page),
+            lastPage: _readInt(pagination['last_page'], page),
+            total: _readInt(pagination['total'], rows.length),
+          );
+        }
+
+        // A body with no pagination block means the server sent everything:
+        // one page, and no second request to make.
+        return HomeFeedPage.unpaged(rows);
+      }
+
+      throw Exception('Failed to load listings.');
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+  }
+
+  /// Reads a paging number, falling back when the field is missing or is not a
+  /// number. A malformed `last_page` must not become 0 — that would claim the
+  /// feed is empty and silently stop the screen from ever loading more.
+  static int _readInt(dynamic value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return fallback;
+  }
+
   /// Keystroke-safe live suggestions for the Search screen.
   ///
   /// Calls the SAME /listings search endpoint but with &suggest=1, the backend
@@ -107,14 +223,15 @@ class ListingService {
       if (name.isEmpty || !name.toLowerCase().contains(lower)) continue;
       counts[name] = (counts[name] ?? 0) + 1;
     }
-    final crops = counts.entries
-        .map((e) => CropSuggestion(name: e.key, count: e.value))
-        .toList()
-      ..sort((a, b) {
-        final byCount = b.count.compareTo(a.count);
-        if (byCount != 0) return byCount;
-        return a.name.compareTo(b.name);
-      });
+    final crops =
+        counts.entries
+            .map((e) => CropSuggestion(name: e.key, count: e.value))
+            .toList()
+          ..sort((a, b) {
+            final byCount = b.count.compareTo(a.count);
+            if (byCount != 0) return byCount;
+            return a.name.compareTo(b.name);
+          });
     return crops;
   }
 
@@ -329,8 +446,7 @@ class ListingService {
             'harvest_date': harvestDate.trim(),
           if (status != null && status.trim().isNotEmpty)
             'status': status.trim(),
-          if (description != null)
-            'description': description.trim(),
+          if (description != null) 'description': description.trim(),
         },
       );
     } catch (e) {
