@@ -7,6 +7,7 @@ use App\Models\Farmer;
 use App\Models\Listing;
 use App\Models\ListingReview;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 /**
@@ -27,6 +28,26 @@ use Illuminate\Http\Request;
  */
 class ListingReviewController extends Controller
 {
+    /** Newest first, and what an absent or unusable ?sort falls back to. */
+    public const SORT_NEWEST = 'newest';
+
+    /** Rating, then has a comment, then newest. The product detail preview. */
+    public const SORT_BEST = 'best';
+
+    /** Rating alone, highest first, ignoring whether a comment was left. */
+    public const SORT_HIGHEST = 'highest';
+
+    /** Rating alone, lowest first. */
+    public const SORT_LOWEST = 'lowest';
+
+    /** Every accepted ?sort value. Membership is checked with in_array. */
+    public const SORTS = [
+        self::SORT_NEWEST,
+        self::SORT_BEST,
+        self::SORT_HIGHEST,
+        self::SORT_LOWEST,
+    ];
+
     /**
      * Paginated visible reviews for a listing, plus the summary.
      *
@@ -35,6 +56,22 @@ class ListingReviewController extends Controller
      * caller's own review rides along in `my_review`, which is what lets the
      * rate sheet open already filled in; guests get null and see the plain
      * "write a review" state.
+     *
+     * Three optional query parameters narrow or reorder the list. All are
+     * additive: with none of them present the response is byte-for-byte what it
+     * was before, apart from the new `rating_breakdown` inside `summary`.
+     *
+     *   ?rating=1..5     only that many stars
+     *   ?with_comment=   true only reviews with words, false only bare ratings
+     *   ?sort=           newest (default), best, highest, lowest
+     *
+     * `summary` is always computed over every visible review, never over the
+     * filtered set, so the header average and the chip counts cannot change
+     * because of a filter the buyer chose.
+     *
+     * `my_review` is likewise unaffected by the filters, so a buyer who has
+     * reviewed this listing can always find and edit their own row even when the
+     * active filter would have excluded it.
      */
     public function index(Request $request, $listingId)
     {
@@ -46,23 +83,44 @@ class ListingReviewController extends Controller
 
         $perPage = $this->perPage($request);
 
-        $reviews = ListingReview::with('user')
+        // Both are optional and both default to the pre-existing behaviour:
+        // newest first, unfiltered. An unusable value is dropped rather than
+        // rejected, so a stale or hand-edited client keeps the list it had
+        // before instead of getting an error page.
+        $rating = $this->ratingFilter($request);
+        $withComment = $this->withCommentFilter($request);
+        $sort = $this->sort($request);
+
+        $query = ListingReview::with('user')
             ->where('LST_ID', $listing->LST_ID)
             ->visible()
-            // Newest first. By time rather than by id: LRV_ID is six random
-            // digits, so sorting those would compare them as strings and hand
-            // back an arbitrary order.
-            ->orderByDesc('LRV_CREATED_AT')
-            ->orderByDesc('LRV_ID')
-            ->paginate($perPage);
+            // Applied before any ordering, and always inside visible() so a
+            // hidden review cannot be narrowed down to by guessing a rating.
+            ->when($rating !== null, fn (Builder $q) => $q->where('LRV_RATING', $rating))
+            ->when($withComment === true, fn (Builder $q) => $q->whereNotNull('LRV_COMMENT'))
+            ->when($withComment === false, fn (Builder $q) => $q->whereNull('LRV_COMMENT'));
 
-        // One aggregate over the visible rows only, matching exactly what the
-        // list above shows. A hidden review is out of both at once, so the
-        // average can never disagree with the reviews the buyer can read.
-        $summary = ListingReview::where('LST_ID', $listing->LST_ID)
+        $this->applySort($query, $sort);
+
+        $reviews = $query->paginate($perPage);
+
+        // Deliberately NOT built from $query: the average, the count and the
+        // breakdown describe every visible review of the listing, so the header
+        // cannot shift when a buyer filters down to "5 stars" or opens a later
+        // page. A filtered list showing an average of only what survived the
+        // filter is how a 3.9 listing ends up advertising itself as a 5.0.
+        $totals = ListingReview::where('LST_ID', $listing->LST_ID)
             ->visible()
             ->selectRaw('COUNT(*) as total, AVG(LRV_RATING) as average')
             ->first();
+
+        // One extra grouped query rather than five, and independent of the
+        // filters above on purpose, matching the totals.
+        $breakdown = ListingReview::where('LST_ID', $listing->LST_ID)
+            ->visible()
+            ->selectRaw('LRV_RATING as rating, COUNT(*) as total')
+            ->groupBy('LRV_RATING')
+            ->pluck('total', 'rating');
 
         $user = $request->user('sanctum');
 
@@ -88,10 +146,19 @@ class ListingReviewController extends Controller
                 //
                 // Rounded here rather than in SQL so the number the app sees is
                 // exactly what the visible review list supports.
-                'average' => $summary->average === null
+                'average' => $totals->average === null
                     ? null
-                    : round((float) $summary->average, 1),
-                'count' => (int) $summary->total,
+                    : round((float) $totals->average, 1),
+                'count' => (int) $totals->total,
+                // New field, additive: counts per rating over every VISIBLE
+                // review, unaffected by ?rating and ?with_comment. All five keys
+                // are always present so the app never has to guard a missing
+                // index to decide whether to print "(8)" beside a chip.
+                //
+                // The keys are strings because JSON object keys are, and they
+                // are built rather than cast so a rating with no reviews reads
+                // as 0 instead of vanishing and shifting the chip order.
+                'rating_breakdown' => $this->breakdown($breakdown),
             ],
             'my_review' => $mine ? $this->format($mine, $user) : null,
             'can_review' => $blocked === null,
@@ -273,6 +340,11 @@ class ListingReviewController extends Controller
 
     /**
      * The {average, count} block for a listing, visible reviews only.
+     *
+     * Shared with store() and destroy() so the summary they return cannot drift
+     * from the one index() sends. The breakdown rides along there too: a buyer
+     * who writes or deletes a review and closes the sheet expects the chip
+     * counts to move with the average, not a request later.
      */
     private function summaryFor(string $listingId): array
     {
@@ -281,12 +353,149 @@ class ListingReviewController extends Controller
             ->selectRaw('COUNT(*) as total, AVG(LRV_RATING) as average')
             ->first();
 
+        $breakdown = ListingReview::where('LST_ID', $listingId)
+            ->visible()
+            ->selectRaw('LRV_RATING as rating, COUNT(*) as total')
+            ->groupBy('LRV_RATING')
+            ->pluck('total', 'rating');
+
         return [
             'average' => $summary->average === null
                 ? null
                 : round((float) $summary->average, 1),
             'count' => (int) $summary->total,
+            'rating_breakdown' => $this->breakdown($breakdown),
         ];
+    }
+
+    /**
+     * Counts for ratings 1 to 5, every key always present.
+     *
+     * A rating nobody chose reads as 0 rather than being left out: the app
+     * renders the chips in descending order from these, so a missing key would
+     * mean a guard on every read and a blank gap in the row.
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>  $counts  rating => total
+     */
+    private function breakdown($counts): array
+    {
+        $breakdown = [];
+
+        for ($rating = 1; $rating <= 5; $rating++) {
+            $breakdown[(string) $rating] = (int) ($counts[$rating] ?? 0);
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * The requested star filter, or null to leave every rating in.
+     *
+     * Anything outside 1..5 is ignored rather than rejected. ?rating=9 from a
+     * stale client is a bug on that side, and failing the request would blank
+     * the whole reviews list over a parameter the server can simply not honour.
+     */
+    private function ratingFilter(Request $request): ?int
+    {
+        $raw = $request->query('rating');
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        // "3abc" must not become 3: is_numeric first, then the range.
+        if (! is_numeric($raw)) {
+            return null;
+        }
+
+        $rating = (int) $raw;
+
+        return $rating >= 1 && $rating <= 5 ? $rating : null;
+    }
+
+    /**
+     * The requested comment filter: true, false, or null for "don't care".
+     *
+     * True admits only reviews with words. False admits only bare star ratings,
+     * which is why this is tri-state rather than a bool — a missing parameter
+     * has to mean "both", not "only stars".
+     *
+     * Accepts true/false/1/0/yes/no. Anything else is ignored.
+     */
+    private function withCommentFilter(Request $request): ?bool
+    {
+        $raw = $request->query('with_comment');
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        $value = is_bool($raw) ? $raw : strtolower((string) $raw);
+
+        if (in_array($value, ['1', 'true', 'yes'], true)) {
+            return true;
+        }
+
+        if (in_array($value, ['0', 'false', 'no'], true)) {
+            return false;
+        }
+
+        return null;
+    }
+
+    /**
+     * Which ordering to use, defaulting to newest first.
+     *
+     * An unrecognised value falls back to the default rather than erroring, for
+     * the same reason the rating filter does.
+     *
+     * in_array, not array_key_exists: SORTS is a list of values rather than a
+     * map of value => true, so a key lookup would answer "no" for every input
+     * including "best", and quietly serve newest-first to a buyer who asked for
+     * the best reviews.
+     */
+    private function sort(Request $request): string
+    {
+        $sort = strtolower(trim((string) $request->query('sort', self::SORT_NEWEST)));
+
+        return in_array($sort, self::SORTS, true) ? $sort : self::SORT_NEWEST;
+    }
+
+    /**
+     * Order the visible-and-filtered query.
+     *
+     * Every branch ends in the same id tiebreak. LRV_ID is six random digits, so
+     * without it two reviews sharing a rating and a second would come back in a
+     * different order on each request, and a buyer paging through "Best" would
+     * see rows swap places between pages.
+     */
+    private function applySort(Builder $query, string $sort): void
+    {
+        switch ($sort) {
+            case self::SORT_BEST:
+                // Best is what the product detail preview uses for its top three,
+                // so the order has to be defensible: rating first, then reviews
+                // that bothered to write something, then newest. A 5-star "Great"
+                // outranks a 5-star tap, which in turn outranks an older 5.
+                $query->orderByDesc('LRV_RATING')
+                    ->orderByRaw('CASE WHEN LRV_COMMENT IS NULL THEN 1 ELSE 0 END')
+                    ->orderByDesc('LRV_CREATED_AT');
+                break;
+
+            case self::SORT_HIGHEST:
+                $query->orderByDesc('LRV_RATING')->orderByDesc('LRV_CREATED_AT');
+                break;
+
+            case self::SORT_LOWEST:
+                $query->orderBy('LRV_RATING')->orderByDesc('LRV_CREATED_AT');
+                break;
+
+            default:
+                $query->orderByDesc('LRV_CREATED_AT');
+                break;
+        }
+
+        $query->orderByDesc('LRV_ID');
     }
 
     /**
