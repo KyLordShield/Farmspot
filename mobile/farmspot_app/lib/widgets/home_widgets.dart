@@ -62,6 +62,33 @@ class CropListing {
     this.placeholderIcon = Icons.eco,
   });
 
+  /// Copy with a new [ratings] summary, used when the product detail screen
+  /// reports that a review was written or edited for this listing.
+  ///
+  /// Every field is restated rather than spread, same as [withDistance]: a field
+  /// added later must not be silently dropped from the copy.
+  CropListing withRatings(RatingSummary ratings) => CropListing(
+    cropName: cropName,
+    farmName: farmName,
+    cropType: cropType,
+    distance: distance,
+    status: status,
+    barangay: barangay,
+    sitio: sitio,
+    postedLabel: postedLabel,
+    expiresLabel: expiresLabel,
+    contactNumber: contactNumber,
+    imageUrl: imageUrl,
+    description: description,
+    photoUrls: photoUrls,
+    listingId: listingId,
+    farmId: farmId,
+    categoryId: categoryId,
+    farmerId: farmerId,
+    ratings: ratings,
+    placeholderIcon: placeholderIcon,
+  );
+
   /// Copy with an overridden [distance] label (used by the feed to swap the
   /// seeded placeholder for the real haversine distance once buyer GPS is known).
   ///

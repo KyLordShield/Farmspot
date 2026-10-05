@@ -898,11 +898,162 @@ group('ListingReviewsSection preview', () {
         ),
       );
 
-      await tester.tap(find.text('open'));
+await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
       expect(find.text('labanos'), findsOneWidget);
       expect(find.text('Write a review'), findsOneWidget);
+    });
+  });
+
+  group('summary reported to the screen above', () {
+    // The product detail screen shows the average beside the crop name from the
+    // listing payload. It is a snapshot from when the feed was fetched, so an
+    // edit made here used to leave the header on 5.0 while the block below it
+    // read 4.0 — the same fact in two places, disagreeing, with no way for the
+    // buyer to tell which one is current.
+
+    /// Mounts a section under a compact label wired the way the detail header is:
+    /// seeded from the payload, then following whatever the section reports.
+    ///
+    /// Held in a [ValueNotifier] rather than a local, because a local inside the
+    /// builder would be re-initialised on every rebuild and quietly undo the
+    /// update under test — the test would then fail for a reason that has
+    /// nothing to do with the code.
+    Widget hostWithHeader(
+      FakeReviewsGateway gateway,
+      RatingSummary payloadSummary,
+      ValueChanged<RatingSummary> onSummary,
+    ) {
+      final shown = ValueNotifier<RatingSummary>(payloadSummary);
+      addTearDown(shown.dispose);
+
+      return MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              ValueListenableBuilder<RatingSummary>(
+                valueListenable: shown,
+                builder: (context, summary, _) =>
+                    CompactRatingLabel(summary: summary, size: 13),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: ListingReviewsSection(
+                    listingId: 'LST0001',
+                    cropName: 'carrot',
+                    initialSummary: payloadSummary,
+                    gateway: gateway,
+                    onSummaryChanged: (summary) {
+                      shown.value = summary;
+                      onSummary(summary);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    testWidgets('editing a review moves the score beside the crop name', (
+      tester,
+    ) async {
+      _usePhone(tester);
+      final mine = aReview(id: 'LRVMINE', rating: 5, isMine: true);
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(
+          reviews: [mine],
+          summary: const RatingSummary(average: 5.0, count: 1),
+          myReview: mine,
+          total: 1,
+        )
+        // The edit lands: same one review, now four stars. savedReview is what a
+        // create/update response carries, and what the block swaps the row for —
+        // without it the summary updates while the card in the preview keeps
+        // drawing the old five stars.
+        ..saveResult = ReviewPageResult(
+          reviews: [aReview(id: 'LRVMINE', rating: 4, isMine: true)],
+          summary: const RatingSummary(average: 4.0, count: 1),
+          savedReview: aReview(id: 'LRVMINE', rating: 4, isMine: true),
+          myReview: aReview(id: 'LRVMINE', rating: 4, isMine: true),
+          canReview: true,
+          total: 1,
+        );
+
+      final reported = <RatingSummary>[];
+      await tester.pumpWidget(
+        hostWithHeader(
+          gateway,
+          const RatingSummary(average: 5.0, count: 1),
+          reported.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Seeded from the payload, so the number is right before any edit. Two or
+      // more because the block's own RatingStars prints the same figure; the
+      // point of the test is that none of them is stale afterwards.
+      expect(find.text('5.0'), findsAtLeastNWidgets(2));
+
+      await _tapWriteButton(tester);
+      await tester.tap(_star(4));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Update review'));
+      await tester.pumpAndSettle();
+
+      // Header, block and the screen behind it all on the new average.
+      expect(find.text('4.0'), findsAtLeastNWidgets(2));
+      expect(find.text('5.0'), findsNothing);
+      expect(find.text('Based on 1 review'), findsOneWidget);
+      expect(reported.last.average, 4.0);
+      expect(reported.last.count, 1);
+    });
+
+    testWidgets('deleting the only review clears the score instead of zeroing it', (
+      tester,
+    ) async {
+      _usePhone(tester);
+      final mine = aReview(id: 'LRVMINE', rating: 5, isMine: true);
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(
+          reviews: [mine],
+          summary: const RatingSummary(average: 5.0, count: 1),
+          myReview: mine,
+          total: 1,
+        )
+        ..deleteResult = aPage(
+          reviews: const [],
+          summary: RatingSummary.none(),
+          total: 0,
+        );
+
+      await tester.pumpWidget(
+        hostWithHeader(
+          gateway,
+          const RatingSummary(average: 5.0, count: 1),
+          (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('5.0'), findsAtLeastNWidgets(2));
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      // The dialog's confirm, not the header's Delete link behind it — both are
+      // a TextButton reading "Delete".
+      await tester.tap(
+        find.descendant(of: find.byType(AlertDialog), matching: find.text('Delete')),
+      );
+      await tester.pumpAndSettle();
+
+      // No reviews left means no average to show, not "0.0" beside the name. The
+      // label widget stays in the tree and collapses itself to nothing, so the
+      // check is on what it actually paints rather than on its presence.
+      expect(find.text('5.0'), findsNothing);
+      expect(find.text('0.0'), findsNothing);
+      expect(tester.getSize(find.byType(CompactRatingLabel)).width, 0);
     });
   });
 }

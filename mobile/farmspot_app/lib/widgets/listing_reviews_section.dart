@@ -37,12 +37,24 @@ class ListingReviewsSection extends StatefulWidget {
   /// Injectable for tests; the real HTTP service is used when omitted.
   final ReviewsGateway? gateway;
 
+  /// Fires whenever this block learns a new [RatingSummary] — on the first read,
+  /// and again after a save, an edit or a delete.
+  ///
+  /// The product detail screen shows the average beside the crop name from the
+  /// listing payload, which is a snapshot taken when the feed was fetched. That
+  /// snapshot is stale the moment anyone writes a review: editing a 5★ down to
+  /// 4★ left the header reading 5.0 next to a section correctly reading 4.0.
+  /// Nothing above this block refetches the listing, so the fresh summary is
+  /// reported upward instead of each caller having to go and look.
+  final ValueChanged<RatingSummary>? onSummaryChanged;
+
   const ListingReviewsSection({
     super.key,
     required this.listingId,
     required this.cropName,
     this.initialSummary = const RatingSummary.none(),
     this.gateway,
+    this.onSummaryChanged,
   });
 
   /// Key for the "Write a review" button, used by widget tests.
@@ -125,6 +137,7 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
           total: result.total,
         );
       });
+      _reportSummary(result.summary);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -185,6 +198,7 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
             ? _page.copyWith(summary: result.summary)
             : _page.withSavedReview(saved, result.summary);
       });
+      _reportSummary(result.summary);
       _toast(wasEditing ? 'Review updated.' : 'Review submitted.');
     } catch (e) {
       if (!mounted) return;
@@ -232,6 +246,7 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
         _submitting = false;
         _page = _page.withoutReview(reviewId, result.summary);
       });
+      _reportSummary(result.summary);
       _toast('Your review was deleted.');
     } catch (e) {
       if (!mounted) return;
@@ -244,6 +259,16 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Passes a fresh summary up to the screen, if it is listening.
+  ///
+  /// Sent unguarded rather than only when the numbers differ. Equality on a
+  /// [RatingSummary] would mean comparing the breakdown too, and a caller that
+  /// rebuilds a header from what it is handed is cheaper than one that has to
+  /// know whether it was told something new.
+  void _reportSummary(RatingSummary summary) {
+    widget.onSummaryChanged?.call(summary);
   }
 
   @override

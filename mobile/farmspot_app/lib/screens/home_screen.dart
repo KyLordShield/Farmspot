@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 import '../theme.dart';
 import '../models/crop_category.dart';
 import '../models/home_filters.dart';
+import '../models/listing_review.dart';
 import '../widgets/home_filter_sheet.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
@@ -127,8 +128,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDetail(CropListing listing) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ProductDetailScreen(listing: listing)),
+      MaterialPageRoute(
+        builder: (_) => ProductDetailScreen(
+          listing: listing,
+          // The feed keeps its own copy of every listing, so a review written on
+          // the detail screen left this card showing the old average until a
+          // pull-to-refresh. Patched here instead of refetching the whole feed:
+          // one listing changed, and a refetch would also throw away the scroll
+          // position and the resolved distances.
+          onRatingsChanged: (summary) => _applyRating(listing, summary),
+        ),
+      ),
     );
+  }
+
+  /// Swaps the fresh average onto the card the buyer came from.
+  void _applyRating(CropListing listing, RatingSummary summary) {
+    final listingId = listing.listingId;
+    if (!mounted || listingId == null || listingId.isEmpty) return;
+
+    setState(() {
+      _listings = [
+        for (final row in _listings)
+          if (row.listingId == listingId) row.withRatings(summary) else row,
+      ];
+    });
   }
 
   Future<void> _loadListings({String? search, bool showLoading = true}) async {

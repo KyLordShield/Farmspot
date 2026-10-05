@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/farm_pin.dart';
+import '../models/listing_review.dart';
 import '../models/report.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
@@ -32,12 +33,23 @@ class ProductDetailScreen extends StatefulWidget {
   /// listing's read-only average already arrives on [listing].
   final ReviewsGateway? reviewsGateway;
 
+  /// Fired whenever the reviews block reports a new average, so the screen that
+  /// pushed this one can update the card it is showing.
+  ///
+  /// The feed holds its own copy of each listing, so a review written here left
+  /// the home card showing the old average until a pull-to-refresh: the same
+  /// number in two places on two screens, disagreeing, with no way for the
+  /// buyer to tell which is current. The detail screen has no way to reach into
+  /// the feed's state, so the fresh summary is handed back instead.
+  final ValueChanged<RatingSummary>? onRatingsChanged;
+
   const ProductDetailScreen({
     super.key,
     required this.listing,
     this.gateway,
     this.reportsGateway,
     this.reviewsGateway,
+    this.onRatingsChanged,
   });
 
   @override
@@ -79,6 +91,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// True while the conversation is being created/fetched, so the Message button
   /// cannot be double-tapped into two pushes.
   bool _startingThread = false;
+
+  /// The score shown beside the crop name.
+  ///
+  /// Starts as whatever arrived on the listing payload so the number is on
+  /// screen immediately, then follows the reviews block. Editing a review does
+  /// not refetch the listing — the listing is immutable here, only its reviews
+  /// changed — so without this the header kept showing the average from when
+  /// the feed was fetched while the block below it showed the new one.
+  late RatingSummary _summary = listing.ratings;
 
   @override
   void initState() {
@@ -153,6 +174,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       subjectName: 'this ${listing.cropName} listing',
       gateway: widget.reportsGateway,
     );
+  }
+
+  /// Keeps the crop-name score, and the feed behind this screen, on the same
+  /// average the reviews block just reported.
+  ///
+  /// A buyer who edits their review and watches the block below update while the
+  /// number beside the crop name stays put has been told one of the two is out of
+  /// date. Both are the same fact, so one update moves both, and the equality
+  /// check keeps a background refetch that agrees with what is shown from
+  /// rebuilding the header and firing the feed callback for nothing.
+  void _onSummaryChanged(RatingSummary summary) {
+    if (summary.average == _summary.average &&
+        summary.count == _summary.count) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _summary = summary);
+    widget.onRatingsChanged?.call(summary);
   }
 
   /// Opens the in-app conversation with the seller for this listing.
@@ -251,12 +290,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         // card default because this is a 24pt heading, not a
                         // card line: the rating supports the name rather than
                         // competing with it.
-                        if (listing.ratings.hasRatings) ...[
+                        if (_summary.hasRatings) ...[
                           const SizedBox(width: 10),
-                          CompactRatingLabel(
-                            summary: listing.ratings,
-                            size: 13,
-                          ),
+                          CompactRatingLabel(summary: _summary, size: 13),
                         ],
                       ],
                     ),
@@ -479,8 +515,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         cropName: listing.cropName,
                         // Already on the payload, so the header renders at once
                         // instead of flashing empty before the fetch lands.
-                        initialSummary: listing.ratings,
+                        initialSummary: _summary,
                         gateway: widget.reviewsGateway,
+                        onSummaryChanged: _onSummaryChanged,
                       ),
                     ],
                     // Reporting sits below the two things a buyer actually came
