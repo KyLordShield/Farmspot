@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/crop_category.dart';
 import '../models/farm_pin.dart';
 import '../models/listing.dart';
+import '../models/listing_review.dart';
 import '../models/search_crop_group.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
@@ -144,6 +145,14 @@ class _ImageResult {
     required this.cropTitle,
     required this.confidence,
   });
+
+  /// Copy with a replaced listing, used when the reviews block reports that this
+  /// listing's average changed while its detail screen was open.
+  _ImageResult copyWithListing(CropListing listing) => _ImageResult(
+    listing: listing,
+    cropTitle: cropTitle,
+    confidence: confidence,
+  );
 }
 
 /// Order + range-split for the mixed image-search list.
@@ -443,7 +452,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             result.listing.listingId == item.listingId) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(listing: result.listing),
+              builder: (_) => ProductDetailScreen(
+                listing: result.listing,
+                onRatingsChanged: (summary) =>
+                    _applyRating(result.listing, summary),
+              ),
             ),
           );
           return;
@@ -455,7 +468,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             row.item.listingId == item.listingId) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(listing: row.listing),
+              builder: (_) => ProductDetailScreen(
+                listing: row.listing,
+                onRatingsChanged: (summary) =>
+                    _applyRating(row.listing, summary),
+              ),
             ),
           );
           return;
@@ -468,6 +485,42 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Swaps a fresh average onto the card the buyer came from.
+  ///
+  /// Same reasoning as the home feed: these rows were built from the search
+  /// response and kept their copy of the average, so a review written on the
+  /// detail screen left the result card reading the old score until the buyer
+  /// searched again. Both the card's own item and the CropListing behind it are
+  /// patched, because a card draws the item while the detail screen is opened
+  /// from the listing.
+  ///
+  /// Image-search rows hold no item of their own — their cards are built by
+  /// [_imageItems] from the listing — so patching the listing is enough there.
+  void _applyRating(CropListing listing, RatingSummary summary) {
+    final listingId = listing.listingId;
+    if (!mounted || listingId == null || listingId.isEmpty) return;
+
+    setState(() {
+      _rows = [
+        for (final row in _rows)
+          if (row.listing.listingId == listingId)
+            _ResultRow(
+              item: row.item.withRatings(summary),
+              listing: row.listing.withRatings(summary),
+            )
+          else
+            row,
+      ];
+      _imageResults = [
+        for (final result in _imageResults)
+          if (result.listing.listingId == listingId)
+            result.copyWithListing(result.listing.withRatings(summary))
+          else
+            result,
+      ];
+    });
   }
 
   /// Opens the category picker; a chosen category narrows the results

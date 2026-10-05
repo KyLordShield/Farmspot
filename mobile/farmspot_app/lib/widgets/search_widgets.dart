@@ -47,6 +47,24 @@ class SearchResultItem {
     this.farmId,
     this.ratings = const RatingSummary.none(),
   });
+
+  /// Copy with a new [ratings] summary.
+  ///
+  /// The search card draws [ratings] and the detail screen draws the summary its
+  /// reviews block reports, so a review written on the detail screen left the
+  /// card it was opened from showing the old average. Every field is restated
+  /// rather than spread, same as `CropListing.withRatings`.
+  SearchResultItem withRatings(RatingSummary ratings) => SearchResultItem(
+    crop: crop,
+    seller: seller,
+    distance: distance,
+    status: status,
+    icon: icon,
+    imageUrl: imageUrl,
+    listingId: listingId,
+    farmId: farmId,
+    ratings: ratings,
+  );
 }
 
 /// Hardcoded 2x2 grid data used by both the typed-results screen and the
