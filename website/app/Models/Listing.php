@@ -90,6 +90,19 @@ class Listing extends Model
             ->withCount(['reviews as rating_count' => fn ($q) => $q->visible()]);
     }
 
+    /**
+     * Buyer complaints filed against this listing.
+     *
+     * Added for the seller's My Farm view, which shows a neutral "Under
+     * review" chip while any of them is still open. Nothing but the count and
+     * the state ever leaves that screen: who reported, why and which buyer said
+     * it stay on the admin side of the wall.
+     */
+    public function reports()
+    {
+        return $this->hasMany(Report::class, 'LST_ID', 'LST_ID');
+    }
+
     public function primaryPhoto()
     {
         return $this->hasOne(ListingPhoto::class, 'LST_ID', 'LST_ID')

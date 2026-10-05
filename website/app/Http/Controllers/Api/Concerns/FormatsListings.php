@@ -73,6 +73,16 @@ trait FormatsListings
             $data['rating_count'] = (int) $listing->rating_count;
         }
 
+        // has_open_report, present only when the caller asked for it with
+        // Listing::withExists(['reports as has_open_report' => ...]). A boolean
+        // and nothing else, because the seller's My Farm row says "Under review"
+        // and stops there — who reported, why and what they wrote stay on the
+        // admin side. Same guard as the rating pair above, so every endpoint
+        // that does not opt in keeps its exact previous shape.
+        if (isset($listing->has_open_report)) {
+            $data['has_open_report'] = (bool) $listing->has_open_report;
+        }
+
         return $data;
     }
 

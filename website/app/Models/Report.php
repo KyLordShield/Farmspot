@@ -35,6 +35,20 @@ class Report extends Model
     public $timestamps = false;
 
     /**
+     * The report states that mean "nobody has looked at this yet".
+     *
+     * Used by the seller's My Farm list, which shows a neutral "Under review"
+     * chip for a listing carrying one of these. Resolved and Dismissed are
+     * deliberately absent: a finished report is not news to the seller, and a
+     * chip that outlives the decision would train them to ignore it.
+     *
+     * Mixed case because that is what the column stores and what the admin
+     * triage form writes — the whole report table is inconsistent this way and
+     * these constants are the one place that has to agree with it.
+     */
+    public const OPEN_STATUSES = ['New', 'Reviewing'];
+
+    /**
      * The enforcement steps available per reported subject.
      *
      * A report is a lead, not a verdict, so nothing here happens on a counter:
