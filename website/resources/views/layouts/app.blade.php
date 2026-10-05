@@ -81,6 +81,16 @@
                 </a>
             </li>
 
+            {{-- Sits after Reports rather than before Users: both are moderation
+                 queues, and keeping them adjacent means an admin working a
+                 flagged item can move straight to the review it produced. --}}
+            <li>
+                <a href="{{ route('reviews') }}">
+                    <i class="bi bi-star"></i>
+                    Reviews
+                </a>
+            </li>
+
             <li>
                 <a href="{{ route('whitelist') }}">
                     <i class="bi bi-check-circle"></i>

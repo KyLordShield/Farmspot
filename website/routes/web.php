@@ -7,6 +7,7 @@ use App\Http\Controllers\ListingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WhitelistController;
+use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\SellerRequestController;
 use Illuminate\Support\Facades\Route;
 
@@ -51,6 +52,13 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::post('/whitelist', [WhitelistController::class, 'store'])->name('whitelist.store');
     Route::get('/whitelist/{id}', [WhitelistController::class, 'show'])->name('whitelist.show');
     Route::patch('/whitelist/{id}/toggle', [WhitelistController::class, 'toggleStatus'])->name('whitelist.toggle');
+
+    // Reviews. Only /reviews and /reviews/{id}/visibility exist — a review can
+    // be hidden or shown again and nothing else. No create/edit/delete, which
+    // is why there is no /reviews/{id} edit route to collide with a wildcard.
+    Route::get('/reviews', [ReviewController::class, 'index'])->name('reviews');
+    Route::patch('/reviews/{id}/visibility', [ReviewController::class, 'toggleStatus'])
+        ->name('reviews.toggleStatus');
 
     Route::get('/seller-requests', [SellerRequestController::class, 'index'])->name('seller-requests');
     Route::get('/seller-requests/{id}', [SellerRequestController::class, 'show'])->name('seller-requests.show');

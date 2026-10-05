@@ -33,6 +33,34 @@ class ListingReview extends Model
 
     protected $guarded = [];
 
+    /**
+     * Microseconds when writing, so the column's datetime(6) is actually used.
+     *
+     * Eloquent serialises dates through getDateFormat(), and Laravel's default
+     * is 'Y-m-d H:i:s' — which would truncate to whole seconds on the way in
+     * and quietly undo the datetime(6) the migration asks for. The review list
+     * sorts newest-first, so two reviews written inside the same second would
+     * tie and fall back to LRV_ID, six random digits. Same fix, same reason as
+     * ReportAction: a tie there is an arbitrary order, and reviews would swap
+     * places between page loads.
+     */
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
+    /**
+     * Both timestamp columns come back as Carbon.
+     *
+     * Needed because $timestamps is off, so Eloquent applies no date casting
+     * on its own and would hand back a plain "Y-m-d H:i:s" string. Anything
+     * comparing or subtracting the two dates — an edit older than the review,
+     * "3 days ago" in the app — would otherwise have to reparse the string
+     * first, and a test asserting on it would be asserting on a string.
+     */
+    protected $casts = [
+        'LRV_RATING' => 'integer',
+        'LRV_CREATED_AT' => 'datetime',
+        'LRV_UPDATED_AT' => 'datetime',
+    ];
+
     public const STATUS_VISIBLE = 'VISIBLE';
 
     public const STATUS_HIDDEN = 'HIDDEN';
@@ -64,9 +92,59 @@ class ListingReview extends Model
         return $query->where('LRV_STATUS', self::STATUS_VISIBLE);
     }
 
+    /**
+     * The moderation queue's other half. Kept as a scope rather than an inline
+     * where() so "hidden" is defined in exactly one place, same as visible().
+     */
+    public function scopeHidden(Builder $query): Builder
+    {
+        return $query->where('LRV_STATUS', self::STATUS_HIDDEN);
+    }
+
     public function isHidden(): bool
     {
         return $this->LRV_STATUS === self::STATUS_HIDDEN;
+    }
+
+    /**
+     * First name plus last initial, e.g. "Maria S." from "Maria Santos".
+     *
+     * Both the public API and the admin table render the reviewer through this,
+     * which is what keeps the full name off the screen in the one place a
+     * reviewer identity is shown. USR_EMAIL and USR_MOBILE are never touched.
+     *
+     * `user` stores one name column, USR_NAME, so the split is done here rather
+     * than being read off the database: first word, plus the initial of the last
+     * word. That keeps a middle name from surviving, which a naive
+     * first-two-words approach would do. A one-word name has no initial to take
+     * and is returned whole.
+     *
+     * Falls back to a neutral label when the name is missing or the account row
+     * is gone — the review still exists as evidence of what was said even if the
+     * account was removed.
+     */
+    public function reviewerName(): string
+    {
+        return self::abbreviate($this->user?->USR_NAME);
+    }
+
+    /**
+     * Shared by reviewerName() so the API payload and the admin table cannot
+     * drift apart and start rendering names differently.
+     */
+    public static function abbreviate(?string $fullName): string
+    {
+        $parts = preg_split('/\s+/', trim((string) $fullName), -1, PREG_SPLIT_NO_EMPTY);
+
+        if (! $parts) {
+            return 'A buyer';
+        }
+
+        if (count($parts) === 1) {
+            return $parts[0];
+        }
+
+        return $parts[0] . ' ' . mb_substr($parts[count($parts) - 1], 0, 1) . '.';
     }
 
     /**

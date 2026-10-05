@@ -85,6 +85,9 @@ class ListingReviewController extends Controller
             'summary' => [
                 // null, not 0.0: an unreviewed listing is not a zero-star one,
                 // and the app renders nothing at all when this is null.
+                //
+                // Rounded here rather than in SQL so the number the app sees is
+                // exactly what the visible review list supports.
                 'average' => $summary->average === null
                     ? null
                     : round((float) $summary->average, 1),
@@ -302,6 +305,10 @@ class ListingReviewController extends Controller
      *
      * `is_mine` is resolved against the caller rather than trusted from the
      * row, so a client can style its own review without a second request.
+     *
+     * `reviewer` comes from the model's reviewerName(), which is also what the
+     * admin table renders, so the public API and the moderation screen cannot
+     * end up abbreviating names differently.
      */
     private function format(ListingReview $review, ?User $viewer): array
     {
@@ -310,36 +317,10 @@ class ListingReviewController extends Controller
             'listing_id' => $review->LST_ID,
             'rating' => (int) $review->LRV_RATING,
             'comment' => $review->LRV_COMMENT,
-            'reviewer' => $this->displayName($review->user?->USR_NAME),
+            'reviewer' => $review->reviewerName(),
             'created_at' => $review->LRV_CREATED_AT,
             'updated_at' => $review->LRV_UPDATED_AT,
             'is_mine' => $viewer !== null && $viewer->USR_ID === $review->USR_ID,
         ];
-    }
-
-    /**
-     * "Juan D." from "Juan Dela Cruz" — first name plus last initial.
-     *
-     * RA 10173: a review is public, so it must not carry an email address or a
-     * mobile number. The full registered name is trimmed to this shape rather
-     * than truncated by length, so the middle name never survives.
-     *
-     * A one-word name has no initial to take and is returned as-is. A missing
-     * name falls back to a neutral label instead of an empty string, so a
-     * review is never rendered with a blank byline.
-     */
-    private function displayName(?string $fullName): string
-    {
-        $parts = preg_split('/\s+/', trim((string) $fullName), -1, PREG_SPLIT_NO_EMPTY);
-
-        if (! $parts) {
-            return 'A buyer';
-        }
-
-        if (count($parts) === 1) {
-            return $parts[0];
-        }
-
-        return $parts[0] . ' ' . mb_substr($parts[count($parts) - 1], 0, 1) . '.';
     }
 }

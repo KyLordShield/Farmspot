@@ -26,10 +26,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // A failed earlier run can leave the table behind without the migration
-        // being recorded, which then makes every retry fail on "already exists".
-        Schema::dropIfExists('listing_review');
-
+        // No dropIfExists here on purpose. This migration is additive: it must
+        // never remove a table it does not own, because on a re-run it would
+        // take every existing review with it. If an earlier attempt left a
+        // half-built table behind without the migration being recorded, the
+        // create below fails loudly on "already exists" and that has to be
+        // cleared by hand. A silent skip is worse than that failure: it would
+        // mark the migration as applied against a schema it did not create.
         Schema::create('listing_review', function (Blueprint $table) {
             $table->char('LRV_ID', 6)->primary();
             // utf8mb4_general_ci to match the rest of the schema. The legacy
@@ -43,8 +46,16 @@ return new class extends Migration
             // Admin moderation. VISIBLE is the default so an insert that omits
             // the column is never accidentally invisible.
             $table->enum('LRV_STATUS', ['VISIBLE', 'HIDDEN'])->default('VISIBLE');
-            $table->dateTime('LRV_CREATED_AT');
-            $table->dateTime('LRV_UPDATED_AT');
+
+            // datetime(6), not a plain datetime, for the same reason report_action
+            // went through the same change: at MySQL's default one-second
+            // resolution, several reviews written in the same second tie, and
+            // "newest first" then falls back to LRV_ID — six random digits — so
+            // the order is arbitrary and a buyer's own two reviews can swap
+            // places between page loads. Microseconds make the sort
+            // deterministic. See 2026_10_01_000009 for the same fix upstream.
+            $table->dateTime('LRV_CREATED_AT', 6);
+            $table->dateTime('LRV_UPDATED_AT', 6);
 
             // Index for "the visible reviews for this listing, newest first",
             // which is the single read every screen performs.
