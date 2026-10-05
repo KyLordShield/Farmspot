@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/listing_reviews_section.dart';
+import '../widgets/rating_stars.dart';
 import '../widgets/report_sheet.dart';
 import 'farm_profile_screen.dart';
 import 'in_app_messages_screen.dart';
@@ -232,12 +233,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildPhotoStrip(),
-                    Text(
-                      listing.cropName,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            listing.cropName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        // Beside the name so the score is readable without
+                        // scrolling to the reviews block. Sized down from the
+                        // card default because this is a 24pt heading, not a
+                        // card line: the rating supports the name rather than
+                        // competing with it.
+                        if (listing.ratings.hasRatings) ...[
+                          const SizedBox(width: 10),
+                          CompactRatingLabel(
+                            summary: listing.ratings,
+                            size: 13,
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Row(
