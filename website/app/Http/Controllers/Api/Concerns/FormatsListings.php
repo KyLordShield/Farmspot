@@ -63,6 +63,33 @@ trait FormatsListings
             ];
         }
 
+        // Rating summary, added to the payload only when the caller asked for
+        // it with Listing::withRatingSummary(). Checking for the loaded
+        // aggregates rather than defaulting them means an endpoint that does
+        // not opt in keeps its exact previous shape, and no endpoint can
+        // silently report "0.0 stars" for a listing it never actually counted.
+        if (isset($listing->rating_count)) {
+            $data['rating_average'] = $this->formatRatingAverage($listing->rating_average);
+            $data['rating_count'] = (int) $listing->rating_count;
+        }
+
         return $data;
+    }
+
+    /**
+     * One review endpoint's average as a number rounded to one decimal, or null
+     * when nobody has reviewed yet.
+     *
+     * Null rather than 0 is the point: "no reviews" and "reviewed and scored
+     * zero" are different states, and a 0.0 would read as a terrible listing
+     * instead of an unreviewed one. The app renders nothing at all for null.
+     */
+    protected function formatRatingAverage($average): ?float
+    {
+        if ($average === null || $average === '') {
+            return null;
+        }
+
+        return round((float) $average, 1);
     }
 }

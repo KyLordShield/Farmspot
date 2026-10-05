@@ -268,6 +268,10 @@ class FarmController extends Controller
         }
 
         $listings = Listing::with(['category', 'farm', 'photos'])
+            // Same single-query rating summary the feed and detail use, so a
+            // listing card looks the same wherever it is opened from — the map
+            // reaches these through the farm profile.
+            ->withRatingSummary()
             ->where('FRM_ID', $farm->FRM_ID)
             // NOT_AVAILABLE stays visible here on purpose (a sold-out crop is
             // still this farm's story), but a REMOVED listing must not: it was

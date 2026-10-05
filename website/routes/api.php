@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ListingController;
+use App\Http\Controllers\Api\ListingReviewController;
 use App\Http\Controllers\Api\ListingCreateController;
 use App\Http\Controllers\Api\ListingPhotoController;
 use App\Http\Controllers\Api\FarmerListingController;
@@ -23,6 +24,9 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
+// Public, like the listing detail it sits on: reviews are shown on a public
+// page, and an optional bearer token only adds `my_review` + `can_review`.
+Route::get('/listings/{listingId}/reviews', [ListingReviewController::class, 'index']);
 Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
 Route::get('/insights', [InsightsController::class, 'show']);
 Route::get('/farms/public', [FarmController::class, 'mapPins']);
@@ -38,6 +42,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/farms/{farmId}/stats', [FarmController::class, 'stats']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
     Route::post('/listings/{listingId}/log-contact', [ListingController::class, 'logContact']);
+    Route::post('/listings/{listingId}/reviews', [ListingReviewController::class, 'store']);
+    Route::delete('/listings/{listingId}/reviews', [ListingReviewController::class, 'destroy']);
     Route::get('/my-listings', [FarmerListingController::class, 'myListings']);
     Route::post('/listings', [ListingCreateController::class, 'store']);
     Route::patch('/listings/{id}', [FarmerListingController::class, 'update']);

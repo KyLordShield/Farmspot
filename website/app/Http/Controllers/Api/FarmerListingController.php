@@ -40,6 +40,10 @@ class FarmerListingController extends Controller
         }
 
         $listings = Listing::with(['farm', 'category', 'photos'])
+            // Read-only rating summary for the seller's own My Farm view. Same
+            // subquery aggregate as the buyer-facing endpoints, so a seller sees
+            // exactly the number a buyer does.
+            ->withRatingSummary()
             ->where('FMR_ID', $farmer->FMR_ID)
             ->where('LST_AVAILABILITY', '!=', Listing::AVAILABILITY_REMOVED)
             ->orderByDesc('LST_CREATED_AT')

@@ -34,3 +34,7 @@ zip files datasets/
 website/public/demo-crops/
 website/public/demo-farm-photos/
 website/public/testing-crops/
+
+# Pre-migration mysqldump snapshots of capstone_db. Local safety copies only,
+# never committed: they contain every row of the live capstone database.
+backups/

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class Listing extends Model
@@ -56,6 +57,37 @@ class Listing extends Model
     public function contacts()
     {
         return $this->hasMany(ContactLog::class, 'LST_ID', 'LST_ID');
+    }
+
+    /**
+     * Buyer reviews left on this listing.
+     *
+     * NOT filtered to VISIBLE here on purpose: an admin page has to be able to
+     * read hidden reviews too. Buyer-facing reads use the visible() scope
+     * (or the withRatingSummary() aggregate below) instead.
+     */
+    public function reviews()
+    {
+        return $this->hasMany(ListingReview::class, 'LST_ID', 'LST_ID');
+    }
+
+    /**
+     * Attach the rating average and count as two extra SELECT subqueries.
+     *
+     * This is the ONLY way the summaries reach a listing payload, and it is
+     * deliberately a pair of subqueries rather than an eager load: withCount /
+     * withAvg fold into the listing query itself, so a feed of 50 listings
+     * still costs one query. Eager-loading the reviews to average them in PHP
+     * would fetch every review row for every card on screen.
+     *
+     * Both subqueries are restricted to VISIBLE, so hiding one review moves
+     * the average on its own without a separate recalculation anywhere.
+     */
+    public function scopeWithRatingSummary(Builder $query): Builder
+    {
+        return $query
+            ->withAvg(['reviews as rating_average' => fn ($q) => $q->visible()], 'LRV_RATING')
+            ->withCount(['reviews as rating_count' => fn ($q) => $q->visible()]);
     }
 
     public function primaryPhoto()

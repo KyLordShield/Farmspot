@@ -59,7 +59,11 @@ class ListingController extends Controller
             ? $request->query('sort')
             : 'latest';
 
+        // withRatingSummary() folds the average + count into this same query as
+        // two subqueries, so rating_average / rating_count reach every card on
+        // the feed at the cost of nothing extra per listing.
         $query = Listing::with(['farm', 'category', 'farmer.buyer.user', 'photos'])
+            ->withRatingSummary()
             ->where('LST_AVAILABILITY', 'ACTIVE')
             ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->when($search, function ($query, $search) {
@@ -191,6 +195,7 @@ class ListingController extends Controller
     public function show($id)
     {
         $listing = Listing::with(['farm', 'category', 'farmer.buyer.user', 'photos'])
+            ->withRatingSummary()
             ->where('LST_AVAILABILITY', 'ACTIVE')
             ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
             ->find($id);
