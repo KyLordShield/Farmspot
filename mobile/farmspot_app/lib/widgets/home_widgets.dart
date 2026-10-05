@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import '../models/listing_review.dart';
 import '../theme.dart';
+import 'rating_stars.dart';
 import 'seller_widgets.dart';
 
 /// Data model for a crop listing shown in the Home feed.
@@ -31,6 +33,13 @@ class CropListing {
   /// accusations that need two different ids.
   final String? farmerId;
 
+  /// Star average and visible review count for this listing.
+  ///
+  /// Defaults to [RatingSummary.none] so every existing caller — the seeded
+  /// fixtures in tests, the my-farm rows — keeps compiling and renders no
+  /// stars, which is the correct display for a listing nobody has reviewed.
+  final RatingSummary ratings;
+
   const CropListing({
     required this.cropName,
     required this.farmName,
@@ -49,31 +58,37 @@ class CropListing {
     this.farmId,
     this.categoryId,
     this.farmerId,
+    this.ratings = const RatingSummary.none(),
     this.placeholderIcon = Icons.eco,
   });
 
   /// Copy with an overridden [distance] label (used by the feed to swap the
   /// seeded placeholder for the real haversine distance once buyer GPS is known).
+  ///
+  /// Every field is restated rather than spread, so a field added later cannot
+  /// be silently dropped from this copy — a missing [ratings] here would make
+  /// a rated listing show no stars once the feed knew the distance.
   CropListing withDistance(String distance) => CropListing(
-        cropName: cropName,
-        farmName: farmName,
-        cropType: cropType,
-        distance: distance,
-        status: status,
-        barangay: barangay,
-        sitio: sitio,
-        postedLabel: postedLabel,
-        expiresLabel: expiresLabel,
-        contactNumber: contactNumber,
-        imageUrl: imageUrl,
-        description: description,
-        photoUrls: photoUrls,
-        listingId: listingId,
-        farmId: farmId,
-        categoryId: categoryId,
-        farmerId: farmerId,
-        placeholderIcon: placeholderIcon,
-      );
+    cropName: cropName,
+    farmName: farmName,
+    cropType: cropType,
+    distance: distance,
+    status: status,
+    barangay: barangay,
+    sitio: sitio,
+    postedLabel: postedLabel,
+    expiresLabel: expiresLabel,
+    contactNumber: contactNumber,
+    imageUrl: imageUrl,
+    description: description,
+    photoUrls: photoUrls,
+    listingId: listingId,
+    farmId: farmId,
+    categoryId: categoryId,
+    farmerId: farmerId,
+    ratings: ratings,
+    placeholderIcon: placeholderIcon,
+  );
 }
 
 /// Rounded green square placeholder used when a listing has no photo yet.
@@ -142,10 +157,7 @@ class HomeSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final searchIcon = Icon(
-      Icons.search,
-      color: Colors.black45,
-    );
+    final searchIcon = Icon(Icons.search, color: Colors.black45);
 
     // In tap-to-open mode the whole bar (icon + hint area) is a single button.
     // We don't render a TextField at all: a TextField consumes the tap to place
@@ -184,8 +196,7 @@ class HomeSearchField extends StatelessWidget {
                     textInputAction: TextInputAction.search,
                     decoration: const InputDecoration(
                       hintText: 'Search Crops or farms',
-                      hintStyle:
-                          TextStyle(color: Colors.black45, fontSize: 14),
+                      hintStyle: TextStyle(color: Colors.black45, fontSize: 14),
                       border: InputBorder.none,
                       isCollapsed: true,
                     ),
@@ -273,7 +284,9 @@ class CropCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.fieldBorder.withValues(alpha: 0.6)),
+          border: Border.all(
+            color: AppColors.fieldBorder.withValues(alpha: 0.6),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -287,10 +300,7 @@ class CropCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: _buildImage(),
-                ),
+                AspectRatio(aspectRatio: 1, child: _buildImage()),
                 Positioned(
                   top: 8,
                   left: 8,
@@ -340,6 +350,14 @@ class CropCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  // Only rendered once something has been rated. Height is
+                  // reserved as a SizedBox.shrink (zero) when not, so a card
+                  // in a masonry column does not jump as reviews arrive.
+                  RatingStars(
+                    summary: listing.ratings,
+                    size: 13,
+                    showCount: true,
                   ),
                 ],
               ),
@@ -468,11 +486,7 @@ class CropCardGrid extends StatelessWidget {
   final List<CropListing> listings;
   final ValueChanged<CropListing> onTap;
 
-  const CropCardGrid({
-    super.key,
-    required this.listings,
-    required this.onTap,
-  });
+  const CropCardGrid({super.key, required this.listings, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -489,10 +503,7 @@ class CropCardGrid extends StatelessWidget {
           itemCount: listings.length,
           itemBuilder: (context, index) {
             final listing = listings[index];
-            return CropCard(
-              listing: listing,
-              onTap: () => onTap(listing),
-            );
+            return CropCard(listing: listing, onTap: () => onTap(listing));
           },
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),

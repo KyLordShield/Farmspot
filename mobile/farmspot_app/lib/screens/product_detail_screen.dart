@@ -9,9 +9,11 @@ import '../services/listing_service.dart';
 import '../services/location_service.dart';
 import '../services/message_service.dart';
 import '../services/report_service.dart';
+import '../services/review_service.dart';
 import '../theme.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/listing_reviews_section.dart';
 import '../widgets/report_sheet.dart';
 import 'farm_profile_screen.dart';
 import 'in_app_messages_screen.dart';
@@ -25,11 +27,16 @@ class ProductDetailScreen extends StatefulWidget {
   /// Injectable for tests, same reason as [gateway].
   final ReportsGateway? reportsGateway;
 
+  /// Injectable for tests, same reason as [gateway]. Reviews only; the
+  /// listing's read-only average already arrives on [listing].
+  final ReviewsGateway? reviewsGateway;
+
   const ProductDetailScreen({
     super.key,
     required this.listing,
     this.gateway,
     this.reportsGateway,
+    this.reviewsGateway,
   });
 
   @override
@@ -47,10 +54,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// that array — so every listing still has a header photo.
   List<String> get _photoUrls {
     final single = listing.imageUrl;
-    final photos =
-        listing.photoUrls.where((u) => u.trim().isNotEmpty).toList();
+    final photos = listing.photoUrls.where((u) => u.trim().isNotEmpty).toList();
     return <String>[
-      if (single != null && single.trim().isNotEmpty && !photos.contains(single))
+      if (single != null &&
+          single.trim().isNotEmpty &&
+          !photos.contains(single))
         single,
       ...photos,
     ];
@@ -99,8 +107,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
       final you = await LocationService.defaultBuyerPosition();
       if (!mounted) return;
-      final km =
-          LocationService.distanceKm(you, LatLng(farm.latitude, farm.longitude));
+      final km = LocationService.distanceKm(
+        you,
+        LatLng(farm.latitude, farm.longitude),
+      );
       setState(() {
         _distance = LocationService.distanceLabel(km);
         _distanceResolving = false;
@@ -111,7 +121,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  Future<void> _callSeller() async {    // Fire-and-forget analytics: never awaited, so the dialer opens the moment
+  Future<void> _callSeller() async {
+    // Fire-and-forget analytics: never awaited, so the dialer opens the moment
     // this handler runs regardless of logging success/network speed.
     ListingService.logContact(
       listingId: listing.listingId ?? '',
@@ -177,9 +188,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Opens the farm's public profile. No-op when the listing carries no farm id
@@ -188,9 +199,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final farmId = listing.farmId;
     if (farmId == null || farmId.isEmpty) return;
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => FarmProfileScreen(farmId: farmId),
-      ),
+      MaterialPageRoute(builder: (_) => FarmProfileScreen(farmId: farmId)),
     );
   }
 
@@ -201,10 +210,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => FullScreenPhotoViewer(
-          urls: urls,
-          initialIndex: index,
-        ),
+        builder: (_) => FullScreenPhotoViewer(urls: urls, initialIndex: index),
       ),
     );
   }
@@ -249,7 +255,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('•', style: TextStyle(color: Colors.black45)),
+                          child: Text(
+                            '•',
+                            style: TextStyle(color: Colors.black45),
+                          ),
                         ),
                         Flexible(
                           child: GestureDetector(
@@ -270,7 +279,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const SizedBox(height: 14),
                     Row(
                       children: [
-                        const Text('Posted ', style: TextStyle(color: Colors.black54)),
+                        const Text(
+                          'Posted ',
+                          style: TextStyle(color: Colors.black54),
+                        ),
                         Flexible(
                           child: Text(
                             listing.postedLabel,
@@ -281,9 +293,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('•', style: TextStyle(color: Colors.black45)),
+                          child: Text(
+                            '•',
+                            style: TextStyle(color: Colors.black45),
+                          ),
                         ),
-                        const Text('expires in ', style: TextStyle(color: Colors.black54)),
+                        const Text(
+                          'expires in ',
+                          style: TextStyle(color: Colors.black54),
+                        ),
                         Flexible(
                           child: Text(
                             listing.expiresLabel,
@@ -312,14 +330,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       behavior: HitTestBehavior.opaque,
                       child: Row(
                         children: [
-                          const Icon(Icons.location_on, color: AppColors.primaryGreen, size: 20),
+                          const Icon(
+                            Icons.location_on,
+                            color: AppColors.primaryGreen,
+                            size: 20,
+                          ),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
                               listing.barangay,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -329,8 +353,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 listing.sitio,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style:
-                                    const TextStyle(color: Colors.black54),
+                                style: const TextStyle(color: Colors.black54),
                               ),
                             ),
                         ],
@@ -360,7 +383,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle, color: AppColors.primaryGreen, size: 20),
+                        const Icon(
+                          Icons.check_circle,
+                          color: AppColors.primaryGreen,
+                          size: 20,
+                        ),
                         const SizedBox(width: 6),
                         const Expanded(
                           child: Text(
@@ -398,22 +425,43 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.primaryGreen),
+                                  strokeWidth: 2,
+                                  color: AppColors.primaryGreen,
+                                ),
                               )
                             : const Icon(Icons.chat_outlined, size: 18),
                         label: Text(
-                            _startingThread ? 'Opening...' : 'Message Seller'),
+                          _startingThread ? 'Opening...' : 'Message Seller',
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primaryGreen,
-                          side:
-                              const BorderSide(color: AppColors.primaryGreen),
+                          side: const BorderSide(color: AppColors.primaryGreen),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),
                         ),
                       ),
                     ),
+                    // Reviews sit after the two things a buyer actually came here
+                    // to do, for the same reason reporting does: Call and Message
+                    // must stay reachable without a scroll, and burying the two
+                    // primary actions under a review list pushed them off screen
+                    // on a phone. The rating is still on the card the buyer came
+                    // from, so the decision they arrived with is not hidden.
+                    //
+                    // Gated on a real LST_ID: without one the section would offer
+                    // a write action the server has no listing to attach to.
+                    if (_canReport) ...[
+                      const SizedBox(height: 28),
+                      ListingReviewsSection(
+                        listingId: listing.listingId!,
+                        cropName: listing.cropName,
+                        // Already on the payload, so the header renders at once
+                        // instead of flashing empty before the fetch lands.
+                        initialSummary: listing.ratings,
+                        gateway: widget.reviewsGateway,
+                      ),
+                    ],
                     // Reporting sits below the two things a buyer actually came
                     // here to do, and is a plain text link rather than a third
                     // button: it must be reachable but never compete with
@@ -431,10 +479,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                           label: const Text(
                             'Report this listing',
-                            style: TextStyle(fontSize: 13, color: Colors.black54),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
                           ),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             minimumSize: const Size(0, 36),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -517,23 +571,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                 ),
-                const Positioned(
-                  bottom: 12,
-                  left: 12,
-                  child: _TapToViewHint(),
-                ),
+                const Positioned(bottom: 12, left: 12, child: _TapToViewHint()),
               ],
               Positioned(
                 right: 12,
                 bottom: 12,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryGreen,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    listing.status == 'P_status' ? 'Product Status' : listing.status,
+                    listing.status == 'P_status'
+                        ? 'Product Status'
+                        : listing.status,
                     style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),
@@ -737,10 +792,8 @@ class FullScreenPhotoViewer extends StatefulWidget {
 
 class _FullScreenPhotoViewerState extends State<FullScreenPhotoViewer> {
   late final int _count = widget.urls.length;
-  late int _index =
-      widget.initialIndex.clamp(0, _count - 1).toInt();
-  late final PageController _controller =
-      PageController(initialPage: _index);
+  late int _index = widget.initialIndex.clamp(0, _count - 1).toInt();
+  late final PageController _controller = PageController(initialPage: _index);
 
   @override
   void dispose() {
@@ -773,7 +826,10 @@ class _FullScreenPhotoViewerState extends State<FullScreenPhotoViewer> {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(14),
@@ -794,7 +850,11 @@ class _FullScreenPhotoViewerState extends State<FullScreenPhotoViewer> {
                         color: Colors.black54,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close, color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ],

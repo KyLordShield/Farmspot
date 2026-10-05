@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/listing_review.dart';
 import '../theme.dart';
 import 'home_widgets.dart' show cropStatusData;
+import 'rating_stars.dart';
 
 /// A single search result card payload. Used both by the image-search mockup
 /// (placeholder-only entries) and — for the live Search screen — built from a
@@ -29,6 +31,11 @@ class SearchResultItem {
 
   final String? farmId;
 
+  /// Star average and visible review count, carried so a search card shows the
+  /// same rating the home card does. Defaults to none, which renders nothing —
+  /// the mockup entries above have no rating and must not grow a fake star row.
+  final RatingSummary ratings;
+
   const SearchResultItem({
     required this.crop,
     required this.seller,
@@ -38,6 +45,7 @@ class SearchResultItem {
     this.imageUrl,
     this.listingId,
     this.farmId,
+    this.ratings = const RatingSummary.none(),
   });
 }
 
@@ -100,9 +108,9 @@ enum SearchSortMode { nearest, available }
 
 extension SearchSortModeLabel on SearchSortMode {
   String get label => switch (this) {
-        SearchSortMode.nearest => 'Nearest',
-        SearchSortMode.available => 'Available',
-      };
+    SearchSortMode.nearest => 'Nearest',
+    SearchSortMode.available => 'Available',
+  };
 }
 
 /// Uniform, evenly-aligned 2x2 grid of result cards. Deliberately NOT the
@@ -159,11 +167,7 @@ class SearchResultCard extends StatelessWidget {
   final SearchResultItem item;
   final VoidCallback? onTap;
 
-  const SearchResultCard({
-    super.key,
-    required this.item,
-    this.onTap,
-  });
+  const SearchResultCard({super.key, required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +177,9 @@ class SearchResultCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.fieldBorder.withValues(alpha: 0.4)),
+          border: Border.all(
+            color: AppColors.fieldBorder.withValues(alpha: 0.4),
+          ),
           boxShadow: const [
             BoxShadow(
               color: Colors.black12,
@@ -193,7 +199,8 @@ class SearchResultCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (item.imageUrl != null && item.imageUrl!.trim().isNotEmpty)
+                    if (item.imageUrl != null &&
+                        item.imageUrl!.trim().isNotEmpty)
                       Image.network(
                         item.imageUrl!,
                         fit: BoxFit.cover,
@@ -203,8 +210,7 @@ class SearchResultCard extends StatelessWidget {
                       )
                     else
                       const _GradientFill(),
-                    if (item.imageUrl == null ||
-                        item.imageUrl!.trim().isEmpty)
+                    if (item.imageUrl == null || item.imageUrl!.trim().isEmpty)
                       Center(
                         child: Container(
                           width: 64,
@@ -318,10 +324,11 @@ class SearchResultCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  // Detection confidence chip, image search only. Sits under
-                  // the farm name so the buyer can see which detected crop
-                  // pulled this listing in and how sure the model was.
-                  ],
+                  // Rating, same treatment as the home card: hidden entirely
+                  // until something has been rated, so a search result and the
+                  // feed listing for the same crop read identically.
+                  RatingStars(summary: item.ratings, size: 13, showCount: true),
+                ],
               ),
             ),
           ],
@@ -371,8 +378,10 @@ class SearchResultsToolbar extends StatelessWidget {
             GestureDetector(
               onTap: onFiltersTap,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE3EEDD),
                   borderRadius: BorderRadius.circular(12),

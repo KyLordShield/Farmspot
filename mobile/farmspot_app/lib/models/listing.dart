@@ -1,4 +1,5 @@
 import '../widgets/home_widgets.dart';
+import 'listing_review.dart';
 
 /// A single photo in a listing's gallery, as returned by the backend's
 /// `photos` array: [{id, url, is_primary}].
@@ -47,6 +48,15 @@ class Listing {
   /// the crop. Null when the seller row is unlinked.
   final String? farmerId;
 
+  /// Star average and visible review count, as sent by the backend's
+  /// `rating_average` / `rating_count` pair.
+  ///
+  /// Defaults to [RatingSummary.none] rather than to 0.0/0: an endpoint that
+  /// did not ask for the summary must leave a card with no stars at all, and
+  /// the only way to get that is for "not loaded" and "loaded and empty" to be
+  /// the same value.
+  final RatingSummary ratings;
+
   Listing({
     required this.id,
     this.cropIcon,
@@ -66,6 +76,7 @@ class Listing {
     this.farmerName,
     this.farmerMobileNumber,
     this.farmerId,
+    this.ratings = const RatingSummary.none(),
   });
 
   factory Listing.fromJson(Map<String, dynamic> json) {
@@ -91,6 +102,7 @@ class Listing {
       farmerName: (json['farmer'] as Map?)?['name'] as String?,
       farmerMobileNumber: (json['farmer'] as Map?)?['mobile_number'] as String?,
       farmerId: (json['farmer'] as Map?)?['id'] as String?,
+      ratings: RatingSummary.fromListingJson(json),
     );
   }
 
@@ -125,6 +137,10 @@ class Listing {
       postedLabel: _relativeDate(createdAt),
       expiresLabel: _relativeExpiry(expiryDate),
       contactNumber: farmerMobileNumber ?? 'N/A',
+      // Carried into the UI-facing shape so cards can show stars without
+      // re-reading the raw Listing, and so the detail screen's rate sheet has a
+      // starting point.
+      ratings: ratings,
     );
   }
 

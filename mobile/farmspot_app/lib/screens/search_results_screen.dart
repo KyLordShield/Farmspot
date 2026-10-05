@@ -40,8 +40,12 @@ const double _imageGridSideMargin = 4;
 /// photo, less is text.
 const double _imageGridAspectRatio = 0.72;
 
-EdgeInsets get _imageListPadding =>
-    const EdgeInsets.fromLTRB(_imageGridSideMargin, 12, _imageGridSideMargin, 24);
+EdgeInsets get _imageListPadding => const EdgeInsets.fromLTRB(
+  _imageGridSideMargin,
+  12,
+  _imageGridSideMargin,
+  24,
+);
 
 /// Two results closer than this (km) are treated as "the same distance", so
 /// the tie is broken by detection confidence instead of floating-point noise.
@@ -271,6 +275,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               imageUrl: crop.imageUrl,
               listingId: crop.listingId,
               farmId: crop.farmId,
+              ratings: crop.ratings,
             ),
             listing: crop,
           );
@@ -298,8 +303,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       final farms = await widget.loadFarms();
       final distances = <String, double>{
         for (final farm in farms)
-          if (farm.id.isNotEmpty &&
-              (farm.latitude != 0 || farm.longitude != 0))
+          if (farm.id.isNotEmpty && (farm.latitude != 0 || farm.longitude != 0))
             farm.id: LocationService.distanceKm(
               position,
               LatLng(farm.latitude, farm.longitude),
@@ -352,11 +356,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     final sorted = List<_ResultRow>.of(_visibleRows);
     switch (_sort) {
       case SearchSortMode.nearest:
-        sorted.sort((a, b) =>
-            _kmFor(a).compareTo(_kmFor(b)));
+        sorted.sort((a, b) => _kmFor(a).compareTo(_kmFor(b)));
       case SearchSortMode.available:
-        sorted.sort((a, b) =>
-            _statusRank(b.listing.status).compareTo(_statusRank(a.listing.status)));
+        sorted.sort(
+          (a, b) => _statusRank(
+            b.listing.status,
+          ).compareTo(_statusRank(a.listing.status)),
+        );
     }
     return sorted;
   }
@@ -415,12 +421,14 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     return _ImageOrdering(
       inRange: sorted
-          .where((r) =>
-              _imageKm(r).isFinite && _imageKm(r) <= imageSearchRangeKm)
+          .where(
+            (r) => _imageKm(r).isFinite && _imageKm(r) <= imageSearchRangeKm,
+          )
           .toList(),
       outOfRange: sorted
-          .where((r) =>
-              !(_imageKm(r).isFinite && _imageKm(r) <= imageSearchRangeKm))
+          .where(
+            (r) => !(_imageKm(r).isFinite && _imageKm(r) <= imageSearchRangeKm),
+          )
           .toList(),
       hasLocation: true,
     );
@@ -496,11 +504,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.tune,
-                size: 16,
-                color: name == null
-                    ? AppColors.primaryGreen
-                    : AppColors.warningAmber),
+            Icon(
+              Icons.tune,
+              size: 16,
+              color: name == null
+                  ? AppColors.primaryGreen
+                  : AppColors.warningAmber,
+            ),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
@@ -596,19 +606,21 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     if (rows.isEmpty) {
       children.add(_buildCountLine(rows.length));
       children.add(const SizedBox(height: 14));
-      children.add(Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            _activeCategoryId != null && _rows.isNotEmpty
-                ? 'No ${(_activeCategoryName ?? 'crop').toLowerCase()} '
-                    'crops listed right now.'
-                : 'No farms selling this crop yet.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black54, fontSize: 14),
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              _activeCategoryId != null && _rows.isNotEmpty
+                  ? 'No ${(_activeCategoryName ?? 'crop').toLowerCase()} '
+                        'crops listed right now.'
+                  : 'No farms selling this crop yet.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54, fontSize: 14),
+            ),
           ),
         ),
-      ));
+      );
     } else if (_sort == SearchSortMode.nearest) {
       // Group by the radius boundary: "Near you" then "Other farms". When the
       // nearest results are all beyond the boundary (or unknown), just show
@@ -621,43 +633,53 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           .toList();
 
       if (near.isEmpty && other.isNotEmpty) {
-        children.add(Text(
-          'No farms selling $_displayTitle within $_searchRadiusLabel of you',
-          style: const TextStyle(color: Colors.black54, fontSize: 13),
-        ));
+        children.add(
+          Text(
+            'No farms selling $_displayTitle within $_searchRadiusLabel of you',
+            style: const TextStyle(color: Colors.black54, fontSize: 13),
+          ),
+        );
         children.add(const SizedBox(height: 14));
         children.add(_buildSectionHeader('All results'));
         children.add(const SizedBox(height: 10));
-        children.add(SearchResultGrid(
-          items: rows.map((r) => r.item).toList(growable: false),
-          onTap: _onCardTap,
-        ));
+        children.add(
+          SearchResultGrid(
+            items: rows.map((r) => r.item).toList(growable: false),
+            onTap: _onCardTap,
+          ),
+        );
       } else {
         children.add(_buildCountLine(near.length, within: true));
         children.add(const SizedBox(height: 14));
         children.add(_buildSectionHeader('Near you'));
         children.add(const SizedBox(height: 10));
-        children.add(SearchResultGrid(
-          items: near.map((r) => r.item).toList(growable: false),
-          onTap: _onCardTap,
-        ));
+        children.add(
+          SearchResultGrid(
+            items: near.map((r) => r.item).toList(growable: false),
+            onTap: _onCardTap,
+          ),
+        );
         if (other.isNotEmpty) {
           children.add(const SizedBox(height: 22));
           children.add(_buildSectionHeader('Other farms'));
           children.add(const SizedBox(height: 10));
-          children.add(SearchResultGrid(
-            items: other.map((r) => r.item).toList(growable: false),
-            onTap: _onCardTap,
-          ));
+          children.add(
+            SearchResultGrid(
+              items: other.map((r) => r.item).toList(growable: false),
+              onTap: _onCardTap,
+            ),
+          );
         }
       }
     } else {
       children.add(_buildCountLine(rows.length));
       children.add(const SizedBox(height: 14));
-      children.add(SearchResultGrid(
-        items: rows.map((r) => r.item).toList(growable: false),
-        onTap: _onCardTap,
-      ));
+      children.add(
+        SearchResultGrid(
+          items: rows.map((r) => r.item).toList(growable: false),
+          onTap: _onCardTap,
+        ),
+      );
     }
 
     return ListView(
@@ -666,7 +688,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
   }
 
-/// Image search: ONE mixed list of every listing from every detected crop,
+  /// Image search: ONE mixed list of every listing from every detected crop,
   /// nearest farm first, with no per-crop sections or headers.
   ///
   /// Layout follows the range split: in-range results, then a full-width
@@ -680,33 +702,37 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     final children = <Widget>[];
 
     children.add(const SizedBox(height: 4));
-    children.add(Text(
-      cropCount == 1
-          ? '1 crop found in your photo'
-          : '$cropCount crops found in your photo',
-      style: const TextStyle(color: Colors.black54, fontSize: 13),
-    ));
+    children.add(
+      Text(
+        cropCount == 1
+            ? '1 crop found in your photo'
+            : '$cropCount crops found in your photo',
+        style: const TextStyle(color: Colors.black54, fontSize: 13),
+      ),
+    );
 
     // No trustworthy position: say so once, and drop distances rather than
     // inventing them from the fallback city.
     if (!ordering.hasLocation) {
       children.add(const SizedBox(height: 8));
-      children.add(const _ImageSearchNote(
-        'Turn on location to see the closest farms first.',
-      ));
+      children.add(
+        const _ImageSearchNote(
+          'Turn on location to see the closest farms first.',
+        ),
+      );
       children.add(const SizedBox(height: 6));
       if (ordering.inRange.isEmpty) {
         children.add(_buildImageEmptyState());
         return ListView(padding: _imageListPadding, children: children);
       }
       children.add(
-          _imageGrid(_imageItems(ordering.inRange, showDistance: false)));
+        _imageGrid(_imageItems(ordering.inRange, showDistance: false)),
+      );
       return ListView(padding: _imageListPadding, children: children);
     }
 
     children.add(const SizedBox(height: 8));
-    children.add(_buildImageCountLine(ordering.inRange.length,
-        within: true));
+    children.add(_buildImageCountLine(ordering.inRange.length, within: true));
     children.add(const SizedBox(height: 12));
 
     // All results are beyond the range: divider first, far results still shown.
@@ -746,7 +772,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
   }
 
-/// Builds card payloads for the mixed list, formatting the real distance
+  /// Builds card payloads for the mixed list, formatting the real distance
   /// when one is known.
   List<SearchResultItem> _imageItems(
     List<_ImageResult> results, {
@@ -768,6 +794,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           imageUrl: result.listing.imageUrl,
           listingId: result.listing.listingId,
           farmId: result.listing.farmId,
+          ratings: result.listing.ratings,
         ),
     ];
   }
@@ -794,8 +821,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.location_off_outlined,
-              size: 15, color: Colors.black38),
+          const Icon(
+            Icons.location_off_outlined,
+            size: 15,
+            color: Colors.black38,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -846,7 +876,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
   }
 
-Widget _buildImageEmptyState() {
+  Widget _buildImageEmptyState() {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 40),
       child: Center(
@@ -861,8 +891,7 @@ Widget _buildImageEmptyState() {
 
   Widget _buildCountLine(int count, {bool within = false}) {
     final noun = count == 1 ? 'farm' : 'farms';
-    final suffix =
-        within ? 'within $_searchRadiusLabel of you' : 'near you';
+    final suffix = within ? 'within $_searchRadiusLabel of you' : 'near you';
     return Row(
       children: [
         Container(
@@ -955,8 +984,11 @@ class _ImageSearchNote extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.location_disabled_outlined,
-              size: 15, color: Colors.black45),
+          const Icon(
+            Icons.location_disabled_outlined,
+            size: 15,
+            color: Colors.black45,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -976,10 +1008,7 @@ class _CategoryFilterSheet extends StatelessWidget {
   final List<CropCategory> categories;
   final String? selectedId;
 
-  const _CategoryFilterSheet({
-    required this.categories,
-    this.selectedId,
-  });
+  const _CategoryFilterSheet({required this.categories, this.selectedId});
 
   @override
   Widget build(BuildContext context) {
@@ -1061,8 +1090,11 @@ class _CategoryFilterSheet extends StatelessWidget {
                 size: 20,
               )
             else
-              const Icon(Icons.circle_outlined,
-                  color: Colors.black26, size: 20),
+              const Icon(
+                Icons.circle_outlined,
+                color: Colors.black26,
+                size: 20,
+              ),
           ],
         ),
       ),

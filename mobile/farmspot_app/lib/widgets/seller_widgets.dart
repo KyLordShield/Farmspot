@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/listing.dart';
 import '../theme.dart';
+import 'rating_stars.dart';
 
 /// Shared tab definitions so SellerBottomNav and FarmSpotBottomNav stay in sync.
 const kSellerTabs = [
@@ -126,7 +127,12 @@ class FieldLabel extends StatelessWidget {
   final String? badge;
   final Color badgeColor;
 
-  const FieldLabel(this.text, {super.key, this.badge, this.badgeColor = Colors.redAccent});
+  const FieldLabel(
+    this.text, {
+    super.key,
+    this.badge,
+    this.badgeColor = Colors.redAccent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +205,13 @@ class UploadBox extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
@@ -213,7 +225,10 @@ class UploadBox extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryGreen,
                 side: const BorderSide(color: AppColors.primaryGreen),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -319,7 +334,10 @@ class CropPickerTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: selected ? AppColors.primaryGreen : Colors.black45),
+            Icon(
+              icon,
+              color: selected ? AppColors.primaryGreen : Colors.black45,
+            ),
             const SizedBox(height: 4),
             Text(
               label,
@@ -378,7 +396,13 @@ class SelectableOptionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                   Text(
                     subtitle,
                     style: const TextStyle(fontSize: 11, color: Colors.black45),
@@ -387,9 +411,17 @@ class SelectableOptionTile extends StatelessWidget {
               ),
             ),
             if (selected)
-              const Icon(Icons.check_circle, color: AppColors.primaryGreen, size: 20)
+              const Icon(
+                Icons.check_circle,
+                color: AppColors.primaryGreen,
+                size: 20,
+              )
             else
-              Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 20),
+              Icon(
+                Icons.circle_outlined,
+                color: Colors.grey.shade400,
+                size: 20,
+              ),
           ],
         ),
       ),
@@ -420,7 +452,9 @@ class WizardNextButton extends StatelessWidget {
           backgroundColor: AppColors.primaryGreen,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -459,11 +493,11 @@ class CropListTile extends StatelessWidget {
   });
 
   (String, Color) get _statusInfo => switch (listing.status) {
-        'AVAILABLE_NOW' => ('Available Now', AppColors.primaryGreen),
-        'SOON_TO_HARVEST' => ('Soon to Harvest', Colors.orange),
-        'NOT_AVAILABLE' => ('Not Available', Colors.grey),
-        _ => ('Not Available', Colors.grey),
-      };
+    'AVAILABLE_NOW' => ('Available Now', AppColors.primaryGreen),
+    'SOON_TO_HARVEST' => ('Soon to Harvest', Colors.orange),
+    'NOT_AVAILABLE' => ('Not Available', Colors.grey),
+    _ => ('Not Available', Colors.grey),
+  };
 
   String get _label => listing.cropIcon ?? listing.categoryName ?? 'Crop';
 
@@ -501,6 +535,18 @@ class CropListTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
+                // Read-only average for the seller. Same number the buyer card
+                // shows, because it is the same server-side aggregate over the
+                // same visible reviews — a seller cannot see a flattering
+                // count. Hidden when unreviewed.
+                if (listing.ratings.hasRatings) ...[
+                  const SizedBox(height: 4),
+                  RatingStars(
+                    summary: listing.ratings,
+                    size: 12,
+                    showCount: true,
+                  ),
+                ],
                 if (updating)
                   const SizedBox(
                     width: 20,
@@ -574,7 +620,11 @@ class CropListTile extends StatelessWidget {
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                    Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.redAccent,
+                    ),
                     SizedBox(width: 8),
                     Text('Delete', style: TextStyle(color: Colors.redAccent)),
                   ],
@@ -660,7 +710,9 @@ class FarmCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEAF6EC),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
+        border: Border.all(
+          color: AppColors.primaryGreen.withValues(alpha: 0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +742,10 @@ class FarmCard extends StatelessWidget {
                       barangay.isEmpty ? 'Farm location' : barangay,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
                     ),
                   ],
                 ),
@@ -708,7 +763,10 @@ class FarmCard extends StatelessWidget {
                 onTap: onEditTap,
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryGreen,
                     borderRadius: BorderRadius.circular(10),
