@@ -22,14 +22,17 @@ import 'package:farmspot_app/screens/seller/my_farm_screen.dart';
 
 /// Reports a member the double does not implement, then fails loudly.
 Never _missing(Invocation invocation, Object owner, String what) {
-  fail('The app used ${invocation.memberName} on $what ($owner), '
-      'which this test double does not implement.');
+  fail(
+    'The app used ${invocation.memberName} on $what ($owner), '
+    'which this test double does not implement.',
+  );
 }
 
 /// Answers one intercepted request. The method is part of the signature
 /// because the app reaches the API through more than one verb, and a test has
 /// to be able to tell a GET /farms refresh from a DELETE /farms/{id} archive.
-typedef _RequestHandler = Future<http.Response> Function(String method, Uri url);
+typedef _RequestHandler =
+    Future<http.Response> Function(String method, Uri url);
 
 /// `HttpHeaders` is abstract, so this supplies what IOClient touches on a
 /// response plus the `set` used to build an outgoing request.
@@ -82,7 +85,8 @@ class _StubHeaders implements HttpHeaders {
       _values.forEach(action);
 
   @override
-  dynamic noSuchMethod(Invocation i) => _missing(i, runtimeType, 'HTTP headers');
+  dynamic noSuchMethod(Invocation i) =>
+      _missing(i, runtimeType, 'HTTP headers');
 }
 
 class _StubClientResponse implements HttpClientResponse {
@@ -121,13 +125,12 @@ class _StubClientResponse implements HttpClientResponse {
     Function? onError,
     void Function()? onDone,
     bool? cancelOnError,
-  }) =>
-      Stream<List<int>>.value(_body).listen(
-            onData,
-            onError: onError,
-            onDone: onDone,
-            cancelOnError: cancelOnError,
-          );
+  }) => Stream<List<int>>.value(_body).listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
 
   @override
   dynamic noSuchMethod(Invocation i) =>
@@ -244,22 +247,41 @@ void main() {
 
   /// A listing on the given farm, keyed the way Listing.fromJson reads it.
   Map<String, dynamic> listing(String id, String crop, String farmId) => {
-        'id': id,
-        'crop_icon': crop,
-        'status': 'AVAILABLE_NOW',
-        'availability': 'ACTIVE',
-        'farm': {'id': farmId, 'name': 'x', 'barangay': 'y'},
-        'category': {'id': 'CAT001', 'name': crop},
-        'photos': <dynamic>[],
-      };
+    'id': id,
+    'crop_icon': crop,
+    'status': 'AVAILABLE_NOW',
+    'availability': 'ACTIVE',
+    'farm': {'id': farmId, 'name': 'x', 'barangay': 'y'},
+    'category': {'id': 'CAT001', 'name': crop},
+    'photos': <dynamic>[],
+  };
 
   /// Farm ids the stats endpoint was asked about, in call order.
   late List<String> statsRequests;
 
+  /// Farm ids the listings endpoint was scoped to, in call order.
+  late List<String?> listingRequests;
+
   /// Served to the screen under test. Reassigned per test.
   late _RequestHandler handler;
 
-  setUp(() => statsRequests = []);
+  setUp(() {
+    statsRequests = [];
+    listingRequests = [];
+  });
+
+  /// The screen's main vertical list. The farm switcher and the status-filter
+  /// row are horizontal lists, so they have to be excluded when scrolling the
+  /// page.
+  ///
+  /// scrollUntilVisible wants the Scrollable the CustomScrollView builds
+  /// internally, not the widget itself, so this finds the Scrollable whose axis
+  /// is vertical rather than matching a particular list widget: the page is a
+  /// sliver list now, and a finder written for the old Column-in-ListView layout
+  /// would silently resolve to the wrong thing or to nothing at all.
+  final mainScrollable = find.byWidgetPredicate(
+    (w) => w is Scrollable && w.axis == Axis.vertical,
+  );
 
   /// Lets the screen finish its chain of dependent calls (farms, then that
   /// farm's stats). The responses are real futures, so they need the real event
@@ -271,6 +293,24 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 20));
     }
+  }
+
+  /// Scrolls until [finder] is on screen and returns, so a lazily built listing
+  /// row can be asserted on.
+  Future<void> reveal(WidgetTester tester, Finder finder) async {
+    await tester.scrollUntilVisible(finder, 120, scrollable: mainScrollable);
+    await settle(tester);
+  }
+
+  /// Scrolls back to the top of the page.
+  ///
+  /// Needed after revealing the remove action: the farm card and switcher sit
+  /// above it, and a sliver list only builds what is on screen, so a name the
+  /// seller can plainly see would not be findable while scrolled past.
+  Future<void> scrollToTop(WidgetTester tester) async {
+    await tester.drag(mainScrollable, const Offset(0, 2000));
+    await settle(tester);
+    await tester.pumpAndSettle();
   }
 
   Future<void> pump(
@@ -301,7 +341,38 @@ void main() {
       }
 
       if (url.path.endsWith('/my-listings')) {
-        return http.Response(jsonEncode({'listings': listings}), 200);
+        listingRequests.add(url.queryParameters['farm_id']);
+
+        // The server filters by farm now, so the double filters too. Returning
+        // every listing regardless of farm_id would make this test pass for the
+        // wrong reason — it would be testing a client-side filter the screen no
+        // longer has.
+        final farmId = url.queryParameters['farm_id'];
+        final rows = farmId == null
+            ? listings
+            : listings
+                  .where((l) => (l['farm'] as Map)['id'] == farmId)
+                  .toList();
+        return http.Response(
+          jsonEncode({
+            'listings': rows,
+            'pagination': {
+              'current_page': 1,
+              'last_page': 1,
+              'per_page': 10,
+              'total': rows.length,
+            },
+            'summary': {
+              'total_listings': rows.length,
+              'active_count': rows.length,
+              'expired_count': 0,
+              'hidden_count': 0,
+              'under_review_count': 0,
+              'review_count': 0,
+            },
+          }),
+          200,
+        );
       }
 
       return http.Response('{}', 200);
@@ -312,8 +383,9 @@ void main() {
     // The test binding installs a blocking HttpOverrides.global of its own, so
     // the double has to replace it around the pump rather than from setUp,
     // which runs before the binding exists.
-    HttpOverrides.global =
-        _StubOverrides((method, url) => handler(method, url));
+    HttpOverrides.global = _StubOverrides(
+      (method, url) => handler(method, url),
+    );
     addTearDown(() => HttpOverrides.global = null);
 
     await tester.pumpWidget(const MaterialApp(home: MyFarmScreen()));
@@ -327,9 +399,9 @@ void main() {
   }
 
   test('the HTTP double answers a request through IOClient', () async {
-    final client = IOClient(_StubClient(
-      (_, _) async => http.Response('{"farms":[]}', 200),
-    ));
+    final client = IOClient(
+      _StubClient((_, _) async => http.Response('{"farms":[]}', 200)),
+    );
 
     // This is the exact code path the services use, so a gap in the double
     // fails here with the real error rather than surfacing inside a widget
@@ -340,8 +412,9 @@ void main() {
     expect(response.body, '{"farms":[]}');
   });
 
-  testWidgets('Add Farm opens the wizard at step 1, not the identity step',
-      (tester) async {
+  testWidgets('Add Farm opens the wizard at step 1, not the identity step', (
+    tester,
+  ) async {
     await pump(tester, farms: [farmA, farmB]);
 
     await tester.tap(find.text('Add Farm'));
@@ -370,28 +443,34 @@ void main() {
     expect(statsRequests, ['AAAAAA']);
   });
 
-  testWidgets('every farm is reachable when the seller owns several',
-      (tester) async {
+  testWidgets('every farm is reachable when the seller owns several', (
+    tester,
+  ) async {
     await pump(tester, farms: [farmA, farmB]);
 
     expect(find.text('North Field'), findsWidgets);
     expect(find.text('South Field'), findsWidgets);
   });
 
-  testWidgets('selecting a farm reloads that farm stats and drops the old ones',
-      (tester) async {
-    await pump(tester, farms: [farmA, farmB]);
+  testWidgets(
+    'selecting a farm reloads that farm stats and drops the old ones',
+    (tester) async {
+      await pump(tester, farms: [farmA, farmB]);
 
-    expect(statsRequests, contains('AAAAAA'));
-    expect(find.text('11'), findsOneWidget, reason: 'farm A profile views');
+      expect(statsRequests, contains('AAAAAA'));
+      expect(find.text('11'), findsOneWidget, reason: 'farm A profile views');
 
-    await selectSecondFarm(tester);
+      await selectSecondFarm(tester);
 
-    expect(statsRequests, contains('BBBBBB'));
-    expect(find.text('22'), findsOneWidget, reason: 'farm B profile views');
-    expect(find.text('11'), findsNothing,
-        reason: "farm A's numbers must not linger after switching");
-  });
+      expect(statsRequests, contains('BBBBBB'));
+      expect(find.text('22'), findsOneWidget, reason: 'farm B profile views');
+      expect(
+        find.text('11'),
+        findsNothing,
+        reason: "farm A's numbers must not linger after switching",
+      );
+    },
+  );
 
   testWidgets('listings are filtered to the selected farm', (tester) async {
     await pump(
@@ -403,15 +482,30 @@ void main() {
       ],
     );
 
-    // Both listings are fetched, but only farm A's is shown first.
+    // The request carries farm_id, so the server returns only that farm's rows.
+    expect(listingRequests, contains('AAAAAA'));
+
+    await reveal(tester, find.text('Tomato'));
     expect(find.text('Tomato'), findsOneWidget);
     expect(find.text('Pechay'), findsNothing);
 
+    // Back up: revealing the row scrolled past the farm switcher, which is
+    // where the second farm's name lives.
+    await scrollToTop(tester);
     await selectSecondFarm(tester);
 
+    await reveal(tester, find.text('Pechay'));
     expect(find.text('Pechay'), findsOneWidget);
-    expect(find.text('Tomato'), findsNothing,
-        reason: "farm A's listing must not appear under farm B");
+    expect(
+      find.text('Tomato'),
+      findsNothing,
+      reason: "farm A's listing must not appear under farm B",
+    );
+    expect(
+      listingRequests.last,
+      'BBBBBB',
+      reason: 'the new farm must be asked for, not filtered on the client',
+    );
   });
 
   testWidgets('a farm with no listings says so by name', (tester) async {
@@ -423,7 +517,11 @@ void main() {
 
     await selectSecondFarm(tester);
 
-    expect(find.textContaining('Nothing listed on South Field'), findsOneWidget);
+    await reveal(tester, find.textContaining('Nothing listed on South Field'));
+    expect(
+      find.textContaining('Nothing listed on South Field'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('there is always a way to add another farm', (tester) async {
@@ -432,16 +530,21 @@ void main() {
     expect(find.text('Add Farm'), findsOneWidget);
   });
 
-  testWidgets('getFarms orders a new pending farm behind approved ones',
-      (tester) async {
+  testWidgets('getFarms orders a new pending farm behind approved ones', (
+    tester,
+  ) async {
     // The order the backend returns, which is what _addFarm used to index
     // into: a new PENDING_REVIEW farm is last only when nothing is approved.
     await pump(tester, farms: [farmA, farmB]);
 
-    expect(statsRequests, ['AAAAAA'],
-        reason: 'the first APPROVED farm is selected, not the last row');
-    expect(find.text('22'), findsNothing,
-        reason: "the second farm's stats must not load before it is selected");
+    expect(statsRequests, [
+      'AAAAAA',
+    ], reason: 'the first APPROVED farm is selected, not the last row');
+    expect(
+      find.text('22'),
+      findsNothing,
+      reason: "the second farm's stats must not load before it is selected",
+    );
   });
 
   /*
@@ -482,7 +585,11 @@ void main() {
         final farmId = url.pathSegments[url.pathSegments.indexOf('farms') + 1];
         statsRequests.add(farmId);
         return http.Response(
-          jsonEncode({'profile_views': 1, 'buyer_contacts': 1, 'active_listings': 0}),
+          jsonEncode({
+            'profile_views': 1,
+            'buyer_contacts': 1,
+            'active_listings': 0,
+          }),
           200,
         );
       }
@@ -499,29 +606,14 @@ void main() {
     };
 
     SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
-    HttpOverrides.global =
-        _StubOverrides((method, url) => handler(method, url));
+    HttpOverrides.global = _StubOverrides(
+      (method, url) => handler(method, url),
+    );
     addTearDown(() => HttpOverrides.global = null);
 
     await tester.pumpWidget(const MaterialApp(home: MyFarmScreen()));
     await settle(tester);
   }
-
-  /// The screen's main vertical list. The farm switcher is a horizontal
-  /// ListView, so it has to be excluded when scrolling the page.
-  ///
-  /// scrollUntilVisible wants the Scrollable the ListView builds internally,
-  /// not the ListView widget itself. The listings area is a nested ListView and
-  /// so contributes a second Scrollable below it; the outer one comes first in
-  /// a depth-first walk, which is the one that scrolls the whole page.
-  final mainScrollable = find
-      .descendant(
-        of: find.byWidgetPredicate(
-          (w) => w is ListView && w.scrollDirection == Axis.vertical,
-        ),
-        matching: find.byType(Scrollable),
-      )
-      .first;
 
   /// Scrolls the page until the remove action is on screen, then returns.
   ///
@@ -555,16 +647,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a seller with one farm is not offered the remove action',
-      (tester) async {
+  testWidgets('a seller with one farm is not offered the remove action', (
+    tester,
+  ) async {
     await pumpWithDelete(tester, farms: [farmA]);
 
     // The last farm is what keeps the account selling. Deactivating the seller
     // is the way to stop, so the button is hidden rather than shown disabled.
     expect(find.text('Remove this farm'), findsNothing);
   });
-  testWidgets('a seller with several farms can remove the selected one',
-      (tester) async {
+  testWidgets('a seller with several farms can remove the selected one', (
+    tester,
+  ) async {
     final removed = <String>[];
     await pumpWithDelete(
       tester,
@@ -587,17 +681,16 @@ void main() {
 
     // The farm that was on screen, and only that farm.
     expect(removed, ['AAAAAA']);
-    expect(find.text('Remove North Field?'), findsNothing,
-        reason: 'the dialog must close once the request is sent');
+    expect(
+      find.text('Remove North Field?'),
+      findsNothing,
+      reason: 'the dialog must close once the request is sent',
+    );
   });
 
   testWidgets('cancelling the remove dialog keeps the farm', (tester) async {
     final removed = <String>[];
-    await pumpWithDelete(
-      tester,
-      farms: [farmA, farmB],
-      removedFarms: removed,
-    );
+    await pumpWithDelete(tester, farms: [farmA, farmB], removedFarms: removed);
 
     await openRemoveDialog(tester);
     expect(find.text('Remove North Field?'), findsOneWidget);
@@ -610,8 +703,9 @@ void main() {
     expect(removed, isEmpty, reason: 'cancelling must not remove anything');
   });
 
-  testWidgets('removing a farm leaves the seller on a farm they still have',
-      (tester) async {
+  testWidgets('removing a farm leaves the seller on a farm they still have', (
+    tester,
+  ) async {
     await pumpWithDelete(
       tester,
       farms: [farmA, farmB],
@@ -625,27 +719,36 @@ void main() {
     await openRemoveDialog(tester);
     await confirmRemove(tester);
 
+    await scrollToTop(tester);
+
     // The card must not keep showing a farm that is no longer in the list.
     expect(find.text('South Field'), findsNothing);
     expect(find.text('North Field'), findsWidgets);
-    expect(statsRequests, contains('AAAAAA'),
-        reason: 'the surviving farm is what should be shown and loaded');
+    expect(
+      statsRequests,
+      contains('AAAAAA'),
+      reason: 'the surviving farm is what should be shown and loaded',
+    );
   });
 
-  testWidgets('the remove confirmation says the buyer history is kept',
-      (tester) async {
+  testWidgets('the remove confirmation says the buyer history is kept', (
+    tester,
+  ) async {
     // The reason this is an archive and not a delete: conversation.FRM_ID
     // cascades from farm, so a real delete would take the threads with it.
     await pumpWithDelete(tester, farms: [farmA, farmB]);
 
     await openRemoveDialog(tester);
 
-    expect(find.textContaining('conversations about this farm are kept'),
-        findsOneWidget);
+    expect(
+      find.textContaining('conversations about this farm are kept'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('a refused removal is reported instead of looking like success',
-      (tester) async {
+  testWidgets('a refused removal is reported instead of looking like success', (
+    tester,
+  ) async {
     final removed = <String>[];
     await pumpWithDelete(
       tester,
@@ -654,7 +757,8 @@ void main() {
       deleteStatus: 422,
       deleteBody: {
         'code': 'LAST_FARM',
-        'message': 'You cannot remove your only farm. Deactivate your seller '
+        'message':
+            'You cannot remove your only farm. Deactivate your seller '
             'account instead if you no longer want to sell.',
       },
     );
@@ -664,8 +768,10 @@ void main() {
 
     // The server has the final say on the last-farm rule; when it refuses, the
     // seller is told why rather than seeing a cheerful "removed".
-    expect(find.textContaining('You cannot remove your only farm'),
-        findsOneWidget);
+    expect(
+      find.textContaining('You cannot remove your only farm'),
+      findsOneWidget,
+    );
     expect(find.textContaining('removed.'), findsNothing);
     expect(removed, ['AAAAAA'], reason: 'the farm on screen is farm A');
 

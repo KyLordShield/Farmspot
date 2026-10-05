@@ -57,6 +57,13 @@ class Listing {
   /// the same value.
   final RatingSummary ratings;
 
+  /// An open report exists against this listing.
+  ///
+  /// Only the seller's own endpoints send this, and only ever as a boolean: a
+  /// seller is told the Association is looking and nothing more. Defaults false
+  /// so buyer endpoints, which never send the field, are unchanged.
+  final bool hasOpenReport;
+
   Listing({
     required this.id,
     this.cropIcon,
@@ -77,6 +84,7 @@ class Listing {
     this.farmerMobileNumber,
     this.farmerId,
     this.ratings = const RatingSummary.none(),
+    this.hasOpenReport = false,
   });
 
   factory Listing.fromJson(Map<String, dynamic> json) {
@@ -103,6 +111,7 @@ class Listing {
       farmerMobileNumber: (json['farmer'] as Map?)?['mobile_number'] as String?,
       farmerId: (json['farmer'] as Map?)?['id'] as String?,
       ratings: RatingSummary.fromListingJson(json),
+      hasOpenReport: json['has_open_report'] as bool? ?? false,
     );
   }
 
