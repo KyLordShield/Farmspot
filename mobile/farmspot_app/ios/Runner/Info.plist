@@ -51,7 +51,9 @@
 		<true/>
 		<key>NSCameraUsageDescription</key>
 		<string>FarmSpot uses the camera to take photos of your farm, crops, and verification documents.</string>
-		<key>NSPhotoLibraryUsageDescription</key>
+		<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FarmSpot uses your location to show how far nearby farms are from you.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
 		<string>FarmSpot accesses your photo library so you can add farm photos and verification documents.</string>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>

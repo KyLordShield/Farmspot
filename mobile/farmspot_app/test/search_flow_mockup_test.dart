@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -333,6 +335,45 @@ void main() {
         expect(find.text('Distance unavailable'), findsOneWidget);
       },
     );
+
+    testWidgets('results render while the permission dialog is still open', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // A first-run permission prompt stays open for as long as the buyer takes
+      // to answer it, so the lookup can outlast any timeout the screen would
+      // put on it. The results cannot wait for that.
+      final pending = Completer<LatLng?>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SearchResultsScreen(
+            query: 'Carrots',
+            loadResults: (_) async => [
+              _listing('L1', 'Carrots', 'Bayan Farm', farmId: 'F1'),
+            ],
+            loadFarms: () async => [
+              _pin('F1', _userPos.latitude + 0.01, _userPos.longitude),
+            ],
+            loadBuyerPosition: () => pending.future,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Bayan Farm'), findsOneWidget);
+      // Pending is not "denied": neither a denial message nor a radius claim.
+      expect(find.textContaining('Distances need'), findsNothing);
+      expect(find.textContaining('within'), findsNothing);
+
+      pending.complete(_userPos);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('1.0 km away'), findsOneWidget);
+    });
 
     testWidgets('image-search merges alias terms (kamatis + tomato) into one '
         'mixed list', (tester) async {

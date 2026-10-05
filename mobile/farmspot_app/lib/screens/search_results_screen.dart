@@ -187,6 +187,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// list falls back to detection confidence.
   bool _hasLocation = false;
 
+  /// True while the position lookup is still in flight — the common case being
+  /// an unanswered permission dialog. While it is true no distance is known,
+  /// and the screen must not print a "within 15 km" claim or a near/far split
+  /// derived from distances that have not arrived yet.
+  bool _locating = false;
+
   bool _loading = true;
   String? _error;
 
@@ -288,17 +294,54 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       // to resolve a position that always came back as that fallback, so a buyer
       // with GPS off was shown a confident "12 km away" measured from a point
       // that is not them.
-      final fix = await widget.loadBuyerPosition();
-      final hasLocation = fix != null;
-
+      //
+      // The lookup starts here but is NOT awaited before the first render. On a
+      // fresh install it ends in a permission dialog, and a results grid that
+      // waits on a dialog is a grid the buyer never sees until they answer it.
+      // So results render now with no distances, and [_applyBuyerPosition] fills
+      // them in when the lookup settles.
+      final positionLookup = widget.loadBuyerPosition();
       final farms = await widget.loadFarms();
+
+      if (!mounted) return;
+      setState(() {
+        _rows = rows;
+        if (_multi) {
+          _imageResults = imageResults;
+        }
+        _categories = categories;
+        if (_activeCategoryId != null &&
+            !_categories.any((c) => c.id == _activeCategoryId)) {
+          _activeCategoryId = null;
+        }
+        _loading = false;
+        _locating = true;
+      });
+
+      _applyBuyerPosition(await positionLookup, farms);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  /// Turns the buyer's fix into the per-farm distance map and repaints.
+  ///
+  /// Runs after the results are already on screen, so it must never throw: a
+  /// failed lookup costs distances, not the page.
+  void _applyBuyerPosition(LatLng? fix, List<FarmPin> farms) {
+    if (!mounted) return;
+    try {
       // With no real fix there is nothing to measure from, so nothing is
       // measured. Leaving the map empty rather than filling it from the fallback
       // anchor matters: the anchor is a real coordinate, so a farm sitting on top
       // of it would otherwise come back as "0 m away" — the most confident wrong
       // answer available. Every consumer treats a missing entry as unknown.
       final distances = <String, double>{
-        if (hasLocation)
+        if (fix != null)
           for (final farm in farms)
             if (farm.id.isNotEmpty &&
                 (farm.latitude != 0 || farm.longitude != 0))
@@ -307,27 +350,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 LatLng(farm.latitude, farm.longitude),
               ),
       };
-
-      if (!mounted) return;
       setState(() {
-        _rows = rows;
-        if (_multi) {
-          _imageResults = imageResults;
-        }
         _distances = distances;
-        _hasLocation = hasLocation;
-        _categories = categories;
-        if (_activeCategoryId != null &&
-            !_categories.any((c) => c.id == _activeCategoryId)) {
-          _activeCategoryId = null;
-        }
-        _loading = false;
+        _hasLocation = fix != null;
+        _locating = false;
       });
-    } catch (e) {
-      if (!mounted) return;
+    } catch (_) {
       setState(() {
-        _loading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _distances = const {};
+        _hasLocation = false;
+        _locating = false;
       });
     }
   }
@@ -700,7 +732,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           .where((r) => !(_kmFor(r).isFinite && _kmFor(r) <= searchRadiusKm))
           .toList();
 
-      if (!_hasLocation && other.isNotEmpty) {
+      if (_locating) {
+        // The lookup is still out — usually an OS permission dialog waiting on
+        // the buyer. Every distance is unknown, so a "within 15 km" line or a
+        // near/far split would be a guess about a location nobody has reported
+        // yet. Show the results and let the distances land when they can.
+        children.add(const SizedBox(height: 8));
+        children.add(_buildCountLine(rows.length));
+        children.add(const SizedBox(height: 14));
+        children.add(_resultGrid(rows.map(_itemFor).toList(growable: false)));
+      } else if (!_hasLocation && other.isNotEmpty) {
         // No GPS fix, so every distance is unknown. Splitting on an unknown
         // radius would put everything under "Other farms" and print "no farms
         // within 15 km of you" — a claim about the buyer's location that was

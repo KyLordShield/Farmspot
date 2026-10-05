@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -15,18 +17,12 @@ class LocationService {
   /// Never throws: any geolocator failure (permission denied, services off,
   /// missing plugin, no fix) falls back to this center so distance sorting
   /// always has an anchor.
+  ///
+  /// Asks for permission before falling back. A buyer who has never been asked
+  /// has never granted, and every distance measured from this anchor is a
+  /// confident number about a place they are not at.
   static Future<LatLng> defaultBuyerPosition() async {
-    try {
-      await GeolocatorPlatform.instance.isLocationServiceEnabled();
-      if (await GeolocatorPlatform.instance.checkPermission() ==
-          LocationPermission.deniedForever) {
-        return const LatLng(10.3178, 123.8742);
-      }
-      final pos = await GeolocatorPlatform.instance.getCurrentPosition();
-      return LatLng(pos.latitude, pos.longitude);
-    } catch (_) {
-      return const LatLng(10.3178, 123.8742);
-    }
+    return await tryBuyerPosition() ?? fallbackPosition;
   }
 
   /// Great-circle distance between two points in kilometers.
@@ -41,45 +37,61 @@ class LocationService {
     return '${km.round()} km away';
   }
 
-  /// Best-effort real fix for image search, WITHOUT the Cebu fallback.
+  /// Best-effort real fix for BOTH search modes, WITHOUT the Cebu fallback.
+  ///
+  /// Asks the OS for permission when it has not been answered yet. Returning
+  /// null on a plain [LocationPermission.denied] without asking first is what
+  /// left a buyer with location switched on staring at "Distance unavailable"
+  /// and no prompt anywhere: the app never requested, so it was never granted,
+  /// so it correctly reported no fix. Distinct from [defaultBuyerPosition],
+  /// which asks first and answers with the fallback city when refused.
   ///
   /// Returns null when the device cannot give a trustworthy position
-  /// (permission denied, location services off, no fix within
-  /// [timeout]). Callers use null to mean "no distances" and sort by
-  /// detection confidence instead. Distinct from [defaultBuyerPosition],
-  /// which always returns a position so text search keeps its existing
-  /// behaviour of sorting against the fallback city.
+  /// (permission refused, location services off, no fix within [fixTimeout]).
+  /// Callers use null to mean "no distances" rather than a measured guess.
   ///
-  /// The timeout is what keeps a slow or wedged GPS from blocking the
-  /// results screen: geolocator's own future can hang indefinitely, so
-  /// this races it and gives up rather than leaving the caller waiting.
+  /// The [fixTimeout] deliberately covers ONLY the GPS fix, never the
+  /// permission request. A permission dialog takes as long as the buyer takes
+  /// to read and answer it; a timeout across it gives up while the dialog is
+  /// still on screen, the caller reports "no location", and the buyer grants
+  /// permission to a screen that has already given up on it.
   static Future<LatLng?> tryBuyerPosition({
-    Duration timeout = const Duration(seconds: 4),
+    Duration fixTimeout = const Duration(seconds: 6),
+    Duration permissionTimeout = const Duration(minutes: 2),
   }) async {
-    // The timeout wraps the WHOLE lookup, not just the fix. Any of the three
-    // geolocator calls can hang (a wedged platform channel never answers), and
-    // a partially-timed-out version would still leave the caller waiting
-    // forever on whichever call stalls first.
-    return _lookupPosition().timeout(
-      timeout,
-      onTimeout: () => null,
-    );
-  }
-
-  static Future<LatLng?> _lookupPosition() async {
     try {
       if (!await GeolocatorPlatform.instance.isLocationServiceEnabled()) {
         return null;
       }
-      final permission = await GeolocatorPlatform.instance.checkPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      var permission = await GeolocatorPlatform.instance.checkPermission();
+      if (permission == LocationPermission.denied) {
+        // The only state that is still answerable. deniedForever is not: the
+        // OS will not show a dialog again, and silently returning null there
+        // is indistinguishable from the buyer having said no.
+        permission = await GeolocatorPlatform.instance
+            .requestPermission()
+            .timeout(
+              permissionTimeout,
+              onTimeout: () => LocationPermission.deniedForever,
+            );
+      }
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always) {
         return null;
       }
-      final pos = await GeolocatorPlatform.instance.getCurrentPosition();
+      // Only the fix is raced. geolocator's future can hang indefinitely on a
+      // wedged platform channel or a GPS that never locks, and this is what
+      // keeps that from stalling the results screen.
+      final pos = await GeolocatorPlatform.instance
+          .getCurrentPosition()
+          .timeout(fixTimeout, onTimeout: () => _throwTimeout());
       return LatLng(pos.latitude, pos.longitude);
     } catch (_) {
       return null;
     }
+  }
+
+  static Never _throwTimeout() {
+    throw TimeoutException('no GPS fix');
   }
 }
