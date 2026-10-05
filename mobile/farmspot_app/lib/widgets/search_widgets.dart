@@ -327,7 +327,7 @@ class SearchResultCard extends StatelessWidget {
                   // Rating, same treatment as the home card: hidden entirely
                   // until something has been rated, so a search result and the
                   // feed listing for the same crop read identically.
-                  RatingStars(summary: item.ratings, size: 13, showCount: true),
+                  CompactRatingLabel(summary: item.ratings, size: 12.5),
                 ],
               ),
             ),

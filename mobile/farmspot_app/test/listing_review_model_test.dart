@@ -39,7 +39,143 @@ void main() {
       expect(RatingSummary.fromJson(null).hasRatings, isFalse);
     });
 
-    test('a count with no average does not render as a rating', () {
+    test('reads the server breakdown for the filter chips', () {
+    final summary = RatingSummary.fromJson({
+      'average': 4.3,
+      'count': 9,
+      'rating_breakdown': {'1': 0, '2': 1, '3': 2, '4': 3, '5': 3},
+    });
+
+    expect(summary.countFor(5), 3);
+    expect(summary.countFor(1), 0);
+    expect(summary.hasBreakdown, isTrue);
+    // Summed to the count: a breakdown disagreeing with the total would put
+    // chip counts that do not add up to the "Based on N reviews" line beside it.
+    expect(
+      [1, 2, 3, 4, 5].map(summary.countFor).reduce((a, b) => a + b),
+      summary.count,
+    );
+  });
+
+  test('a breakdown with an odd key is ignored rather than clamped', () {
+    // "0" and "6" are not star ratings. Bending one onto 1 or 5 would overstate
+    // a band, so it is dropped.
+    final summary = RatingSummary.fromJson({
+      'count': 3,
+      'rating_breakdown': {'0': 5, '6': 4, 'three': 1, '5': 3},
+    });
+
+    expect(summary.countFor(5), 3);
+    expect(summary.countFor(1), 0);
+    expect(summary.countFor(6), 0);
+  });
+
+  test('tolerates a missing or null breakdown', () {
+    // An older backend sends none at all. Chips then render without counts
+    // rather than the parse failing.
+    final absent = RatingSummary.fromJson({'average': 4.0, 'count': 2});
+    final nulled = RatingSummary.fromJson({
+      'average': 4.0,
+      'count': 2,
+      'rating_breakdown': null,
+    });
+
+    expect(absent.hasBreakdown, isFalse);
+    expect(absent.countFor(5), 0);
+    expect(nulled.hasBreakdown, isFalse);
+    expect(nulled.countFor(5), 0);
+  });
+
+  test('ReviewSort parses the wire values and falls back to newest', () {
+    expect(ReviewSort.fromWire('best'), ReviewSort.best);
+    expect(ReviewSort.fromWire('lowest'), ReviewSort.lowest);
+    // An unknown value from a newer server must not blank a list being read.
+    expect(ReviewSort.fromWire('sideways'), ReviewSort.newest);
+    expect(ReviewSort.fromWire(null), ReviewSort.newest);
+    // Wire values are what the endpoint expects, spelled exactly.
+    for (final sort in ReviewSort.values) {
+      expect(sort.wireValue, isNotEmpty);
+    }
+  });
+
+  test('ReviewFilter only sends parameters that are doing something', () {
+    // Untouched: nothing added, so the request is byte-identical to the one
+    // that existed before filtering.
+    expect(const ReviewFilter.all().toQuery(), isEmpty);
+    expect(const ReviewFilter.all().toQuery(sort: ReviewSort.newest), isEmpty);
+
+    expect(const ReviewFilter.all().toQuery(sort: ReviewSort.best), {
+      'sort': 'best',
+    });
+    expect(const ReviewFilter(rating: 4).toQuery(), {'rating': '4'});
+
+    // Star selection and comments are independent parameters, so they combine
+    // without the backend needing to understand a combined token.
+    expect(
+      const ReviewFilter(rating: 4, withCommentsOnly: true).toQuery(),
+      {'rating': '4', 'with_comment': 'true'},
+    );
+
+    // withComments(false) is deliberately not sent: it would mean "only bare
+    // star ratings", which is not what an untouched screen means.
+    expect(
+      const ReviewFilter(rating: 4, withCommentsOnly: false).toQuery(),
+      {'rating': '4'},
+    );
+  });
+
+  test('ReviewFilter toggles one axis and keeps the other', () {
+    const start = ReviewFilter(rating: 3);
+
+    expect(start.withComments(true).rating, 3);
+    expect(start.withComments(true).withCommentsOnly, isTrue);
+    expect(start.withRating(5).withCommentsOnly, isFalse);
+    expect(const ReviewFilter.all().withRating(2).isActive, isTrue);
+    expect(const ReviewFilter.all().isActive, isFalse);
+    // Two filters with the same selection compare equal, so the screen can tell a
+    // real change from a re-selection of what is already active.
+    expect(const ReviewFilter(rating: 2), const ReviewFilter(rating: 2));
+    expect(const ReviewFilter(rating: 2), isNot(const ReviewFilter(rating: 3)));
+  });
+
+  test('ListingReviewsPage knows whether the loaded rows include mine', () {
+    final mine = ListingReview(
+      id: 'LRVMINE',
+      listingId: 'LST0001',
+      rating: 2,
+      comment: null,
+      reviewer: 'Me',
+      createdAt: '2026-10-01T08:30:00Z',
+      updatedAt: '2026-10-01T08:30:00Z',
+      isMine: true,
+    );
+    final other = ListingReview(
+      id: 'LRVOTHER',
+      listingId: 'LST0001',
+      rating: 5,
+      comment: null,
+      reviewer: 'Maria S.',
+      createdAt: '2026-10-01T08:30:00Z',
+      updatedAt: '2026-10-01T08:30:00Z',
+    );
+
+    // The own review exists but a filter excluded it: still findable, which is
+    // why the list screen pins it above the rows.
+    final hidden = ListingReviewsPage(myReview: mine);
+    expect(hidden.hasMine, isTrue);
+    expect(hidden.listsMine, isFalse);
+
+    // Present in the loaded rows: no second copy gets pinned above it.
+    final listed = ListingReviewsPage(reviews: [mine, other], myReview: mine);
+    expect(listed.listsMine, isTrue);
+
+    // No own review at all.
+    final guest = ListingReviewsPage(reviews: [other]);
+    expect(guest.hasMine, isFalse);
+    expect(guest.listsMine, isFalse);
+  });
+
+  test('a count with no average does not render as a rating', () {
       // Malformed, but a lone "4.0" over an empty list is worse than hiding.
       final summary = RatingSummary.fromJson({'average': null, 'count': 4});
 

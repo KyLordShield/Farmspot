@@ -1,5 +1,3 @@
-/// Rating summary and review list for one listing.
-///
 /// One file for both the wire shapes the reviews endpoint returns: the
 /// `{average, count}` block and a single review row. They are always used
 /// together — a listing's reviews are not shown without the summary above them,
@@ -9,8 +7,110 @@
 /// The null handling is the whole point of this file. The backend sends
 /// `average: null` for a listing nobody has reviewed, and `null` must never
 /// become 0: showing "0.0" or an empty star row on a brand new listing claims
-/// buyers already judged it badly. [hasRatings] is what gates every render.
+/// buyers already judged it badly. [RatingSummary.hasRatings] is what gates
+/// every render.
 library;
+
+/// How the "See all reviews" list is ordered.
+///
+/// The wire values match the server's `sort` parameter exactly. [ReviewSort.newest]
+/// is the default and is what the endpoint already did, so a screen that never
+/// touches the selector sends no parameter and changes nothing.
+enum ReviewSort {
+  newest('newest', 'Newest'),
+  best('best', 'Best'),
+  highest('highest', 'Highest'),
+  lowest('lowest', 'Lowest');
+
+  const ReviewSort(this.wireValue, this.label);
+
+  /// What goes in `?sort=`.
+  final String wireValue;
+
+  /// What the selector shows.
+  final String label;
+
+  /// Parses a wire value, falling back to [ReviewSort.newest].
+  ///
+  /// Never throws: an unknown value from a newer server must not blank a list
+  /// the buyer is reading.
+  static ReviewSort fromWire(String? value) {
+    for (final option in ReviewSort.values) {
+      if (option.wireValue == value) return option;
+    }
+    return ReviewSort.newest;
+  }
+}
+
+/// The whole selection behind the See all screen's chips and selector.
+///
+/// One object rather than two loose fields because the star chips are
+/// single-select while "With comments" combines with them: keeping the pair in
+/// one immutable value is what stops the two from drifting into a state the
+/// screen cannot represent, and makes "changing anything resets to page 1" a
+/// single comparison in the widget.
+///
+/// The combination travels as two independent parameters, `rating` and
+/// `with_comment`, so the backend never has to understand a combined token. A
+/// null [rating] means "all ratings", which is an absent parameter rather than
+/// `rating=0`, because the endpoint rejects an out-of-range value outright.
+class ReviewFilter {
+  /// Selected star count, or null for All.
+  final int? rating;
+
+  /// Whether "With comments" is on.
+  final bool withCommentsOnly;
+
+  const ReviewFilter({this.rating, this.withCommentsOnly = false});
+
+  const ReviewFilter.all() : rating = null, withCommentsOnly = false;
+
+  /// Whether anything at all is being filtered, which decides between the
+  /// "No reviews yet" and "No reviews match this filter" empty states.
+  bool get isActive => rating != null || withCommentsOnly;
+
+  /// Selects one star band, replacing any previous star selection.
+  ReviewFilter withRating(int? value) =>
+      ReviewFilter(rating: value, withCommentsOnly: withCommentsOnly);
+
+  /// Toggles "With comments", leaving the star selection alone.
+  ReviewFilter withComments(bool value) =>
+      ReviewFilter(rating: rating, withCommentsOnly: value);
+
+  ReviewFilter copyWith({int? rating, bool? withCommentsOnly}) {
+    return ReviewFilter(
+      rating: rating ?? this.rating,
+      withCommentsOnly: withCommentsOnly ?? this.withCommentsOnly,
+    );
+  }
+
+  /// The query parameters this filter adds, omitted when they would be no-ops.
+  ///
+  /// [ReviewSort.newest] is excluded because it is the endpoint's existing
+  /// default, and [withCommentsOnly] false is excluded because an explicit
+  /// `with_comment=false` would narrow the list to bare star ratings, which is
+  /// not what an untouched screen means.
+  Map<String, String> toQuery({ReviewSort sort = ReviewSort.newest}) {
+    return {
+      if (sort != ReviewSort.newest) 'sort': sort.wireValue,
+      if (rating != null) 'rating': '$rating',
+      if (withCommentsOnly) 'with_comment': 'true',
+    };
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ReviewFilter &&
+      other.rating == rating &&
+      other.withCommentsOnly == withCommentsOnly;
+
+  @override
+  int get hashCode => Object.hash(rating, withCommentsOnly);
+
+  @override
+  String toString() =>
+      'ReviewFilter(rating: $rating, withComments: $withCommentsOnly)';
+}
 
 /// `{average, count}` from GET /api/listings/{id}/reviews, and the
 /// `rating_average` / `rating_count` pair on a listing payload.
@@ -21,9 +121,24 @@ class RatingSummary {
   /// How many visible reviews the average is over.
   final int count;
 
-  const RatingSummary({this.average, this.count = 0});
+  /// Counts per rating, 1 to 5, over every visible review.
+  ///
+  /// New on the API as `rating_breakdown`. Always all five entries, zeros
+  /// included, so the filter chips never have to guard a missing index to
+  /// decide whether to print a count. Never affected by an active filter: the
+  /// numbers beside the chips describe the listing, not the current selection.
+  final Map<int, int> ratingBreakdown;
 
-  const RatingSummary.none() : average = null, count = 0;
+  const RatingSummary({
+    this.average,
+    this.count = 0,
+    this.ratingBreakdown = const {},
+  });
+
+  const RatingSummary.none()
+      : average = null,
+        count = 0,
+        ratingBreakdown = const {};
 
   /// Parses the endpoint's `summary` block.
   factory RatingSummary.fromJson(Map<String, dynamic>? json) {
@@ -39,8 +154,18 @@ class RatingSummary {
       // as num rather than double or the parse throws on `average: 5`.
       average: rawAverage == null ? null : (rawAverage as num).toDouble(),
       count: rawCount is num ? rawCount.toInt() : 0,
+      ratingBreakdown: breakdownFromJson(json['rating_breakdown']),
     );
   }
+
+  /// How many visible reviews carry [rating] stars, 0 when unknown.
+  ///
+  /// Returns 0 rather than throwing when the server omitted the breakdown, so
+  /// an older backend still renders chips without counts.
+  int countFor(int rating) => ratingBreakdown[rating] ?? 0;
+
+  /// Whether the server sent a usable breakdown, so chips can show counts.
+  bool get hasBreakdown => ratingBreakdown.isNotEmpty;
 
   /// Builds from a listing payload's `rating_average` / `rating_count` pair.
   ///
@@ -93,11 +218,39 @@ class RatingSummary {
     return RatingSummary(
       average: average ?? this.average,
       count: count ?? this.count,
+      // Carried over rather than defaulted: the breakdown arrives on the same
+      // response as the average, and dropping it here would blank every chip
+      // count the moment a buyer saved or deleted a review.
+      ratingBreakdown: ratingBreakdown,
     );
   }
 
   @override
   String toString() => 'RatingSummary(average: $average, count: $count)';
+}
+
+/// Reads `rating_breakdown` into a {1..5: count} map.
+///
+/// Shared by the summary block and the listing payload. JSON object keys are
+/// strings, so "5" has to be read as a key and the value taken with it; keys
+/// that are not 1..5 are dropped rather than clamped, since a clamped entry
+/// would silently overstate one star band.
+Map<int, int> breakdownFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+
+  final breakdown = <int, int>{};
+
+  for (final entry in raw.entries) {
+    final rating = int.tryParse(entry.key.toString());
+    final total = entry.value;
+
+    if (rating == null || rating < 1 || rating > 5) continue;
+    if (total is! num) continue;
+
+    breakdown[rating] = total.toInt();
+  }
+
+  return breakdown;
 }
 
 /// One row from the `reviews` array.
@@ -265,6 +418,15 @@ class ListingReviewsPage {
 
   /// Whether this viewer has already reviewed this listing.
   bool get hasMine => myReview != null;
+
+  /// Whether the caller's own row is among the rows currently loaded.
+  ///
+  /// Not the same question as [hasMine]: the own review exists either way, but
+  /// it may be on a page nobody has scrolled to, or excluded by an active
+  /// filter. The See all screen uses this to decide whether to pin a "Your
+  /// review" row above the list so the edit and delete buttons stay reachable.
+  bool get listsMine =>
+      myReview != null && reviews.any((review) => review.id == myReview!.id);
 
   /// What the "Write a review" button should say for this viewer.
   ///

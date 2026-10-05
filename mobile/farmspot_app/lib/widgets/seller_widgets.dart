@@ -541,11 +541,10 @@ class CropListTile extends StatelessWidget {
                 // count. Hidden when unreviewed.
                 if (listing.ratings.hasRatings) ...[
                   const SizedBox(height: 4),
-                  RatingStars(
-                    summary: listing.ratings,
-                    size: 12,
-                    showCount: true,
-                  ),
+                  // Compact form, same as the buyer-facing cards: a seller row
+                  // is already name + status + actions, and five drawn stars
+                  // pushed the actions off the right edge of a phone.
+                  CompactRatingLabel(summary: listing.ratings, size: 12),
                 ],
                 if (updating)
                   const SizedBox(

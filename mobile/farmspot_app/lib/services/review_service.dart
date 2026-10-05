@@ -10,10 +10,18 @@ import 'auth_service.dart';
 /// product detail screen a recording fake instead of standing up a server.
 abstract class ReviewsGateway {
   /// One page of a listing's reviews plus its summary.
+  ///
+  /// [sort], [rating] and [withCommentsOnly] are additive and all default to
+  /// what the endpoint did before any of them existed: newest first, unfiltered.
+  /// They are omitted from the query string when unset rather than sent empty,
+  /// so the default call is byte-identical to the original request.
   Future<ReviewPageResult> fetch({
     required String listingId,
     int page = 1,
     int perPage = 5,
+    ReviewSort sort = ReviewSort.newest,
+    int? rating,
+    bool withCommentsOnly = false,
   });
 
   /// Creates or updates the signed-in user's review. The backend turns a second
@@ -46,10 +54,24 @@ class ReviewService implements ReviewsGateway {
     required String listingId,
     int page = 1,
     int perPage = 5,
+    ReviewSort sort = ReviewSort.newest,
+    int? rating,
+    bool withCommentsOnly = false,
   }) async {
+    // page and per_page always go out because pagination needs them. The three
+    // narrowing parameters are added only when they are doing something, so the
+    // default call sends exactly what it sent before any of this existed.
+    final query = <String, String>{
+      'page': '$page',
+      'per_page': '$perPage',
+      if (sort != ReviewSort.newest) 'sort': sort.wireValue,
+      if (rating != null) 'rating': '$rating',
+      if (withCommentsOnly) 'with_comment': 'true',
+    };
+
     final uri = Uri.parse(
       '$baseUrl/listings/$listingId/reviews',
-    ).replace(queryParameters: {'page': '$page', 'per_page': '$perPage'});
+    ).replace(queryParameters: query);
 
     final http.Response response;
     try {

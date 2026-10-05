@@ -3,7 +3,77 @@ import 'package:flutter/material.dart';
 import '../models/listing_review.dart';
 import '../theme.dart';
 
+/// A single filled star plus the average, e.g. "★ 4.5 (12)".
+///
+/// The compact form used on listing cards. Five drawn stars next to a crop name
+/// on a phone-width card turned the rating into the loudest thing on the tile,
+/// when the buyer only needs the number and a glanceable marker; the single
+/// star plus the exact figure carries the same information in roughly a third
+/// of the width.
+///
+/// Renders nothing when [summary] has no ratings, matching [RatingStars]: a
+/// "0" or a lone empty star on a brand new listing is a claim nobody has made.
+///
+/// [showCount] appends the review count in a smaller, muted style. The count is
+/// dropped rather than truncated when it will not fit, because "★ 4.5" is still
+/// true and "★ 4.5 (1…" is not.
+class CompactRatingLabel extends StatelessWidget {
+  final RatingSummary summary;
+  final double size;
+  final bool showCount;
+
+  /// Above this the count is left off rather than allowed to wrap the row.
+  static const int maxCount = 9999;
+
+  const CompactRatingLabel({
+    super.key,
+    required this.summary,
+    this.size = 13,
+    this.showCount = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!summary.hasRatings) return const SizedBox.shrink();
+
+    final color = AppColors.warningAmber;
+    final countFits = showCount && summary.count > 0 && summary.count <= maxCount;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(Icons.star, size: size + 1, color: color),
+        const SizedBox(width: 3),
+        Text(
+          summary.averageLabel,
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        if (countFits) ...[
+          const SizedBox(width: 3),
+          Text(
+            '(${summary.count})',
+            style: TextStyle(
+              fontSize: size * 0.78,
+              fontWeight: FontWeight.w500,
+              color: Colors.black45,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// Read-only star row plus the average and review count.
+///
+/// Retained for the places that genuinely want the drawn row: the product
+/// detail header and each review card, where there is room for it and the
+/// individual stars are the point. Cards use [CompactRatingLabel] instead.
 ///
 /// Renders nothing at all when [summary] has no ratings, which is the rule
 /// that matters: an unreviewed listing must not show five empty stars and a

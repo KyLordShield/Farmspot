@@ -58,12 +58,22 @@ void main() {
       (tester) async {
     await _pump(tester);
 
-    expect(find.text('Mr. A Farm'), findsOneWidget);
-    expect(find.text('Sudlon II'), findsOneWidget);
+    // Scoped to the header. The farm name and the distance also appear below it
+    // now that every listing card shows its own name and its own distance over
+    // the photo, so a whole-screen count would be answering a different
+    // question than the one this test asks.
+    final header = find.byKey(FarmProfileScreen.headerKey);
+
+    expect(find.descendant(of: header, matching: find.text('Mr. A Farm')), findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text('Sudlon II')), findsOneWidget);
 
     // Stats row: AVAILABLE_NOW count + distance reused from the feed.
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('0.4 km away'), findsOneWidget);
+    final stats = find.byKey(FarmProfileScreen.statsRowKey);
+    expect(find.descendant(of: stats, matching: find.text('2')), findsOneWidget);
+    expect(
+      find.descendant(of: stats, matching: find.text('0.4 km away')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('All tab shows every listing via the shared CropCardGrid',

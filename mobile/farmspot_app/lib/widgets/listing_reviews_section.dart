@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/listing_review.dart';
+import '../screens/all_reviews_screen.dart';
 import '../services/review_service.dart';
 import '../theme.dart';
 import 'farmspot_loader.dart';
 import 'rating_stars.dart';
+import 'review_card.dart';
 import 'review_sheet.dart';
 
 /// The reviews block on the product detail screen.
@@ -16,6 +18,13 @@ import 'review_sheet.dart';
 /// It owns its loading state rather than being handed a prebuilt list, because
 /// reviews change as a result of what happens here — a submit, an edit, a
 /// delete — and the header average has to move with them.
+///
+/// The block shows a preview, not the whole list: [previewLimit] best reviews
+/// and a "See all" link into [AllReviewsScreen]. Paging used to live here, which
+/// meant the buyer had to find and press a button at the bottom of a product
+/// page to reach reviews two, three and four — and on a phone that button sat
+/// under the fold often enough to be invisible. One link that says how many
+/// there are is easier to act on than an afterthought at the end of a scroll.
 class ListingReviewsSection extends StatefulWidget {
   final String listingId;
   final String cropName;
@@ -38,6 +47,17 @@ class ListingReviewsSection extends StatefulWidget {
 
   /// Key for the "Write a review" button, used by widget tests.
   static const Key writeButtonKey = Key('reviews-write-button');
+
+  /// Key for the "See all reviews" link, used by widget tests.
+  static const Key seeAllKey = Key('reviews-see-all');
+
+  /// How many reviews the preview shows.
+  ///
+  /// Three, not five: a preview exists to show the shape of what is there, and
+  /// five full review cards plus a write button push the rest of the product page
+  /// off a phone screen. Three is enough to show the pattern, and anything more
+  /// is one tap away.
+  static const int previewLimit = 3;
 
   @override
   State<ListingReviewsSection> createState() => _ListingReviewsSectionState();
@@ -66,6 +86,13 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
     _load();
   }
 
+  /// Loads the preview: the best [ListingReviewsSection.previewLimit] reviews.
+  ///
+  /// Asked for `sort=best` rather than newest. On a preview, the newest review
+  /// is the least useful of the three on offer — it is most likely to be a bare
+  /// star rating, because that is all some buyers bother with — and the one this
+  /// row is meant to show is the review that says something. Sorting by rating
+  /// and then by whether anyone left words is what the endpoint's `best` does.
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -73,7 +100,11 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
     });
 
     try {
-      final result = await _gateway.fetch(listingId: widget.listingId);
+      final result = await _gateway.fetch(
+        listingId: widget.listingId,
+        perPage: ListingReviewsSection.previewLimit,
+        sort: ReviewSort.best,
+      );
 
       if (!mounted) return;
 
@@ -103,38 +134,23 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
     }
   }
 
-  /// Fetches the next page and appends it, keeping what is already on screen.
+  /// Opens the full review list for this listing.
   ///
-  /// Separate from [_load] so paging does not blank the list and lose the
-  /// buyer's place, and does not reset the summary or the prefill state.
-  Future<void> _showMore() async {
-    if (_loading) return;
-    setState(() => _loading = true);
-
-    try {
-      final result = await _gateway.fetch(
-        listingId: widget.listingId,
-        page: _page.currentPage + 1,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _loading = false;
-        _page = _page
-            .withReviews([..._page.reviews, ...result.reviews])
-            .copyWith(
-              currentPage: result.currentPage,
-              lastPage: result.lastPage,
-            );
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
-      });
-    }
+  /// The write and delete handlers are handed over rather than left behind: a
+  /// buyer who scrolls the full list and decides to edit or withdraw their review
+  /// should not have to walk back to the product page to do it. The page reloads
+  /// on return, so the preview reflects whatever changed.
+  Future<void> _seeAll() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AllReviewsScreen(
+          listingId: widget.listingId,
+          cropName: widget.cropName,
+          gateway: widget.gateway,
+          onReviewsChanged: _load,
+        ),
+      ),
+    );
   }
 
   /// Opens the sheet, then saves and merges whatever comes back.
@@ -408,82 +424,48 @@ class _ListingReviewsSectionState extends State<ListingReviewsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final review in _page.reviews) ...[
-          _ReviewRow(review: review),
+        // Capped here as well as in the request. per_page=3 is what the endpoint
+        // honours, but a server that ignored it would otherwise put five full
+        // cards and a write button below the fold on a phone — which is the
+        // reason the preview exists rather than the whole list.
+        for (final review
+            in _page.reviews.take(ListingReviewsSection.previewLimit)) ...[
+          ReviewCard(review: review),
           const Divider(height: 20),
         ],
-        if (_page.hasMorePages)
-          Center(
+        // Only offered when the preview is genuinely truncated. A listing with
+        // three or fewer reviews has nothing behind the link, and a "See all
+        // reviews (3)" that opens a three-row list is worse than no link.
+        if (_page.total > ListingReviewsSection.previewLimit)
+          Align(
+            alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: _loading ? null : _showMore,
-              child: const Text('Show more reviews'),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// One review line: stars, reviewer, when, and the comment if there is one.
-class _ReviewRow extends StatelessWidget {
-  final ListingReview review;
-
-  const _ReviewRow({required this.review});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            RatingStars(
-              summary: RatingSummary(
-                average: review.rating.toDouble(),
-                count: 1,
+              key: ListingReviewsSection.seeAllKey,
+              onPressed: _seeAll,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryGreen,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              size: 14,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                review.reviewer,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                  // The buyer's own review is labelled, so a long list does not
-                  // leave them wondering which line is theirs.
-                  color: review.isMine
-                      ? AppColors.primaryGreen
-                      : Colors.black87,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _page.total == 1
+                        ? 'See all 1 review'
+                        : 'See all ${_page.total} reviews',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
               ),
             ),
-            if (review.isMine) ...[
-              const SizedBox(width: 6),
-              const Text(
-                'Your review',
-                style: TextStyle(fontSize: 11, color: AppColors.primaryGreen),
-              ),
-            ],
-          ],
-        ),
-        if (review.createdLabel.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(
-            review.createdLabel,
-            style: const TextStyle(fontSize: 11, color: Colors.black45),
           ),
-        ],
-        if (review.hasComment) ...[
-          const SizedBox(height: 6),
-          Text(
-            review.comment!,
-            style: const TextStyle(fontSize: 13, height: 1.4),
-          ),
-        ],
       ],
     );
   }

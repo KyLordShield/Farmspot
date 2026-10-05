@@ -4,6 +4,7 @@ import 'package:farmspot_app/models/listing_review.dart';
 import 'package:farmspot_app/services/review_service.dart';
 import 'package:farmspot_app/widgets/listing_reviews_section.dart';
 import 'package:farmspot_app/widgets/rating_stars.dart';
+import 'package:farmspot_app/widgets/review_card.dart';
 import 'package:farmspot_app/widgets/review_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +43,14 @@ class FakeReviewsGateway implements ReviewsGateway {
   /// Pages requested, in order, so a duplicate fetch is caught.
   final List<int> requestedPages = [];
 
+  /// Every sort/filter the caller asked for, in order.
+  ///
+  /// Separate from [requestedPages] on purpose: the preview and the See all
+  /// screen both request page 1, so page alone cannot distinguish "asked for the
+  /// best three" from "asked for everything newest first", which is the whole
+  /// difference between them.
+  final List<({int? rating, bool withComments, ReviewSort sort})> requestedScopes = [];
+
   /// When set, [fetch] waits on this instead of answering immediately.
   ///
   /// Needed for the state that only exists on a real network: between the
@@ -55,8 +64,12 @@ class FakeReviewsGateway implements ReviewsGateway {
     required String listingId,
     int page = 1,
     int perPage = 5,
+    ReviewSort sort = ReviewSort.newest,
+    int? rating,
+    bool withCommentsOnly = false,
   }) async {
     requestedPages.add(page);
+    requestedScopes.add((rating: rating, withComments: withCommentsOnly, sort: sort));
 
     final pending = pendingFetch;
     if (pending != null) return pending.future;
@@ -440,39 +453,102 @@ void main() {
     });
   });
 
-  group('ListingReviewsSection paging', () {
-    testWidgets('appends the next page without dropping what is shown', (
+group('ListingReviewsSection preview', () {
+    testWidgets('is capped at three even if the server sends more', (
       tester,
     ) async {
+      // Defensive: the request asks for three, but a server that ignored
+      // per_page would otherwise push five full cards plus a write button off a
+      // phone screen, which is exactly what the preview limit prevents.
       final gateway = FakeReviewsGateway()
         ..pages[1] = aPage(
-          reviews: [aReview(id: 'A', reviewer: 'Maria S.')],
-          summary: const RatingSummary(average: 4.0, count: 2),
-          currentPage: 1,
-          lastPage: 2,
-          total: 2,
-        )
-        ..pages[2] = aPage(
-          reviews: [aReview(id: 'B', reviewer: 'Reyes R.', rating: 4)],
-          summary: const RatingSummary(average: 4.0, count: 2),
-          currentPage: 2,
-          lastPage: 2,
-          total: 2,
+          reviews: [
+            for (var i = 0; i < 5; i++) aReview(id: 'R$i', reviewer: 'R $i'),
+          ],
+          summary: const RatingSummary(average: 4.3, count: 9),
+          total: 9,
         );
 
       await _pumpSection(tester, gateway);
 
-      expect(find.text('Show more reviews'), findsOneWidget);
-      await tester.tap(find.text('Show more reviews'));
+      expect(find.byType(ReviewCard), findsNWidgets(3));
+      expect(find.text('R 4'), findsNothing);
+      expect(find.byKey(ListingReviewsSection.seeAllKey), findsOneWidget);
+    });
+
+    testWidgets('asks for the best three rather than the newest five', (
+      tester,
+    ) async {
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(reviews: [aReview()], total: 9, lastPage: 3);
+
+      await _pumpSection(tester, gateway);
+
+      // The preview has to be the *best* three, not the first three the server
+      // would send newest-first: on a listing whose newest review is a bare star
+      // rating, a newest-first preview shows the least informative three.
+      expect(gateway.requestedScopes.single.sort, ReviewSort.best);
+      expect(gateway.requestedPages, [1]);
+    });
+
+    testWidgets('offers See all with the listing total, and it opens the list', (
+      tester,
+    ) async {
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(
+          reviews: [aReview(id: 'A'), aReview(id: 'B'), aReview(id: 'C')],
+          summary: const RatingSummary(average: 4.3, count: 9),
+          total: 9,
+          lastPage: 1,
+        );
+
+      await _pumpSection(tester, gateway);
+
+      expect(find.byKey(ListingReviewsSection.seeAllKey), findsOneWidget);
+      expect(find.text('See all 9 reviews'), findsOneWidget);
+
+      await tester.tap(find.byKey(ListingReviewsSection.seeAllKey));
       await tester.pumpAndSettle();
 
-      expect(gateway.requestedPages, [1, 2]);
-      expect(find.text('Maria S.'), findsOneWidget);
-      expect(find.text('Reyes R.'), findsOneWidget);
-      // The summary is unchanged by paging, and is not overwritten by the
-      // page-two response's copy of it.
-      expect(find.text('Based on 2 reviews'), findsOneWidget);
-      expect(find.text('Show more reviews'), findsNothing);
+      // The full list is its own screen, so it asks for a full page rather than
+      // the preview's three.
+      expect(gateway.requestedScopes.last.sort, ReviewSort.newest);
+      expect(find.text('Reviews'), findsOneWidget);
+      expect(find.text('A', findRichText: false), findsNothing);
+    });
+
+    testWidgets('shows three reviews, not the whole page', (tester) async {
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(
+          reviews: [
+            aReview(id: 'A', reviewer: 'Maria S.'),
+            aReview(id: 'B', reviewer: 'Reyes R.'),
+            aReview(id: 'C', reviewer: 'Ana L.'),
+          ],
+          summary: const RatingSummary(average: 4.3, count: 3),
+          total: 3,
+        );
+
+      await _pumpSection(tester, gateway);
+
+      expect(find.byType(ReviewCard), findsNWidgets(3));
+      // Three reviews is the whole listing, so there is nothing behind the link.
+      expect(find.byKey(ListingReviewsSection.seeAllKey), findsNothing);
+    });
+
+    testWidgets('a singular total reads "See all 1 review"', (tester) async {
+      final gateway = FakeReviewsGateway()
+        ..pages[1] = aPage(
+          reviews: [aReview()],
+          summary: const RatingSummary(average: 5, count: 1),
+          total: 1,
+        );
+
+      await _pumpSection(tester, gateway);
+
+      // Would not happen from a real endpoint, since one review is never more
+      // than the preview limit, but the wording has to survive it.
+      expect(find.byKey(ListingReviewsSection.seeAllKey), findsNothing);
     });
   });
 

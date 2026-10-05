@@ -325,6 +325,55 @@ class CropCard extends StatelessWidget {
                     ),
                   ),
                 ),
+              Positioned(
+                  bottom: 8,
+                  right: 8,
+                  // Distance sits on the image rather than in the text block:
+                  // it describes where the photo was taken, and putting it under
+                  // the farm name made every card's second line
+                  // "Farm - 0.4 km away", which is the least scannable place for
+                  // the one number that varies between two otherwise identical
+                  // cards. Overlaying it on the image also leaves the line below
+                  // the crop name free for the rating.
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.near_me,
+                          size: 11,
+                          color: AppColors.primaryGreen,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          listing.distance,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
             Padding(
@@ -346,7 +395,7 @@ class CropCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${listing.farmName} - ${listing.distance}',
+                    listing.farmName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
@@ -354,11 +403,9 @@ class CropCard extends StatelessWidget {
                   // Only rendered once something has been rated. Height is
                   // reserved as a SizedBox.shrink (zero) when not, so a card
                   // in a masonry column does not jump as reviews arrive.
-                  RatingStars(
-                    summary: listing.ratings,
-                    size: 13,
-                    showCount: true,
-                  ),
+                  // Next to the crop name rather than over the image, because
+                  // it is metadata about the listing and not about the photo.
+                  CompactRatingLabel(summary: listing.ratings, size: 12.5),
                 ],
               ),
             ),

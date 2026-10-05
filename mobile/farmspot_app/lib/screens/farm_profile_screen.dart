@@ -39,6 +39,17 @@ class FarmProfileScreen extends StatefulWidget {
 
   /// Key for the "Report this farm" link, used by widget tests.
   static const Key reportFarmKey = Key('farm-profile-report');
+
+  /// Scope for the header block: farm name, location row and stats.
+  ///
+  /// Exists because the same strings now appear elsewhere on the screen — the
+  /// farm name on every listing card, the distance on each card's image — so a
+  /// test asking "does the header show the farm name?" cannot be answered by a
+  /// whole-screen count any more.
+  static const Key headerKey = Key('farm-profile-header');
+
+  /// Scope for the stats row alone, for the same reason as [headerKey].
+  static const Key statsRowKey = Key('farm-profile-stats');
 }
 
 class _FarmProfileScreenState extends State<FarmProfileScreen> {
@@ -212,6 +223,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
     final photo = profile.firstPhoto;
     final hasPhoto = photo == null || photo.trim().isEmpty;
     return Container(
+      key: FarmProfileScreen.headerKey,
       width: double.infinity,
       height: 240,
       clipBehavior: Clip.antiAlias,
@@ -328,6 +340,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
     final distance =
         _distanceResolving ? null : (_computedDistance ?? profile.distanceLabel);
     return Padding(
+      key: FarmProfileScreen.statsRowKey,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       // Expanded per stat so the two pairs always share the row width
       // proportionally; a long distance label can never push past the row's

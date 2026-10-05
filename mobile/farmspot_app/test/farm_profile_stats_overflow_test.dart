@@ -70,8 +70,16 @@ void main() {
       expect(tester.takeException(), isNull,
           reason: 'stats row must not overflow at 360px, text scale $scale');
 
-      // The real distance string is still displayed.
-      expect(find.text('0.4 km away'), findsOneWidget);
+      // The real distance string is still displayed, in the stats row. Scoped,
+      // because each listing card below now carries its own distance over its
+      // photo, and this test is about the header stat that used to overflow.
+      expect(
+        find.descendant(
+          of: find.byKey(FarmProfileScreen.statsRowKey),
+          matching: find.text('0.4 km away'),
+        ),
+        findsOneWidget,
+      );
     }
   });
 
@@ -85,8 +93,14 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'an overly long distance must shrink to fit, never overflow');
 
-    final paragraph =
-        tester.renderObject<RenderParagraph>(find.text(longDistance));
+    // Scoped to the stats row for the same reason as above: the long string is in
+    // the header stat, not on the listing cards.
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.descendant(
+        of: find.byKey(FarmProfileScreen.statsRowKey),
+        matching: find.text(longDistance),
+      ),
+    );
     expect(paragraph.didExceedMaxLines, isTrue,
         reason: 'the ellipsis must actually engage for over-long text');
   });
