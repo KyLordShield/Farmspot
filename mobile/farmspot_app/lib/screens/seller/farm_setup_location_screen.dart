@@ -11,6 +11,7 @@ import '../../../services/geocoding_service.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
 import '../../../widgets/map_tile_layer.dart';
+import '../../../widgets/lottie_loader.dart';
 import 'farm_setup_complete_screen.dart';
 
 class FarmSetupLocationScreen extends StatefulWidget {
@@ -267,6 +268,31 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   Future<void> _confirm() async {
     if (_isSubmitting) return;
 
+    // Last step of the wizard: once the farm is created the map pin can't be
+    // changed, so ask before firing the save.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm farm location?'),
+        content: const Text(
+          "This pin will be saved as your farm's location. "
+          'Once the farm is created, the map location can no longer be '
+          'changed. Is this pin correct?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     widget.farmSetupData.latitude = _markerPosition.latitude;
     widget.farmSetupData.longitude = _markerPosition.longitude;
 
@@ -275,10 +301,14 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       _errorMessage = null;
       _submitError = null;
     });
+    showFarmLottieLoading(context, message: 'Creating your farm...');
 
     final result = await FarmService.createFarm(widget.farmSetupData);
 
     if (!mounted) return;
+
+    // Close the lottie overlay before moving on.
+    Navigator.of(context, rootNavigator: true).pop();
 
     if (result['success'] == true) {
       Navigator.of(context).pushReplacement(

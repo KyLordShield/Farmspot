@@ -727,7 +727,7 @@ void main() {
 
       await tester.tap(find.text('Camera'));
       await tester.pump();
-      expect(find.text('Scanning image...'), findsOneWidget);
+      expect(find.text('Scanning Image'), findsOneWidget);
 
       // Scan completes -> live results screen (no "detected" interstitial).
       await tester.pump(const Duration(milliseconds: 600));

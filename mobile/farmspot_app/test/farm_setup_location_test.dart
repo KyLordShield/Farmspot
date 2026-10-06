@@ -163,6 +163,12 @@ void main() {
     await tester.tap(find.text('Create My Farm'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    // The last-step confirmation guard must be acknowledged first.
+    expect(find.text('Confirm farm location?'), findsOneWidget,
+        reason: 'the wizard must confirm before creating the farm');
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(data.latitude, isNotNull,

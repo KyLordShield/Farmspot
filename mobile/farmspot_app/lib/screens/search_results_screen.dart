@@ -13,7 +13,7 @@ import '../theme.dart';
 import '../utils/crop_icons.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/search_widgets.dart';
-import '../widgets/farmspot_loader.dart';
+import '../widgets/lottie_loader.dart';
 import 'product_detail_screen.dart';
 
 /// Radius boundary for the "Nearest" view, in kilometers. Results from farms
@@ -660,7 +660,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const FarmSpotLoader();
+      return const Center(child: FarmLottieLoading());
     }
 
     if (_error != null) {

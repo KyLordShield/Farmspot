@@ -10,6 +10,7 @@ import '../../services/listing_service.dart';
 import '../../theme.dart';
 import '../../widgets/seller_widgets.dart';
 import '../../widgets/farmspot_loader.dart';
+import '../../widgets/lottie_loader.dart';
 import 'farm_live_screen.dart';
 
 enum AvailabilityStatus {
@@ -361,6 +362,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _isSubmitting = true;
       _submitError = null;
     });
+    showFarmLottieLoading(context, message: 'Saving your crop...');
 
     try {
       final label = _cropLabelCtrl.text.trim();
@@ -397,6 +399,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
       if (!mounted) return;
 
+      // Close the lottie overlay before switching screens.
+      Navigator.of(context, rootNavigator: true).pop();
+
       if (widget.isFirstCrop) {
         // Driven by the REAL created listing, not a locally guessed crop.
         Navigator.of(context).pushReplacement(
@@ -411,6 +416,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       setState(() {
         _isSubmitting = false;
         _submitError = _friendlyError(e);
@@ -500,6 +506,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _isSubmitting = true;
       _submitError = null;
     });
+    showFarmLottieLoading(context, message: 'Saving your crop...');
 
     try {
       await ListingService.updateListing(
@@ -535,9 +542,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
       }
 
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       setState(() {
         _isSubmitting = false;
         _submitError = _friendlyError(e);

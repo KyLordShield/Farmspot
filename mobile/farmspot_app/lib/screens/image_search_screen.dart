@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:lottie/lottie.dart';
 import '../models/farm_pin.dart';
 import '../models/listing.dart';
 import '../models/search_crop_group.dart';
@@ -152,7 +153,8 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     );
   }
 
-  /// Step 2 — Identifying: shows a loading state while the YOLO service runs.
+  /// Step 2 — Identifying: shows the Image scan animation while the YOLO
+  /// service runs.
   Widget _buildIdentifying() {
     return Column(
       children: [
@@ -162,31 +164,24 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    width: 150,
-                    height: 150,
-                    color: const Color(0xFFE9F1E7),
-                    child: const Icon(
-                      Icons.eco,
-                      size: 56,
+                Lottie.asset(
+                  'assets/animations/Image scan.lottie',
+                  width: 240,
+                  height: 240,
+                  repeat: true,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
                       color: AppColors.primaryGreen,
                     ),
                   ),
                 ),
-                const SizedBox(height: 28),
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primaryGreen,
-                  ),
-                ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 18),
                 const Text(
-                  'Scanning image...',
+                  'Scanning Image',
                   style: TextStyle(
                     color: Colors.black87,
                     fontSize: 15,
