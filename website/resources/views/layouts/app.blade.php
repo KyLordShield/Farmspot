@@ -120,7 +120,9 @@
         </ul>
 
         <div class="sidebar-footer">
-            <form method="POST" action="{{ route('logout') }}">
+            <form method="POST" action="{{ route('logout') }}"
+                  data-confirm-title="Log out?"
+                  data-confirm-text="You will be returned to the sign-in page.">
                 @csrf
                 <button type="submit" class="btn-logout">
                     <i class="bi bi-box-arrow-right"></i>
