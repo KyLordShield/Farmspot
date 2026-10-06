@@ -135,8 +135,10 @@
                     <td>
                         @if($user->USR_STATUS == 'ACTIVE')
                             <span class="badge badge-soft-success">Active</span>
+                        @elseif($user->USR_STATUS == 'PENDING_VERIFICATION')
+                            <span class="badge badge-soft-warning">Pending Verification</span>
                         @else
-                            <span class="badge badge-soft-neutral">{{ $user->USR_STATUS }}</span>
+                            <span class="badge badge-soft-neutral">Deactivated</span>
                         @endif
                     </td>
                     <td>
@@ -153,7 +155,9 @@
 
                             <form method="POST" action="{{ route('users.destroy', $user->USR_ID) }}"
                                   class="d-inline"
-                                  onsubmit="return confirm('Are you sure you want to deactivate this user?');">
+                                  data-confirm-title="Deactivate user?"
+                                  data-confirm-text="Are you sure you want to deactivate {{ $user->USR_NAME }}? This removes their access until an admin re-activates it."
+                                  data-confirm-tone="danger">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="btn-icon danger" title="Deactivate">

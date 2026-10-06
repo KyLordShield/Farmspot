@@ -67,8 +67,10 @@
                 <td>
                     @if($user->USR_STATUS == 'ACTIVE')
                         <span class="badge badge-soft-success">Active</span>
+                    @elseif($user->USR_STATUS == 'PENDING_VERIFICATION')
+                        <span class="badge badge-soft-warning">Pending Verification</span>
                     @else
-                        <span class="badge badge-soft-neutral">{{ $user->USR_STATUS }}</span>
+                        <span class="badge badge-soft-neutral">Deactivated</span>
                     @endif
                 </td>
             </tr>
