@@ -9,11 +9,31 @@
         <h1 class="page-title">Listings</h1>
         <div class="page-desc">Manage all crop listings</div>
     </div>
+
+    {{-- Categories live here rather than on their own page: a category is only
+         ever looked at next to the listings it classifies. --}}
+    <div class="page-actions">
+        <button type="button"
+                class="btn btn-ghost"
+                data-bs-toggle="modal"
+                data-bs-target="#categoryPanel">
+            <i class="bi bi-tags me-1"></i> Manage Categories
+        </button>
+    </div>
 </div>
 
 @if(session('success'))
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
+{{-- A refused delete lands here. Same block the Reviews and Seller Requests pages
+     use, so an error reads identically wherever an admin meets one. --}}
+@if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
@@ -177,5 +197,7 @@
     </div>
 
 </div>
+
+@include('partials._category-panel')
 
 @endsection

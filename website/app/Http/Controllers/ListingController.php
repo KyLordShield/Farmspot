@@ -35,9 +35,27 @@ class ListingController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $categories = CropCategory::orderBy('CAT_NAME')->get();
+        return view('listings', [
+            'listings' => $listings,
+            // withCount on all three referencing tables, because the category
+            // panel disables delete on any of them. Counting listings alone would
+            // light the button up green on a category that analytics rows still
+            // point at, and the delete would come back as a foreign key error.
+            'categories' => $this->categoriesForPanel(),
+        ]);
+    }
 
-        return view('listings', compact('listings', 'categories'));
+    /**
+     * Every category, with how many rows still reference it.
+     *
+     * Ordered by name because that is the order the panel lists them in and the
+     * order the filter dropdown above the table uses.
+     */
+    private function categoriesForPanel()
+    {
+        return CropCategory::withCount(['listings', 'insights', 'trends'])
+            ->orderBy('CAT_NAME')
+            ->get();
     }
 
     public function show($id)

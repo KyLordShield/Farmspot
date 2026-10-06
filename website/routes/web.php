@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\CropCategoryController;
 use App\Http\Controllers\ListingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
@@ -28,6 +29,18 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/listings/{id}', [ListingController::class, 'show'])->name('listings.show');
     Route::put('/listings/{id}', [ListingController::class, 'update'])->name('listings.update');
     Route::delete('/listings/{id}', [ListingController::class, 'destroy'])->name('listings.destroy');
+
+    // Crop categories, managed from a panel on the Listings page rather than from a
+    // page of their own — a category only matters here because of the listings it
+    // classifies, and an extra nav item for five rows is not worth it.
+    //
+    // There is deliberately no GET /categories: the only way to see the list is
+    // alongside the listings it filters, which keeps the two in one place. The
+    // writes are real POST/PUT/DELETE rather than an ajax endpoint, so they carry
+    // CSRF protection like every other admin action.
+    Route::post('/categories', [CropCategoryController::class, 'store'])->name('categories.store');
+    Route::put('/categories/{id}', [CropCategoryController::class, 'update'])->name('categories.update');
+    Route::delete('/categories/{id}', [CropCategoryController::class, 'destroy'])->name('categories.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
     Route::patch('/reports/{id}/status', [ReportController::class, 'updateStatus'])->name('reports.updateStatus');

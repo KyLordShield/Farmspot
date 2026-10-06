@@ -19,6 +19,11 @@
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
     <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+
+    {{-- Page-specific stylesheets. Two stacks rather than one because a partial
+         that pushes into 'scripts' for JS would otherwise have to push its CSS
+         there too, which works and is exactly as clear as it sounds. --}}
+    @stack('styles')
 </head>
 
 <body>
