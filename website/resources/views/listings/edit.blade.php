@@ -35,7 +35,7 @@
         </h5>
     </div>
     <div class="panel-body">
-        <form method="POST" action="{{ route('listings.update', $listing->LST_ID) }}">
+        <form method="POST" action="{{ route('listings.update', $listing->LST_ID) }}" data-auto-spinner>
             @csrf
             @method('PUT')
 

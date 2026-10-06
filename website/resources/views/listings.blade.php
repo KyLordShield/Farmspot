@@ -163,7 +163,9 @@
 
                             <form method="POST" action="{{ route('listings.destroy', $listing->LST_ID) }}"
                                   class="d-inline"
-                                  onsubmit="return confirm('Are you sure you want to remove this listing?');">
+                                  data-confirm-title="Remove listing?"
+                                  data-confirm-text="Are you sure you want to remove {{ $listing->LST_CROP_ICON ?: 'this listing' }} ({{ $listing->LST_ID }})? It comes off sale immediately."
+                                  data-confirm-tone="danger">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="btn-icon danger" title="Remove">

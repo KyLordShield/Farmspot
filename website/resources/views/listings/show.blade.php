@@ -69,7 +69,15 @@
 
             <tr>
                 <th>Availability</th>
-                <td>{{ $listing->LST_AVAILABILITY }}</td>
+                <td>
+                    @if($listing->LST_AVAILABILITY == 'ACTIVE')
+                        <span class="badge badge-soft-success">Active</span>
+                    @elseif($listing->LST_AVAILABILITY == 'NOT_AVAILABLE')
+                        <span class="badge badge-soft-neutral">Not Available</span>
+                    @else
+                        <span class="badge badge-soft-neutral">{{ $listing->LST_AVAILABILITY }}</span>
+                    @endif
+                </td>
             </tr>
 
             <tr>

@@ -335,7 +335,9 @@
                                              appear. --}}
                                         <form method="POST"
                                               action="{{ route('categories.destroy', $category->CAT_ID) }}"
-                                              onsubmit="return confirm({{ Js::from('Delete the category \''.$category->CAT_NAME.'\'?') }});">
+                                              data-confirm-title="Delete category?"
+                                              data-confirm-text="Delete the category &quot;{{ $category->CAT_NAME }}&quot;?"
+                                              data-confirm-tone="danger">
                                             @csrf
                                             @method('DELETE')
                                             {{-- The Listings page filters ride along so saving or
