@@ -516,6 +516,24 @@ void main() {
         reason: 'a reply appears without the user pulling to refresh');
   });
 
+  testWidgets('a poll echo of a held row cannot render a duplicate bubble',
+      (tester) async {
+    final api = FakeGateway()
+      ..stored = [message(id: 'MSG0001', content: 'Freshly harvested', isMine: false)];
+    await _pumpChat(tester, api);
+    expect(find.text('Freshly harvested'), findsOneWidget);
+
+    // The server transiently hands back the same row again (the classic
+    // echo of a just-sent message racing the poll).
+    api.stored = [...api.stored, api.stored.last];
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Freshly harvested'), findsOneWidget,
+        reason: 'one message id must render exactly one bubble');
+  });
+
   testWidgets('polling stops once the screen is closed', (tester) async {
     final api = FakeGateway();
     await _pumpChat(tester, api);

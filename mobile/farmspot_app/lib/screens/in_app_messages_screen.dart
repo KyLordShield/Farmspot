@@ -129,6 +129,20 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     _poll = Timer.periodic(pollInterval, (_) => _pollOnce());
   }
 
+  /// Appends incoming messages, skipping any id already on screen. A poll that
+  /// happens to echo a just-sent row must not render a second bubble for it,
+  /// and the poll cursor has to stay at the newest id either way.
+  void _addMessages(Iterable<ChatMessage> incoming) {
+    final known = _messages.map((m) => m.id).toSet();
+    setState(() {
+      for (final message in incoming) {
+        if (known.add(message.id)) {
+          _messages.add(message);
+        }
+      }
+    });
+  }
+
   /// Asks only for messages newer than the last one held, so an idle chat
   /// costs one small indexed query. A failed poll is deliberately silent: the
   /// thread is still on screen and the next tick will catch up.
@@ -139,7 +153,7 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       final fresh = await _api.fetchMessages(widget.conversation.id,
           after: lastId);
       if (!mounted || fresh.isEmpty) return;
-      setState(() => _messages.addAll(fresh));
+      _addMessages(fresh);
       if (_atBottom) _scrollToEnd();
     } catch (_) {
       // Offline or server hiccup — retry on the next tick.
@@ -203,8 +217,8 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       if (!mounted) return;
       // Render the server's copy (real id and timestamp) instead of a local
       // guess, so the next poll's `after` cursor lines up with the database.
+      _addMessages([saved]);
       setState(() {
-        _messages.add(saved);
         _input.clear();
         _sending = false;
       });
@@ -264,8 +278,8 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       final saved =
           await _api.sendMessage(widget.conversation.id, '', image: picked);
       if (!mounted) return;
+      _addMessages([saved]);
       setState(() {
-        _messages.add(saved);
         _sending = false;
         _sendingPhoto = false;
       });

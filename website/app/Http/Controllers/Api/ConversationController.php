@@ -10,6 +10,7 @@ use App\Models\Farmer;
 use App\Models\Listing;
 use App\Models\Message;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -368,6 +369,26 @@ class ConversationController extends Controller
     }
 
     /**
+     * A datetime column as an explicit UTC ISO-8601 string. The database keeps
+     * plain `datetime` values (no zone), and the app's timezone is UTC, so
+     * without a marker the mobile app would read the wall clock as a *local*
+     * time on every device that is not itself UTC — exactly why the recipient
+     * saw "6 PM" for a message sent at "2 AM". Appending the offset lets
+     * Flutter's `DateTime.parse` treat it as UTC and `.toLocal()` render it in
+     * the viewer's own timezone.
+     */
+    private function utc($datetime): ?string
+    {
+        if (! $datetime) {
+            return null;
+        }
+
+        return Carbon::parse($datetime)
+            ->setTimezone(config('app.timezone'))
+            ->toIso8601String();
+    }
+
+    /**
      * A message plus the one derived field the app needs: whether it is mine.
      * Comparing the sender against the caller's own USR_ID means the identical
      * payload renders correctly for the buyer and the seller, with no role
@@ -383,7 +404,7 @@ class ConversationController extends Controller
             'content' => $message->MSG_CONTENT,
             'image_url' => $message->MSG_IMAGE_PATH,
             'is_read' => (bool) $message->MSG_IS_READ,
-            'created_at' => $message->MSG_CREATED_AT,
+            'created_at' => $this->utc($message->MSG_CREATED_AT),
         ];
     }
 
@@ -415,8 +436,8 @@ class ConversationController extends Controller
             'seller_farmer_id' => $conversation->FMR_ID,
             'farm_id' => $conversation->FRM_ID,
             'last_message' => $this->visiblePreviewFor($conversation->CONV_ID),
-            'last_message_at' => $conversation->CNV_LAST_MESSAGE_AT,
-            'created_at' => $conversation->CONV_CREATED_AT,
+            'last_message_at' => $this->utc($conversation->CNV_LAST_MESSAGE_AT),
+            'created_at' => $this->utc($conversation->CONV_CREATED_AT),
             'listing' => $listing ? $this->formatListing($listing) : null,
             'farm' => [
                 'id' => $listing?->farm?->FRM_ID ?? $conversation->FRM_ID,
