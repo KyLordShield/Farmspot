@@ -124,7 +124,18 @@
                 </tr>
                 <tr>
                     <th>Status</th>
-                    <td>{{ $report->listing?->LST_STATUS ?? '-' }}</td>
+                    <td>
+                        @php($reportedListingStatus = $report->listing?->LST_STATUS ?? null)
+                        @if($reportedListingStatus === 'AVAILABLE_NOW')
+                            <span class="badge badge-soft-success">Available Now</span>
+                        @elseif($reportedListingStatus === 'SOON_TO_HARVEST')
+                            <span class="badge badge-soft-warning">Soon to Harvest</span>
+                        @elseif($reportedListingStatus)
+                            <span class="badge badge-soft-neutral">Not Available</span>
+                        @else
+                            -
+                        @endif
+                    </td>
                 </tr>
                 <tr>
                     <th>Farm</th>
@@ -223,7 +234,18 @@
                     </tr>
                     <tr>
                         <th>Account status</th>
-                        <td>{{ $accused?->USR_STATUS ?? '-' }}</td>
+                        <td>
+                            @php($accusedStatus = $accused?->USR_STATUS ?? null)
+                            @if($accusedStatus === 'ACTIVE')
+                                <span class="badge badge-soft-success">Active</span>
+                            @elseif($accusedStatus === 'PENDING_VERIFICATION')
+                                <span class="badge badge-soft-warning">Pending Verification</span>
+                            @elseif($accusedStatus)
+                                <span class="badge badge-soft-neutral">Deactivated</span>
+                            @else
+                                -
+                            @endif
+                        </td>
                     </tr>
                     <tr>
                         <th>Selling mode</th>
@@ -291,7 +313,8 @@
                  moderator who has taken a listing down may still want to
                  deactivate the seller who posted it. --}}
             <form method="POST" action="{{ route('reports.undoAction', $report->RPT_ID) }}"
-                  onsubmit="return confirm('Put the most recent action back as it was?');"
+                  data-confirm-title="Undo most recent action?"
+                  data-confirm-text="Put the most recent action back exactly as it was?"
                   class="mb-3">
                 @csrf
                 <button type="submit" class="btn btn-ghost">
@@ -314,7 +337,9 @@
                  seller who posted it, and undoing one leaves the other alone. --}}
             @foreach($options as $option)
                 <form method="POST" action="{{ route('reports.applyAction', [$report->RPT_ID, $option['action']]) }}"
-                      onsubmit="return confirm('{{ $option['button'] }}? This takes effect immediately.');"
+                      data-confirm-title="{{ $option['button'] }}?"
+                      data-confirm-text="This takes effect immediately and is recorded in the audit trail."
+                      data-confirm-tone="danger"
                       class="mb-3">
                     @csrf
                     <div class="row g-3 align-items-end">
@@ -356,7 +381,7 @@
         </h5>
     </div>
     <div class="panel-body">
-        <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}" class="row g-3 align-items-end">
+        <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}" class="row g-3 align-items-end" data-auto-spinner>
             @csrf
             @method('PATCH')
 

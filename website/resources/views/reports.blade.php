@@ -217,12 +217,13 @@
                             </a>
 
                             <form method="POST" action="{{ route('reports.updateStatus', $report->RPT_ID) }}"
-                                  class="d-inline">
+                                  class="d-inline"
+                                  data-confirm-select-label="report status">
                                 @csrf
                                 @method('PATCH')
                                 <select name="status" class="form-select form-select-sm"
                                         style="width: 128px;"
-                                        onchange="this.form.submit()" title="Update status">
+                                        data-confirm-select title="Update status">
                                     <option value="New" {{ $report->RPT_STATUS == 'New' ? 'selected' : '' }}>New</option>
                                     <option value="Reviewing" {{ $report->RPT_STATUS == 'Reviewing' ? 'selected' : '' }}>Reviewing</option>
                                     <option value="Resolved" {{ $report->RPT_STATUS == 'Resolved' ? 'selected' : '' }}>Resolved</option>
