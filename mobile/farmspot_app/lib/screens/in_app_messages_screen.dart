@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/conversation.dart';
 import '../models/report.dart';
@@ -9,6 +10,7 @@ import '../services/report_service.dart';
 import '../theme.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/report_sheet.dart';
+import 'product_detail_screen.dart' show FullScreenPhotoViewer;
 
 /// In-app buyer <-> seller chat.
 ///
@@ -28,11 +30,16 @@ class InAppMessagesScreen extends StatefulWidget {
   /// Injectable for tests, same reason as [gateway].
   final ReportsGateway? reportsGateway;
 
+  /// Injectable image picker for tests; defaults to the real gallery picker.
+  /// Tests hand the screen a stub instead of launching the photo dialog.
+  final Future<XFile?> Function(ImageSource source)? pickImage;
+
   const InAppMessagesScreen({
     super.key,
     required this.conversation,
     this.gateway,
     this.reportsGateway,
+    this.pickImage,
   });
 
   @override
@@ -40,6 +47,9 @@ class InAppMessagesScreen extends StatefulWidget {
 
   /// Header action to report the other person in the thread.
   static const Key reportCounterpartyKey = Key('chat-report-counterparty');
+
+  /// The composer button that opens the gallery, for tests.
+  static const Key attachPhotoKey = Key('chat-attach-photo');
 
   /// Key of a message bubble, so tests can long-press a specific message.
   static Key bubbleKey(String messageId) => Key('chat-bubble-$messageId');
@@ -204,6 +214,54 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     }
   }
 
+  /// Picks a photo from the gallery and sends it as a message. The photo
+  /// uploads to the server and the stored row renders like any other bubble, so
+  /// the other side actually sees it instead of a local placeholder.
+  Future<void> _pickAndSendPhoto() async {
+    if (_sending) return;
+
+    final onPick = widget.pickImage ?? _pickFromGallery;
+    final picked = await onPick(ImageSource.gallery);
+    if (picked == null || !mounted) return;
+
+    setState(() => _sending = true);
+    try {
+      final saved =
+          await _api.sendMessage(widget.conversation.id, '', image: picked);
+      if (!mounted) return;
+      setState(() {
+        _messages.add(saved);
+        _sending = false;
+      });
+      _scrollToEnd();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+    }
+  }
+
+  /// The real gallery picker. Photos are compressed down the same path as the
+  /// farm uploads — the server budget (and the peer's data plan) does not want
+  /// a 12MP original riding a chat message.
+  Future<XFile?> _pickFromGallery() async {
+    try {
+      return await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _scrollToEnd({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -245,14 +303,9 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                     color: Colors.black87,
                   ),
                   const SizedBox(width: 2),
-                  CircleAvatar(
-                    radius: 21,
-                    backgroundColor: green,
-                    child: Text(initial,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16)),
+                  _HeaderAvatar(
+                    initial: initial,
+                    photo: thread.otherPartyPhoto,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -266,17 +319,15 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                                 color: Colors.black87,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 2),
-                        Text(
-                          // Honest presence: the server does not track online
-                          // status, so say what is actually true.
-                          thread.farmName == null
-                              ? 'In-app conversation'
-                              : thread.farmName!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: muted, fontSize: 12),
-                        ),
+                        if (thread.farmName != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            thread.farmName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -447,6 +498,7 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                   message.isMine ? null : () => _onMessageLongPress(message),
               child: _MessageBubble(
                 text: message.content,
+                imageUrl: message.imageUrl,
                 isMine: message.isMine,
                 time: _timeLabel(message.createdAt),
               ),
@@ -464,6 +516,15 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
           12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
       child: Row(
         children: [
+          // Attach a photo. The gallery picker returns a compressed image that
+          // rides a multipart upload, so no server config changes hands.
+          IconButton(
+            key: InAppMessagesScreen.attachPhotoKey,
+            onPressed: _sending ? null : _pickAndSendPhoto,
+            icon: const Icon(Icons.image_outlined),
+            color: green,
+            tooltip: 'Send a photo',
+          ),
           Expanded(
             child: TextField(
               controller: _input,
@@ -555,15 +616,63 @@ class _DayDivider extends StatelessWidget {
   }
 }
 
+/// The counterparty's face in the chat header: their profile photo in a
+/// circle when they have one, otherwise a green circle with their initial.
+/// A photo that fails to load (or is still loading) falls back to the initial
+/// so the header never shows an empty hole.
+class _HeaderAvatar extends StatelessWidget {
+  final String initial;
+  final String? photo;
+
+  const _HeaderAvatar({required this.initial, this.photo});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photo?.trim();
+    if (url == null || url.isEmpty) return _initial();
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 42,
+        height: 42,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _initial(),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return _initial();
+        },
+      ),
+    );
+  }
+
+  Widget _initial() {
+    return CircleAvatar(
+      radius: 21,
+      backgroundColor: AppColors.primaryGreen,
+      child: Text(
+        initial,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+}
+
 /// A single chat bubble: mine on the right in green, theirs on the left in
-/// white, each with a small timestamp.
+/// white, each with a small timestamp. A photo message renders the image
+/// (tap to view it full-screen) with any caption underneath.
 class _MessageBubble extends StatelessWidget {
   final String text;
+  final String? imageUrl;
   final bool isMine;
   final String time;
 
   const _MessageBubble({
     required this.text,
+    this.imageUrl,
     required this.isMine,
     required this.time,
   });
@@ -571,6 +680,11 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final green = AppColors.primaryGreen;
+    final url = imageUrl?.trim();
+    final hasImage = url != null && url.isNotEmpty;
+    final imageWidth = MediaQuery.of(context).size.width * 0.6;
+    const imageHeight = 180.0;
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
@@ -600,14 +714,60 @@ class _MessageBubble extends StatelessWidget {
                       ),
                     ],
             ),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: isMine ? Colors.white : Colors.black87,
-                fontSize: 14,
-                height: 1.35,
-              ),
-            ),
+            child: hasImage
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: isMine
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => FullScreenPhotoViewer(
+                              urls: [url],
+                              initialIndex: 0,
+                            ),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            url,
+                            width: imageWidth,
+                            height: imageHeight,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return _photoPlaceholder(imageWidth, imageHeight,
+                                  isMine, spinner: true);
+                            },
+                            errorBuilder: (_, _, _) => _photoPlaceholder(
+                                imageWidth, imageHeight, isMine),
+                          ),
+                        ),
+                      ),
+                      if (text.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          text,
+                          style: TextStyle(
+                            color: isMine ? Colors.white : Colors.black87,
+                            fontSize: 14,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : Text(
+                    text,
+                    style: TextStyle(
+                      color: isMine ? Colors.white : Colors.black87,
+                      fontSize: 14,
+                      height: 1.35,
+                    ),
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -616,6 +776,32 @@ class _MessageBubble extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// The striped-in placeholder while a photo downloads, or the broken-image
+  /// fallback when it cannot. Same footprint either way so a bubble never
+  /// jumps while loading.
+  Widget _photoPlaceholder(double width, double height, bool isMine,
+      {bool spinner = false}) {
+    return Container(
+      width: width,
+      height: height,
+      alignment: Alignment.center,
+      color: isMine
+          ? AppColors.primaryGreen.withValues(alpha: 0.08)
+          : const Color(0xFFF3F5F1),
+      child: spinner
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primaryGreen,
+              ),
+            )
+          : const Icon(Icons.broken_image_outlined,
+              color: AppColors.mutedGreen, size: 32),
     );
   }
 }

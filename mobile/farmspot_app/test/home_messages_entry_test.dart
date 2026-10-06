@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cross_file/cross_file.dart';
+
 import 'package:farmspot_app/models/app_notification.dart';
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/screens/home_screen.dart';
@@ -36,8 +38,9 @@ class _HomeGateway implements MessagesGateway {
   @override
   Future<ChatMessage> sendMessage(
     String conversationId,
-    String content,
-  ) async => throw UnimplementedError();
+    String content, {
+    XFile? image,
+  }) async => throw UnimplementedError();
 }
 
 Conversation _thread({

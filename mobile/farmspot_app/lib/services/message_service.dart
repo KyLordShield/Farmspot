@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/conversation.dart';
@@ -23,8 +24,9 @@ abstract class MessagesGateway {
 
   /// Posts a message and returns the stored row, so the bubble the user just
   /// typed renders from the server's copy (real id and timestamp) rather than a
-  /// local guess.
-  Future<ChatMessage> sendMessage(String conversationId, String content);
+  /// local guess. Pass [image] to send a photo — with or without caption text.
+  Future<ChatMessage> sendMessage(String conversationId, String content,
+      {XFile? image});
 }
 
 /// In-app buyer <-> seller messaging over the app's own Laravel backend.
@@ -66,11 +68,17 @@ class MessageService implements MessagesGateway {
         .toList();
   }
 
+  /// Posts a message and returns the stored row, so the bubble the user just
+  /// typed renders from the server's copy (real id and timestamp) rather than a
+  /// local guess. Pass [image] to send a photo; a photo echoed back with no
+  /// caption stays an image-only message on the server, whose preview reads
+  /// "Photo".
   @override
-  Future<ChatMessage> sendMessage(String conversationId, String content) async {
-    final response = await _post('/conversations/$conversationId/messages', {
-      'content': content,
-    });
+  Future<ChatMessage> sendMessage(String conversationId, String content,
+      {XFile? image}) async {
+    final http.Response response = image == null
+        ? await _post('/conversations/$conversationId/messages', {'content': content})
+        : await _postPhoto('/conversations/$conversationId/messages', content, image);
     return ChatMessage.fromJson(
         _data(response)['message'] as Map<String, dynamic>);
   }
@@ -93,6 +101,24 @@ class MessageService implements MessagesGateway {
         headers: await _headers(),
         body: jsonEncode(body),
       );
+    } catch (_) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+  }
+
+  /// Sends a photo as a multipart upload — the Content-Type has to be form data
+  /// for PHP to populate `$request->file('photo')`; a JSON body never will.
+  Future<http.Response> _postPhoto(
+      String path, String content, XFile image) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+        ..fields['content'] = content
+        ..files.add(await http.MultipartFile.fromPath('photo', image.path,
+            filename: image.name));
+      final token = await AuthService.getToken();
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      return await http.Response.fromStream(await request.send());
     } catch (_) {
       throw Exception('Could not reach the server. Check your connection.');
     }

@@ -152,15 +152,23 @@ class ChatMessage {
   final String conversationId;
   final String senderId;
   final String content;
+
+  /// Cloudinary URL of the photo this message carries, null for text.
+  final String? imageUrl;
+
   final bool isMine;
   final bool isRead;
   final DateTime createdAt;
+
+  /// True when this is a photo message (with or without a caption).
+  bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
 
   const ChatMessage({
     required this.id,
     required this.conversationId,
     required this.senderId,
     required this.content,
+    this.imageUrl,
     required this.isMine,
     required this.isRead,
     required this.createdAt,
@@ -172,6 +180,7 @@ class ChatMessage {
       conversationId: json['conversation_id'] as String? ?? '',
       senderId: json['sender_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
+      imageUrl: json['image_url'] as String?,
       isMine: json['is_mine'] as bool? ?? false,
       isRead: json['is_read'] as bool? ?? false,
       createdAt:

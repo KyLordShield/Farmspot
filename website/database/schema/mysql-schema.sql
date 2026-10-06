@@ -279,7 +279,8 @@ DROP TABLE IF EXISTS `message`;
 CREATE TABLE `message` (
   `MSG_ID` char(6) NOT NULL COMMENT 'Unique message ID',
   `MSG_SEQ` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
+`MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
+  `MSG_IMAGE_PATH` varchar(500) DEFAULT NULL COMMENT 'Cloudinary URL of the photo this message carries, null for a text-only message',
   `MSG_VISIBILITY` enum('VISIBLE','HIDDEN') NOT NULL DEFAULT 'VISIBLE' COMMENT 'HIDDEN by a moderator after a report. Rows are kept so the action can be undone and the history stays auditable.',
   `MSG_HIDDEN_AT` datetime DEFAULT NULL COMMENT 'When it was hidden, for the audit trail.',
   `MSG_IS_READ` tinyint(1) NOT NULL DEFAULT 0,
@@ -508,3 +509,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_10_01_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_10_01_000010_add_sequence_to_report_action_table',14);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_10_02_000001_create_notification_table',15);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_10_03_000001_add_whitelist_and_reactivation_notification_types',16);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_10_07_000001_add_msg_image_path_to_message_table',20);

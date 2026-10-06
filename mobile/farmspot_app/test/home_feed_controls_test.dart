@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cross_file/cross_file.dart';
+
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/screens/home_screen.dart';
 import 'package:farmspot_app/services/message_service.dart';
@@ -27,8 +29,9 @@ class _HomeGateway implements MessagesGateway {
   @override
   Future<ChatMessage> sendMessage(
     String conversationId,
-    String content,
-  ) async => throw UnimplementedError();
+    String content, {
+    XFile? image,
+  }) async => throw UnimplementedError();
 }
 
 /// The controls that were removed from the home feed once the Filter button

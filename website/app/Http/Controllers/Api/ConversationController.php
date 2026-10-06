@@ -11,6 +11,7 @@ use App\Models\Listing;
 use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ConversationController extends Controller
@@ -230,11 +231,16 @@ class ConversationController extends Controller
         }
 
         $validated = $request->validate([
-            'content' => ['required', 'string', 'max:1000'],
+            'content' => ['nullable', 'string', 'max:1000'],
+            'photo' => ['nullable', 'image', 'max:5120'],
         ]);
 
-        // 'required' alone still admits a whitespace-only string.
-        if (trim($validated['content']) === '') {
+        $content = trim($validated['content'] ?? '');
+        $photo = $request->file('photo');
+
+        // A message needs something to say: either text or a photo. 'nullable'
+        // alone would admit a request with neither.
+        if ($content === '' && ! $photo) {
             return response()->json([
                 'message' => 'Message cannot be empty.',
                 'errors' => ['content' => ['Message cannot be empty.']],
@@ -243,7 +249,18 @@ class ConversationController extends Controller
 
         $user = $request->user();
 
-        $message = DB::transaction(function () use ($conversation, $validated, $user) {
+        // Upload before touching the database, so a failed upload leaves no
+        // empty message row behind. Odd but honest: the previews say "Photo",
+        // because a photo in the app cannot be rendered as text.
+        $imageUrl = null;
+        if ($photo) {
+            $extension = $photo->getClientOriginalExtension() ?: 'jpg';
+            $path = "message-images/{$conversation->CONV_ID}/" . uniqid() . ".{$extension}";
+            Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+            $imageUrl = Storage::disk('cloudinary')->url($path);
+        }
+
+        $message = DB::transaction(function () use ($conversation, $content, $imageUrl, $user) {
             do {
                 $messageId = strtoupper(Str::random(6));
             } while (Message::where('MSG_ID', $messageId)->exists());
@@ -252,7 +269,11 @@ class ConversationController extends Controller
                 'MSG_ID' => $messageId,
                 'CONV_ID' => $conversation->CONV_ID,
                 'USR_ID' => $user->USR_ID,
-                'MSG_CONTENT' => trim($validated['content']),
+                // An image-only message keeps its text column as the empty
+                // string the old validation would have rejected, but the photo
+                // URL is what makes it a real message.
+                'MSG_CONTENT' => $content,
+                'MSG_IMAGE_PATH' => $imageUrl,
                 // A message row has exactly one recipient, so MSG_IS_READ means
                 // "the other side has read it" — it must start at 0. The sender
                 // never counts their own messages toward their badge anyway
@@ -264,7 +285,7 @@ class ConversationController extends Controller
 
             // Keep the denormalized inbox preview in step with the thread.
             Conversation::where('CONV_ID', $conversation->CONV_ID)->update([
-                'CNV_LAST_MESSAGE' => mb_substr($message->MSG_CONTENT, 0, 500),
+                'CNV_LAST_MESSAGE' => $this->previewFor($imageUrl, $content),
                 'CNV_LAST_MESSAGE_AT' => $message->MSG_CREATED_AT,
             ]);
 
@@ -360,6 +381,7 @@ class ConversationController extends Controller
             'sender_id' => $message->USR_ID,
             'is_mine' => $message->USR_ID === $viewerId,
             'content' => $message->MSG_CONTENT,
+            'image_url' => $message->MSG_IMAGE_PATH,
             'is_read' => (bool) $message->MSG_IS_READ,
             'created_at' => $message->MSG_CREATED_AT,
         ];
@@ -410,6 +432,22 @@ class ConversationController extends Controller
     }
 
     /**
+     * The text a thread preview should show for a message.
+     *
+     * Plain text is truncated to the width CNV_LAST_MESSAGE stores, so a
+     * preview is the same length whether it came from the row or from the query
+     * below. A photo-only message has no readable text, so it becomes "Photo".
+     */
+    private function previewFor(?string $imageUrl, string $content): string
+    {
+        if ($content !== '') {
+            return mb_substr($content, 0, 500);
+        }
+
+        return $imageUrl ? 'Photo' : '';
+    }
+
+    /**
      * The newest message the viewer is allowed to see, for the thread preview.
      *
      * CNV_LAST_MESSAGE is a copy of the last message's text kept on the
@@ -423,25 +461,28 @@ class ConversationController extends Controller
      * message history is: two messages in one thread can share a timestamp, and
      * the sequence is monotonic.
      *
-     * Null when every message in the thread is hidden. There is deliberately no
-     * fallback to CNV_LAST_MESSAGE: the stored copy is the text of whichever
-     * message came last, hidden or not, so falling back to it would put the
-     * reported text straight back into the list — the one thing the hidden
-     * button exists to prevent.
+     * Reads MSG_IMAGE_PATH too so the photo-only case previews as "Photo",
+     * matching the stored copy. Null when every message in the thread is
+     * hidden. There is deliberately no fallback to CNV_LAST_MESSAGE: the stored
+     * copy is the text of whichever message came last, hidden or not, so
+     * falling back to it would put the reported text straight back into the
+     * list — the one thing the hidden button exists to prevent.
      *
      * @return string|null
      */
     private function visiblePreviewFor(string $conversationId): ?string
     {
-        // Truncated to the same width the stored CNV_LAST_MESSAGE copy uses, so
-        // a preview is the same length whether it came from the row or from here.
-        return mb_substr(
-            Message::where('CONV_ID', $conversationId)
-                ->visible()
-                ->orderByDesc('MSG_SEQ')
-                ->value('MSG_CONTENT') ?? '',
-            0,
-            500
-        );
+        $message = Message::where('CONV_ID', $conversationId)
+            ->visible()
+            ->orderByDesc('MSG_SEQ')
+            ->first(['MSG_CONTENT', 'MSG_IMAGE_PATH']);
+
+        if (! $message) {
+            return null;
+        }
+
+        return $message->MSG_IMAGE_PATH && trim($message->MSG_CONTENT) === ''
+            ? 'Photo'
+            : mb_substr($message->MSG_CONTENT, 0, 500);
     }
 }

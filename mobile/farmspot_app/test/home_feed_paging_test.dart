@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cross_file/cross_file.dart';
+
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/models/home_feed_page.dart';
 import 'package:farmspot_app/models/home_filters.dart';
@@ -86,8 +88,9 @@ class _NoMessages implements MessagesGateway {
   @override
   Future<ChatMessage> sendMessage(
     String conversationId,
-    String content,
-  ) async => throw UnimplementedError();
+    String content, {
+    XFile? image,
+  }) async => throw UnimplementedError();
 }
 
 Listing _row(String id) => Listing(

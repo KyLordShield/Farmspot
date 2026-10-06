@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cross_file/cross_file.dart';
+
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/models/farm_profile.dart';
 import 'package:farmspot_app/models/listing.dart';
@@ -49,12 +51,16 @@ class _Messages implements MessagesGateway {
   Future<List<Conversation>> fetchConversations() async => [];
 
   @override
-  Future<ChatMessage> sendMessage(String conversationId, String content) async {
+  Future<ChatMessage> sendMessage(String conversationId, String content,
+      {XFile? image}) async {
     final saved = ChatMessage(
       id: 'MSGSENT',
       conversationId: conversationId,
       senderId: 'USR0001',
       content: content,
+      imageUrl: image == null
+          ? null
+          : 'https://example.invalid/photo.jpg',
       isMine: true,
       isRead: false,
       createdAt: DateTime.now(),
