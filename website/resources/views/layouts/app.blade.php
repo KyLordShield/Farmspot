@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>@yield('title','FarmSpot')</title>
+    <title>@hasSection('title')@yield('title') · FarmSpot Admin@else FarmSpot Admin@endif</title>
 
     <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
@@ -31,7 +31,7 @@
 <div class="wrapper">
 
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="appSidebar">
 
         <div class="brand">
             <div class="brand-mark">
@@ -131,19 +131,43 @@
 
     </aside>
 
+    <!-- Tap-away layer behind the off-canvas sidebar on small screens -->
+    <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
+    <!-- Mobile topbar: hamburger + branding. Hidden on large screens. -->
+    <header class="topbar">
+        <button type="button"
+                class="topbar-toggle"
+                id="sidebarToggle"
+                aria-label="Toggle navigation"
+                aria-expanded="false"
+                aria-controls="appSidebar">
+            <i class="bi bi-list"></i>
+        </button>
+        <span class="topbar-brand">
+            <i class="bi bi-flower1 me-1"></i> FarmSpot Admin
+        </span>
+    </header>
+
     <!-- Main Content -->
 
-    <main class="content">
+    <div class="main-area">
 
-        @yield('content')
+        <main class="content">
 
-    </main>
+            @yield('content')
+
+        </main>
+
+    </div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="{{ asset('js/global.js') }}"></script>
 
 @stack('scripts')
 
