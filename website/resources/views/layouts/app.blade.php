@@ -169,6 +169,12 @@
 
 <script src="{{ asset('js/global.js') }}"></script>
 
+{{-- SweetAlert2 for confirmations and toasts. Pinned to an exact version so a
+     future CDN release cannot change the behaviour of the helper below. --}}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+
+<script src="{{ asset('js/admin-alerts.js') }}"></script>
+
 @stack('scripts')
 
 </body>
