@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'screens/splash_screen.dart';
-import 'screens/welcome_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'services/auth_service.dart';
@@ -61,6 +61,8 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool _ready = false;
+  bool _splashDone = false;
+  bool _bootstrapped = false;
   String? _token;
 
   @override
@@ -70,29 +72,66 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   /// Read the saved token while the splash plays; never swap the screen
-  /// before the splash has had its moment.
+  /// until the splash's logo fade-out has actually completed.
   ///
   /// [SessionState.init] rides along in the same window. Seeding the role here
   /// — behind the splash rather than in the first screen's `initState` — is
   /// what stops the bottom nav from painting a buyer nav and then swapping to
-  /// the seller nav once the role resolves. It costs no extra wall-clock time
-  /// because the 1950ms splash delay is already the long pole.
+  /// the seller nav once the role resolves.
   Future<void> _bootstrap() async {
-    final results = await Future.wait<Object?>([
-      AuthService.getToken(),
-      SessionState.instance.init(),
-      Future<Object?>.delayed(const Duration(milliseconds: 1950), () => null),
-    ]);
+    String? token;
+    try {
+      final results = await Future.wait<Object?>([
+        AuthService.getToken(),
+        SessionState.instance.init(),
+      ]);
+      token = results.first as String?;
+    } catch (_) {
+      // A broken local session must not pin the app to the splash forever.
+      token = null;
+    }
     if (!mounted) return;
-    setState(() {
-      _ready = true;
-      _token = results.first as String?;
+    _token = token;
+    _bootstrapped = true;
+    _maybeReady();
+
+    // Safety net: if the splash animation somehow never fires its completion,
+    // release the splash a few seconds in so the app is never stranded on a
+    // permanent white screen. Normally `_splashDone` gets set first and this
+    // becomes a no-op.
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (!mounted || _ready) return;
+      _splashDone = true;
+      _maybeReady();
     });
+  }
+
+  /// The splash fires this the moment its fade-out ends.
+  void _onSplashFinished() {
+    if (!mounted) return;
+    _splashDone = true;
+    _maybeReady();
+  }
+
+  void _maybeReady() {
+    if (_ready || !_splashDone || !_bootstrapped) return;
+    setState(() => _ready = true);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) return const SplashScreen();
-    return _token != null ? const HomeScreen() : const WelcomeScreen();
+    // Cross-fade between states so the splash's logo fade-out melts into the
+    // first frame of the next screen instead of snapping.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: !_ready
+          ? SplashScreen(
+              key: const ValueKey('splash'), onFinished: _onSplashFinished)
+          : _token != null
+              ? const HomeScreen(key: ValueKey('home'))
+              : const LoginScreen(key: ValueKey('login')),
+    );
   }
 }

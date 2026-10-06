@@ -26,6 +26,7 @@ dependencies:
   latlong2: ^0.9.1
   geolocator: ^14.0.3
   onesignal_flutter: ^5.7.0
+  lottie: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +43,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/animations/
 
 flutter_native_splash:
   color: "#FFFFFF"

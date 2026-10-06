@@ -9,9 +9,10 @@ import '../models/home_feed_page.dart';
 import '../models/home_filters.dart';
 import '../models/listing.dart';
 import 'auth_service.dart';
+import 'api_config.dart';
 
 class ListingService {
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Fetches the browse feed. Returns the list on success, or throws
   /// an Exception with a user-friendly message on failure.

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
-import '../widgets/farmspot_loader.dart';
+import '../widgets/lottie_loader.dart';
 import '../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _isLoading = true);
-    showFarmSpotLoading(context, message: 'Signing in...');
+    showFarmLottieLoading(context, message: 'Signing in...');
 
     final result = await AuthService.attemptLogin(
       _emailController.text.trim(),
@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _goToSignUp() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+      farmFadeRoute(const SignUpScreen()),
     );
   }
 
@@ -166,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// back instead of retyping it.
   void _goToForgotPassword() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+      farmFadeRoute(const ForgotPasswordScreen()),
     );
   }
 

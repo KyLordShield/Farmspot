@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
-/// FarmSpot brand splash: the logo pops in with a gentle spring while the
-/// tagline fades below it and a green progress bar fills across the bottom.
-/// AuthGate shows this while the startup token check runs, so the animation
-/// duration matches the minimum splash time.
+/// FarmSpot brand splash: a single smooth logo moment — fade in, hold, fade
+/// out — on a white background. No progress bar, no springy pop. [onFinished]
+/// fires once the fade-out completes so the caller can swap screens exactly
+/// when the logo has had its moment — no fixed timer to race against.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final VoidCallback? onFinished;
+
+  const SplashScreen({super.key, this.onFinished});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -16,9 +17,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
-  late final Animation<double> _taglineOpacity;
 
   @override
   void initState() {
@@ -27,19 +26,21 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1900),
     );
-    _logoScale = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.65, curve: Curves.easeOutBack),
-    );
-    _logoOpacity = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.45, curve: Curves.easeIn),
-    );
-    _taglineOpacity = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.55, 0.85, curve: Curves.easeIn),
-    );
-    _controller.forward();
+    // 28% fade in, 50% hold, 22% fade out — one gentle brand moment.
+    _logoOpacity = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 28,
+      ),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 50),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 22,
+      ),
+    ]).animate(_controller);
+    _controller.forward().whenComplete(() {
+      if (mounted) widget.onFinished?.call();
+    });
   }
 
   @override
@@ -52,49 +53,10 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(flex: 2),
-            FadeTransition(
-              opacity: _logoOpacity,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.5, end: 1.0).animate(_logoScale),
-                child: const FarmSpotLogo(size: 170),
-              ),
-            ),
-            const SizedBox(height: 18),
-            FadeTransition(
-              opacity: _taglineOpacity,
-              child: const Text(
-                'A healthy Connection',
-                style: TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontSize: 15,
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            const Spacer(flex: 3),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(48, 0, 48, 40),
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) => ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(
-                    value: _controller.value,
-                    minHeight: 6,
-                    backgroundColor:
-                        AppColors.primaryGreen.withValues(alpha: 0.12),
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.primaryGreen),
-                  ),
-                ),
-              ),
-            ),
-          ],
+      body: Center(
+        child: FadeTransition(
+          opacity: _logoOpacity,
+          child: const FarmSpotLogo(size: 170),
         ),
       ),
     );

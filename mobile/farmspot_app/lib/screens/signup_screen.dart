@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/lottie_loader.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -125,6 +126,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     setState(() => _isLoading = true);
+    showFarmLottieLoading(context, message: 'Creating account...');
 
     final result = await AuthService.attemptRegister(
       name: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'
@@ -137,6 +139,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
 
     if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
     setState(() => _isLoading = false);
 
     if (result.success) {
@@ -226,7 +229,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _goToLogin() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      farmFadeRoute(const LoginScreen()),
     );
   }
 

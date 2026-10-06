@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/insights.dart';
+import 'api_config.dart';
 
 class InsightsService {
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Fetches the Insights dashboard payload (GET /api/insights). Public
   /// endpoint — no auth token needed. Returns the parsed payload on success,

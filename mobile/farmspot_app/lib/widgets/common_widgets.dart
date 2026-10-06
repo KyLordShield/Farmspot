@@ -313,3 +313,13 @@ Future<bool?> showFarmAlert(
     ),
   );
 }
+
+/// Fade page transition used across the auth flow so screens appear and
+/// disappear gently instead of sliding.
+Route<T> farmFadeRoute<T>(Widget page) => PageRouteBuilder<T>(
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionDuration: const Duration(milliseconds: 350),
+      reverseTransitionDuration: const Duration(milliseconds: 250),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+    );

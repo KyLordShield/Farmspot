@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai_chat_service.dart';
+import 'api_config.dart';
 import 'session_state.dart';
 
 /// Structured login outcome so screens can distinguish network failures from
@@ -68,9 +69,7 @@ class PasswordResetRequestResult {
 }
 
 class AuthService {
-  // Chrome + Laravel on the same machine -> localhost works fine.
-  // When we move to the physical phone, this becomes your PC's LAN IP.
-  static const String baseUrl = 'http://10.143.212.234:8000/api';
+  static const String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Attempts login. Returns null on success, or an error message string on failure.
   static Future<String?> login(String email, String password) async {
