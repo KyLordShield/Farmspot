@@ -75,9 +75,19 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
     final remaining = _maxPhotos - widget.farmSetupData.photos.length;
     final List<XFile> picked;
     if (source == ImageSource.gallery) {
-      picked = await _picker.pickMultiImage(limit: remaining);
+      picked = await _picker.pickMultiImage(
+        limit: remaining,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
     } else {
-      final single = await _picker.pickImage(source: ImageSource.camera);
+      final single = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
       picked = single == null ? <XFile>[] : [single];
     }
     if (picked.isEmpty || !mounted) return;

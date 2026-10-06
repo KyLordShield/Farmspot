@@ -153,6 +153,20 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
     );
   }
 
+  /// Opens the full-screen gallery on the photo the user tapped. Reuses the
+  /// same viewer the product-detail screen ships, so the swipe/navigate/close
+  /// experience is identical everywhere on the app.
+  void _openPhotoViewer(FarmProfileData profile, int index) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FullScreenPhotoViewer(
+          urls: profile.photos,
+          initialIndex: index,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -197,6 +211,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
             child: Column(
                 children: [
                   _buildHeader(profile),
+                  _buildPhotoStrip(profile),
                   _buildStats(profile),
                   _buildReportRow(profile),
                 ],
@@ -231,19 +246,30 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (hasPhoto)
-            Icon(Icons.agriculture, size: 96, color: AppColors.primaryGreen)
-          else
-            Image.network(
-              photo,
-              fit: BoxFit.cover,
-              cacheWidth: 1080,
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.agriculture,
-                size: 96,
-                color: AppColors.primaryGreen,
-              ),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: profile.photos.length > 1
+                  ? () => _openPhotoViewer(profile, 0)
+                  : null,
+              child: hasPhoto
+                  ? const Icon(
+                      Icons.agriculture,
+                      size: 96,
+                      color: AppColors.primaryGreen,
+                    )
+                  : Image.network(
+                      photo,
+                      fit: BoxFit.cover,
+                      cacheWidth: 1080,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.agriculture,
+                        size: 96,
+                        color: AppColors.primaryGreen,
+                      ),
+                    ),
             ),
+          ),
           // Subtle dark gradient over the bottom third so the white-on-photo
           // title/location stay legible over any cover image.
           Align(
@@ -278,6 +304,14 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               ),
             ),
           ),
+          if (profile.photos.length > 1)
+            Positioned(
+              top: 12,
+              right: 16,
+              child: _FarmPhotoHint(
+                onTap: () => _openPhotoViewer(profile, 0),
+              ),
+            ),
           Positioned(
             left: 16,
             right: 16,
@@ -327,6 +361,60 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
                   ),
                 ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Horizontal thumbnail strip of every farm photo, shown under the banner
+  /// when the farm has more than one. Each thumb opens the full-screen viewer
+  /// on that photo (the same viewer the product detail screen uses).
+  Widget _buildPhotoStrip(FarmProfileData profile) {
+    final urls = profile.photos;
+    if (urls.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Expanded(
+                child: Text(
+                  'FARM PHOTOS',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: Colors.black54,
+                  ),
+                ),
+              ),
+              Text(
+                '${urls.length} photos • tap to view',
+                style: const TextStyle(fontSize: 11, color: Colors.black38),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 78,
+            child: ListView.separated(
+              key: const Key('farm_photo_strip'),
+              scrollDirection: Axis.horizontal,
+              itemCount: urls.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                return _FarmStripThumb(
+                  key: ValueKey('farm_photo_thumb_$i'),
+                  url: urls[i],
+                  isCover: i == 0,
+                  onTap: () => _openPhotoViewer(profile, i),
+                );
+              },
             ),
           ),
         ],
@@ -530,6 +618,115 @@ class _StatPair extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Small pill on the banner, shown only when the farm has more than one photo,
+/// hinting that the cover can be tapped to browse them full-screen.
+class _FarmPhotoHint extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _FarmPhotoHint({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.black45,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.fullscreen, size: 14, color: Colors.white),
+            SizedBox(width: 5),
+            Text(
+              'Tap to view photos',
+              style: TextStyle(color: Colors.white, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Rounded thumbnail in the farm photo strip. The cover photo (the one shown
+/// big on the banner) gets a green ring so buyers know which thumbnail it
+/// matches.
+class _FarmStripThumb extends StatelessWidget {
+  final String url;
+  final bool isCover;
+  final VoidCallback onTap;
+
+  const _FarmStripThumb({
+    super.key,
+    required this.url,
+    required this.isCover,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 78,
+        height: 78,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isCover ? AppColors.primaryGreen : Colors.transparent,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(9),
+          child: _FarmNetworkImage(url: url),
+        ),
+      ),
+    );
+  }
+}
+
+/// Image.network wrapper that always shows a friendly loading spinner and a
+/// broken-image fallback instead of crashing on a bad URL.
+class _FarmNetworkImage extends StatelessWidget {
+  final String url;
+
+  const _FarmNetworkImage({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      cacheWidth: 300,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: AppColors.fieldBackground,
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.agriculture,
+          size: 30,
+          color: AppColors.primaryGreen,
+        ),
+      ),
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return Container(
+          color: Colors.grey.shade200,
+          alignment: Alignment.center,
+          child: const SizedBox(
+            width: 24,
+            height: 24,
+            child: FarmSpotLoader(size: 20),
+          ),
+        );
+      },
     );
   }
 }

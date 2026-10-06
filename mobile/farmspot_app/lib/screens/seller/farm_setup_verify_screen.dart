@@ -92,7 +92,12 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     );
     if (source == null) return;
 
-    final picked = await _picker.pickImage(source: source);
+    final picked = await _picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1920,
+      maxHeight: 1920,
+    );
     if (picked != null && mounted) {
       setState(() => assign(picked));
     }
