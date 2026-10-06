@@ -224,8 +224,14 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   /// Picks a photo from the gallery and sends it as a message. The photo
   /// uploads to the server and the stored row renders like any other bubble, so
   /// the other side actually sees it instead of a local placeholder.
+  ///
+  /// The composer locks *before* the gallery opens, not after a photo comes
+  /// back. Otherwise a quick second tap on the attach button while the picker
+  /// is opening would start a second pick and a second send.
   Future<void> _pickAndSendPhoto() async {
     if (_sending) return;
+
+    setState(() => _sending = true);
 
     // Both branches take the same (ImageSource) shape, so assigning either one
     // here can never produce an arity mismatch at the call below.
@@ -237,6 +243,7 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       picked = await onPick(ImageSource.gallery);
     } catch (_) {
       if (!mounted) return;
+      setState(() => _sending = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not open your photo gallery.'),
@@ -245,12 +252,14 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       );
       return;
     }
-    if (picked == null || !mounted) return;
+    if (!mounted) return;
+    if (picked == null) {
+      // The gallery was closed without a photo: unlock the composer again.
+      setState(() => _sending = false);
+      return;
+    }
 
-    setState(() {
-      _sending = true;
-      _sendingPhoto = true;
-    });
+    setState(() => _sendingPhoto = true);
     try {
       final saved =
           await _api.sendMessage(widget.conversation.id, '', image: picked);

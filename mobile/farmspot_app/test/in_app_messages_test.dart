@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:cross_file/cross_file.dart';
 
 import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/screens/in_app_messages_screen.dart';
@@ -393,6 +392,43 @@ void main() {
 
     expect(api.sends, 0,
         reason: 'closing the gallery without a photo is not a message');
+  });
+
+  testWidgets('a quick double tap on the photo button sends exactly one image',
+    (tester) async {
+    final api = FakeGateway();
+    final picks = <ImageSource>[];
+    // The gallery stays open (pending) while both taps land on the button.
+    final pickGate = Completer<XFile?>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InAppMessagesScreen(
+          conversation: thread(),
+          gateway: api,
+          pickImage: (source) async {
+            picks.add(source);
+            return pickGate.future;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachPhotoKey));
+    await tester.tap(find.byKey(InAppMessagesScreen.attachPhotoKey));
+    await tester.pump();
+
+    expect(picks.length, 1,
+        reason: 'the composer must lock before the picker opens, so the '
+            'second tap is ignored');
+
+    pickGate.complete(XFile('C:/tmp/harvest.jpg'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(api.sends, 1,
+        reason: 'one photo pick must produce exactly one send');
   });
 
   testWidgets('a failing picker explains itself instead of doing nothing',
