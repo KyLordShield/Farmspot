@@ -35,7 +35,7 @@
         </h5>
     </div>
     <div class="panel-body">
-        <form method="POST" action="{{ route('whitelist.store') }}">
+        <form method="POST" action="{{ route('whitelist.store') }}" data-auto-spinner>
             @csrf
 
             <div class="mb-3">

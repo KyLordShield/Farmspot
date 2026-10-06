@@ -130,7 +130,9 @@
                             @if($whitelist->WLST_IS_ACTIVE)
                                 <form method="POST" action="{{ route('whitelist.toggle', $whitelist->WLST_ID) }}"
                                       class="d-inline"
-                                      onsubmit="return confirm('Are you sure you want to deactivate this number?');">
+                                      data-confirm-title="Deactivate number?"
+                                      data-confirm-text="Are you sure you want to deactivate {{ $whitelist->WLST_MOBILE_NUMBER }}? This number will no longer be accepted as pre-approved."
+                                      data-confirm-tone="danger">
                                     @csrf
                                     @method('PATCH')
                                     <button type="submit" class="btn-icon danger" title="Deactivate">
