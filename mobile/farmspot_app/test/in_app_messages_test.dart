@@ -388,6 +388,30 @@ void main() {
         reason: 'closing the gallery without a photo is not a message');
   });
 
+  testWidgets('a failing picker explains itself instead of doing nothing',
+      (tester) async {
+    final api = FakeGateway();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InAppMessagesScreen(
+          conversation: thread(),
+          gateway: api,
+          pickImage: (_) async => throw StateError('picker crashed'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachPhotoKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Could not open your photo gallery.'), findsOneWidget,
+        reason: 'a picker crash must surface instead of eating the tap');
+    expect(api.sends, 0);
+  });
+
   testWidgets('an open thread polls and shows a new reply without a refresh',
       (tester) async {
     final api = FakeGateway()

@@ -220,8 +220,24 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   Future<void> _pickAndSendPhoto() async {
     if (_sending) return;
 
-    final onPick = widget.pickImage ?? _pickFromGallery;
-    final picked = await onPick(ImageSource.gallery);
+    // Both branches take the same (ImageSource) shape, so assigning either one
+    // here can never produce an arity mismatch at the call below.
+    final Future<XFile?> Function(ImageSource) onPick =
+        widget.pickImage ?? _pickFromGallery;
+
+    final XFile? picked;
+    try {
+      picked = await onPick(ImageSource.gallery);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open your photo gallery.'),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+      return;
+    }
     if (picked == null || !mounted) return;
 
     setState(() => _sending = true);
@@ -249,10 +265,10 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   /// The real gallery picker. Photos are compressed down the same path as the
   /// farm uploads — the server budget (and the peer's data plan) does not want
   /// a 12MP original riding a chat message.
-  Future<XFile?> _pickFromGallery() async {
+  Future<XFile?> _pickFromGallery(ImageSource source) async {
     try {
       return await ImagePicker().pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 80,
         maxWidth: 1920,
         maxHeight: 1920,
@@ -291,7 +307,7 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header: back arrow, counterparty, and the In-app badge.
+            // Header: back arrow, counterparty, and the report action.
             Container(
               color: Colors.white,
               padding: const EdgeInsets.fromLTRB(4, 8, 16, 10),
@@ -331,27 +347,6 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.infoSoft,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.lock_outline,
-                            size: 12, color: AppColors.infoSage),
-                        SizedBox(width: 4),
-                        Text('In-app',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.infoSage,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                   ),
                    // Report the other person. Not every thread needs it, but
                    // when someone is being pressured, it's one tap away in the
                    // header. Hidden entirely if there is no resolvable id.
