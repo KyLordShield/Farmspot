@@ -45,10 +45,32 @@ class AuthRegisterResult {
   });
 }
 
+/// Outcome of asking for a reset code.
+///
+/// [debugCode] is only ever non-null when the backend runs with
+/// APP_ENV=local and PASSWORD_RESET_EXPOSE_CODE=true. It exists so the flow can
+/// be tested before Gmail SMTP is configured; the forgot-password screen shows it
+/// in an obvious "local only" banner rather than pretending it was emailed.
+class PasswordResetRequestResult {
+  final bool success;
+  final int? statusCode;
+  final String? message;
+  final bool isNetworkError;
+  final String? debugCode;
+
+  const PasswordResetRequestResult({
+    required this.success,
+    this.statusCode,
+    this.message,
+    this.isNetworkError = false,
+    this.debugCode,
+  });
+}
+
 class AuthService {
   // Chrome + Laravel on the same machine -> localhost works fine.
   // When we move to the physical phone, this becomes your PC's LAN IP.
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = 'http://10.143.212.234:8000/api';
 
   /// Attempts login. Returns null on success, or an error message string on failure.
   static Future<String?> login(String email, String password) async {
@@ -593,6 +615,125 @@ class AuthService {
         return http.MediaType('image', 'heic');
       default:
         return http.MediaType('image', 'jpeg');
+    }
+  }
+
+  // --- Forgot password (emailed 6-digit code) -------------------------------
+  //
+  // Sibling of attemptLogin rather than a new service: it hits the same API
+  // base URL, uses the same exception -> isNetworkError mapping, and has the
+  // same "never throw at the widget" contract the login screen relies on.
+  //
+  // Note there is no admin equivalent. Admin reset was withdrawn by owner
+  // decision (docs/admin_audit_report.md, S1); these routes only ever serve
+  // GENERAL_USER accounts.
+
+  /// Asks the API to email a 6-digit code to [email].
+  ///
+  /// Deliberately reports the same success for known and unknown addresses so
+  /// the screen cannot be used to discover which emails have accounts - the
+  /// backend does the same. [PasswordResetRequestResult] carries [debugCode]
+  /// which the backend only fills when APP_ENV=local and
+  /// PASSWORD_RESET_EXPOSE_CODE=true, i.e. while SMTP is still being set up.
+  static Future<PasswordResetRequestResult> requestPasswordResetCode(
+    String email,
+  ) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/forgot-password'),
+            headers: {'Accept': 'application/json'},
+            body: {'email': email},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return PasswordResetRequestResult(
+          success: true,
+          message: data['message'] as String?,
+          debugCode: data['debug_code'] as String?,
+        );
+      }
+
+      return PasswordResetRequestResult(
+        success: false,
+        statusCode: response.statusCode,
+        message: data['message'] as String?,
+      );
+    } on TimeoutException {
+      debugPrint('AuthService.requestPasswordResetCode: request timed out.');
+      return const PasswordResetRequestResult(success: false, isNetworkError: true);
+    } on SocketException {
+      debugPrint('AuthService.requestPasswordResetCode: socket error (no connection).');
+      return const PasswordResetRequestResult(success: false, isNetworkError: true);
+    } on http.ClientException {
+      debugPrint('AuthService.requestPasswordResetCode: client error (no connection).');
+      return const PasswordResetRequestResult(success: false, isNetworkError: true);
+    } catch (e) {
+      debugPrint('AuthService.requestPasswordResetCode: unexpected error: $e');
+      return PasswordResetRequestResult(success: false);
+    }
+  }
+
+  /// Completes the reset with the emailed [code] and the new [password].
+  ///
+  /// The code is normalised here (spaces and dashes stripped, lowercased) so the
+  /// user can paste `123 456` straight out of the email. A successful reset
+  /// revokes every Sanctum token server-side, so any device already signed in is
+  /// signed out and must use the new password.
+  ///
+  /// 422 carries a human message on purpose: the backend distinguishes expired /
+  /// already-used / too-many-attempts so the user knows whether to request a
+  /// fresh code instead of guessing again.
+  static Future<AuthLoginResult> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String password,
+  }) async {
+    final normalizedCode = code.replaceAll(RegExp(r'[\s-]'), '').toLowerCase();
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/reset-password'),
+            headers: {'Accept': 'application/json'},
+            body: {
+              'email': email,
+              'code': normalizedCode,
+              'password': password,
+              'password_confirmation': password,
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        // No token to cache: the reset deliberately logs every device out, so
+        // the user goes back to the login screen and signs in with the new
+        // password. Leaving any stale auth_token here would be misleading.
+        return const AuthLoginResult(success: true);
+      }
+
+      return AuthLoginResult(
+        success: false,
+        statusCode: response.statusCode,
+        message: data['message'] as String?,
+      );
+    } on TimeoutException {
+      debugPrint('AuthService.resetPasswordWithCode: request timed out.');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } on SocketException {
+      debugPrint('AuthService.resetPasswordWithCode: socket error (no connection).');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } on http.ClientException {
+      debugPrint('AuthService.resetPasswordWithCode: client error (no connection).');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } catch (e) {
+      debugPrint('AuthService.resetPasswordWithCode: unexpected error: $e');
+      return AuthLoginResult(success: false);
     }
   }
 }

@@ -66,6 +66,28 @@ class User extends Authenticatable
         return $this->USR_PASSWORD;
     }
 
+    /**
+     * Tell Laravel's mail channel where to deliver notifications.
+     *
+     * Without this the channel falls back to `$this->email`, which is null on
+     * this schema - the address lives in USR_EMAIL. The failure is silent: the
+     * message is built and handed to the mailer with no recipient, so nothing
+     * is sent and nothing is logged, while the caller still sees success.
+     * That is how the app's password-reset email could be configured correctly
+     * and still never arrive.
+     *
+     * Fixed here rather than per-notification so every mail notification for
+     * this model is covered, including any added later.
+     *
+     * Takes the optional $notification argument because the framework's
+     * routeNotificationFor() calls this method as
+     * `$this->{$method}($notification)`.
+     */
+    public function routeNotificationForMail($notification = null): string
+    {
+        return (string) $this->USR_EMAIL;
+    }
+
     public function buyer()
     {
         return $this->hasOne(Buyer::class, 'USR_ID', 'USR_ID');

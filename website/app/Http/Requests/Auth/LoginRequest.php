@@ -47,7 +47,10 @@ class LoginRequest extends FormRequest
             'password' => $this->input('password'),
         ];
 
-        if (! Auth::attempt($credentials, $this->boolean('remember'))) {
+        // No "remember" flag here on purpose: the user table has no
+        // remember_token column, so a persistent login cookie would fail with a
+        // SQL error. The checkbox has been removed from the login form to match.
+        if (! Auth::attempt($credentials)) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([

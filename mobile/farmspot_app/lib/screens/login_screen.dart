@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/farmspot_loader.dart';
 import '../services/auth_service.dart';
 import 'signup_screen.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -159,6 +161,15 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  /// Pushes, not replaces: the email the user just typed stays on the login
+  /// screen underneath, so if they remember the password they are one tap away
+  /// back instead of retyping it.
+  void _goToForgotPassword() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -197,6 +208,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 26),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _goToForgotPassword,
+                      child: const Text(
+                        'Forgot Password?',
+                        style: TextStyle(
+                          color: AppColors.primaryGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   FarmSpotButton(
                     label: _isLoading ? 'Logging in...' : 'Log In',
                     onPressed: _isLoading ? () {} : () => _handleLogin(),

@@ -68,6 +68,7 @@ class FarmSpotTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final List<TextInputFormatter>? inputFormatters;
   final Widget? suffixIcon;
+  final FocusNode? focusNode;
 
   const FarmSpotTextField({
     super.key,
@@ -80,12 +81,14 @@ class FarmSpotTextField extends StatelessWidget {
     this.onChanged,
     this.inputFormatters,
     this.suffixIcon,
+    this.focusNode,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,
       onChanged: onChanged,

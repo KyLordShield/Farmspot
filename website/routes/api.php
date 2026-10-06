@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
@@ -21,6 +22,22 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+// Password reset for app users, by emailed 6-digit code.
+//
+// Public, and deliberately so - someone who cannot log in is by definition not
+// holding a token. The admin panel has no equivalent; those routes and views
+// were removed by owner decision (docs/admin_audit_report.md, S1).
+//
+// Throttled hard because this is the one unauthenticated endpoint that can
+// change a credential. 3 requests/minute per IP on request-code, since each one
+// can cost an SMTP round trip and, more importantly, 3/minute on reset attempts
+// keeps a 6-digit code well out of reach of an online guesser. The per-code
+// attempt cap in the controller is the second lock; this is the first.
+Route::post('/forgot-password', [PasswordResetController::class, 'requestCode'])
+    ->middleware('throttle:3,1');
+Route::post('/reset-password', [PasswordResetController::class, 'resetPassword'])
+    ->middleware('throttle:5,1');
 
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);

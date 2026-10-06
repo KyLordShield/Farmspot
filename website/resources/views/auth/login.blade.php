@@ -174,21 +174,6 @@
                     @enderror
                 </div>
 
-                <!-- Remember + Forgot -->
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="remember" id="remember_me">
-                        <label class="form-check-label small" for="remember_me">
-                            Remember me
-                        </label>
-                    </div>
-                    @if (Route::has('password.request'))
-                        <a href="{{ route('password.request') }}" class="small text-decoration-none" style="color:#1e4d2b;">
-                            Forgot password?
-                        </a>
-                    @endif
-                </div>
-
                 <button type="submit" class="btn btn-login w-100">
                     Sign In
                 </button>

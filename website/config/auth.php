@@ -103,6 +103,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | App Password Reset Codes
+    |--------------------------------------------------------------------------
+    |
+    | Settings for the mobile app's emailed 6-digit reset code. This is a
+    | separate mechanism from the 'passwords' broker above: the broker issues
+    | 60-character link tokens for browser sessions, and the app authenticates
+    | with a Sanctum bearer token, so there is no browser session for a link to
+    | return to. See App\Http\Controllers\Api\PasswordResetController.
+    |
+    | The defaults also live as constants on App\Models\PasswordResetCode and
+    | are what the controller actually reads; these exist so they can be tuned
+    | per environment without a code change.
+    |
+    | expose_code hands the generated code back in the API response so the flow
+    | can be tested while SMTP is unconfigured. It is only honoured when
+    | APP_ENV=local, but leave it false in anything shared - with it on, anyone
+    | who knows an email address can reset that account.
+    |
+    */
+
+    'password_reset_code' => [
+        'expiry_minutes' => env('PASSWORD_RESET_EXPIRY_MINUTES', 10),
+        'max_attempts' => env('PASSWORD_RESET_MAX_ATTEMPTS', 5),
+        'expose_code' => env('PASSWORD_RESET_EXPOSE_CODE', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |
