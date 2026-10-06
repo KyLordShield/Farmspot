@@ -49,19 +49,29 @@
         .login-card .brand-title-form {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-weight: 800;
-            font-size: 1.9rem;
+            font-size: 2.6rem;
             color: #1e4d2b;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.5px;
             margin-bottom: 0.25rem;
-            text-align: left;
+            text-align: center;
+            transform: translateY(-1.25rem);
+        }
+        .form-panel {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f4f6f5;
+            padding: 2rem;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 400px;
         }
         .login-card h2 {
             font-weight: 700;
             color: #1e293b;
             margin-bottom: 0.25rem;
-        }
-        .login-card h2 + h2 {
-            margin-top: 1.25rem;
         }
         .login-card .subtext {
             color: #64748b;
@@ -99,10 +109,6 @@
             background-color: #16351e;
             color: #ffffff;
         }
-        .btn-login:focus-visible {
-            box-shadow: 0 0 0 0.2rem rgba(27, 107, 44, 0.35);
-            outline: none;
-        }
         .footer-note {
             font-size: 0.8rem;
             color: #94a3b8;
@@ -136,7 +142,7 @@
                 <div class="alert alert-success py-2">{{ session('status') }}</div>
             @endif
 
-            <form method="POST" action="{{ route('login') }}" id="loginForm">
+            <form method="POST" action="{{ route('login') }}">
                 @csrf
 
                 <!-- Email -->
@@ -181,19 +187,6 @@
     </div>
 
 </div>
-
-<script>
-    document.getElementById('loginForm').addEventListener('submit', function () {
-        var button = this.querySelector('button[type="submit"]');
-        if (button && !button.disabled) {
-            button.disabled = true;
-            var spinner = document.createElement('span');
-            spinner.className = 'spinner-border spinner-border-sm me-1';
-            spinner.setAttribute('aria-hidden', 'true');
-            button.prepend(spinner);
-        }
-    });
-</script>
 
 </body>
 </html>
