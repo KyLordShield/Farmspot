@@ -147,7 +147,7 @@
                         {{-- The raw stars, not a rounded average: a moderator
                              judging a one-star review needs to see that it is
                              one star. --}}
-                        <span class="tint-amber badge" title="{{ $review->LRV_RATING }} of 5">
+                        <span class="badge badge-soft-warning" title="{{ $review->LRV_RATING }} of 5">
                             @for($star = 1; $star <= 5; $star++)
                                 <i class="bi {{ $star <= $review->LRV_RATING ? 'bi-star-fill' : 'bi-star' }}"></i>
                             @endfor
@@ -179,7 +179,10 @@
                         <div class="actions">
                             <form method="POST"
                                   action="{{ route('reviews.toggleStatus', $review->LRV_ID) }}"
-                                  class="d-inline">
+                                  class="d-inline"
+                                  data-confirm-title="{{ $review->isHidden() ? 'Show review again?' : 'Hide review?' }}"
+                                  data-confirm-text="{{ $review->isHidden() ? 'Make this review visible to buyers again?' : 'Hide this review from buyers? It will no longer count toward the listing\'s star average.' }}"
+                                  data-confirm-tone="{{ $review->isHidden() ? 'primary' : 'danger' }}">
                                 @csrf
                                 @method('PATCH')
                                 {{-- Carry the active filters through the action so

@@ -196,7 +196,8 @@
         <div class="decision-grid">
 
             <form method="POST" action="{{ route('seller-requests.approve', $farm->FRM_ID) }}"
-                  onsubmit="return confirm('Are you sure you want to approve this seller request?');">
+                  data-confirm-title="Approve seller request?"
+                  data-confirm-text="Approve {{ $farm->FRM_NAME }}? The farm goes live for the owner immediately.">
                 @csrf
                 <button type="submit" class="btn btn-farm">
                     <i class="bi bi-check-circle me-1"></i> Approve
@@ -204,7 +205,9 @@
             </form>
 
             <form method="POST" action="{{ route('seller-requests.reject', $farm->FRM_ID) }}"
-                  onsubmit="return confirm('Are you sure you want to reject this seller request?');">
+                  data-confirm-title="Reject seller request?"
+                  data-confirm-text="Reject {{ $farm->FRM_NAME }}? The owner is notified of the rejection."
+                  data-confirm-tone="danger">
                 @csrf
                 <textarea name="reason" class="form-control mb-2" rows="2"
                           placeholder="Reason for rejection (optional)">{{ old('reason') }}</textarea>
