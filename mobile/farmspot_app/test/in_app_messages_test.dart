@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -80,6 +82,10 @@ class FakeGateway implements MessagesGateway {
   String? lastAfterCursor;
   String? lastImagePath;
 
+  /// When set, the fake holds the response until the test completes the gate,
+  /// so a slow upload can be proven to show progress while it is in flight.
+  Completer<void>? sendGate;
+
   @override
   Future<Conversation> startConversation(String listingId) async =>
       Conversation.fromJson(conversationJson());
@@ -106,6 +112,7 @@ class FakeGateway implements MessagesGateway {
     sends++;
     lastImagePath = image?.path;
     if (sendError != null) throw Exception(sendError!);
+    if (sendGate != null) await sendGate!.future;
     final saved = message(
       id: 'MSGNEW$sends',
       content: content,
@@ -410,6 +417,40 @@ void main() {
     expect(find.text('Could not open your photo gallery.'), findsOneWidget,
         reason: 'a picker crash must surface instead of eating the tap');
     expect(api.sends, 0);
+  });
+
+  testWidgets('a photo upload shows progress while in flight, then clears',
+      (tester) async {
+    final api = FakeGateway()..sendGate = Completer<void>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InAppMessagesScreen(
+          conversation: thread(),
+          gateway: api,
+          pickImage: (_) async => XFile('C:/tmp/harvest.jpg'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachPhotoKey));
+    await tester.pump();
+
+    expect(api.sends, 1, reason: 'the upload must have started');
+    expect(find.byType(LinearProgressIndicator), findsOneWidget,
+        reason: 'an in-flight photo upload needs a visible progress bar, '
+            'not a frozen composer');
+    expect(find.byType(CircularProgressIndicator), findsOneWidget,
+        reason: 'the send button spins while the photo is uploading');
+
+    // The slow upload finishes; the bar and spinner should both go away.
+    api.sendGate!.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('an open thread polls and shows a new reply without a refresh',

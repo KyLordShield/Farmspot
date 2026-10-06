@@ -67,6 +67,13 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
 
   bool _loading = true;
   bool _sending = false;
+
+  /// True only while a photo is uploading. Text sends are near-instant, so the
+  /// progress bar is reserved for the long tail: a photo leaves the phone,
+  /// lands on the server, and rides another round-trip to Cloudinary before the
+  /// row exists.
+  bool _sendingPhoto = false;
+
   String? _error;
   bool _atBottom = true;
 
@@ -240,7 +247,10 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     }
     if (picked == null || !mounted) return;
 
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _sendingPhoto = true;
+    });
     try {
       final saved =
           await _api.sendMessage(widget.conversation.id, '', image: picked);
@@ -248,11 +258,15 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       setState(() {
         _messages.add(saved);
         _sending = false;
+        _sendingPhoto = false;
       });
       _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _sendingPhoto = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
@@ -505,59 +519,82 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   }
 
   Widget _buildInput(Color green, Color bg) {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.fromLTRB(
-          12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
-      child: Row(
-        children: [
-          // Attach a photo. The gallery picker returns a compressed image that
-          // rides a multipart upload, so no server config changes hands.
-          IconButton(
-            key: InAppMessagesScreen.attachPhotoKey,
-            onPressed: _sending ? null : _pickAndSendPhoto,
-            icon: const Icon(Icons.image_outlined),
-            color: green,
-            tooltip: 'Send a photo',
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The long tail of a photo send warrants an explicit progress bar —
+        // otherwise a slow uplink looks like a frozen app.
+        if (_sendingPhoto)
+          const LinearProgressIndicator(
+            minHeight: 3,
+            color: AppColors.primaryGreen,
+            backgroundColor: AppColors.searchBackground,
           ),
-          Expanded(
-            child: TextField(
-              controller: _input,
-              enabled: !_sending,
-              minLines: 1,
-              maxLines: 4,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              decoration: InputDecoration(
-                hintText: 'Type a message...',
-                hintStyle: const TextStyle(color: Colors.black38),
-                filled: true,
-                fillColor: bg,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+        Container(
+          color: Colors.white,
+          padding: EdgeInsets.fromLTRB(
+              12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
+          child: Row(
+            children: [
+              // Attach a photo. The gallery picker returns a compressed image
+              // that rides a multipart upload, so no server config changes hands.
+              IconButton(
+                key: InAppMessagesScreen.attachPhotoKey,
+                onPressed: _sending ? null : _pickAndSendPhoto,
+                icon: const Icon(Icons.image_outlined),
+                color: green,
+                tooltip: 'Send a photo',
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  enabled: !_sending,
+                  minLines: 1,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _send(),
+                  decoration: InputDecoration(
+                    hintText: 'Type a message...',
+                    hintStyle: const TextStyle(color: Colors.black38),
+                    filled: true,
+                    fillColor: bg,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Material(
-            color: _sending ? green.withValues(alpha: 0.5) : green,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: _sending ? null : _send,
-              child: const Padding(
-                padding: EdgeInsets.all(10),
-                child: Icon(Icons.send_rounded, size: 20, color: Colors.white),
+              const SizedBox(width: 8),
+              Material(
+                color: _sending ? green.withValues(alpha: 0.5) : green,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _sending ? null : _send,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: _sending
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded,
+                            size: 20, color: Colors.white),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
