@@ -10,7 +10,7 @@
         <div class="page-desc">Demand trends &amp; system usage</div>
     </div>
     <div class="page-actions">
-        <button class="btn btn-ghost">
+        <button class="btn btn-ghost" title="Export is not wired to a backend report yet">
             <i class="bi bi-download me-1"></i>
             Export Data
         </button>
@@ -34,7 +34,7 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box">
-                    <canvas id="cropChart"></canvas>
+                    <canvas id="cropChart" role="img" aria-label="Bar chart of most searched crops this week"></canvas>
                 </div>
             </div>
         </div>
@@ -105,7 +105,7 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box-sm">
-                    <canvas id="growthChart"></canvas>
+                    <canvas id="growthChart" role="img" aria-label="Bar chart of user growth this month"></canvas>
                 </div>
             </div>
         </div>

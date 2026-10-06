@@ -12,7 +12,7 @@
     </div>
 
     <div class="page-actions">
-        <button class="btn btn-ghost">
+        <button class="btn btn-ghost" title="Export is not wired to a backend report yet">
             <i class="bi bi-download me-1"></i>
             Export Data
         </button>
@@ -81,7 +81,7 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box">
-                    <canvas id="cropChart"></canvas>
+                    <canvas id="cropChart" role="img" aria-label="Bar chart of top crops this week"></canvas>
                 </div>
             </div>
         </div>
@@ -103,7 +103,7 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box-sm">
-                    <canvas id="userChart"></canvas>
+                    <canvas id="userChart" role="img" aria-label="Donut chart of user accounts"></canvas>
                 </div>
 
                 <div class="kpi-grid">
