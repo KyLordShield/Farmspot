@@ -10,7 +10,7 @@ from ultralytics import YOLO
 
 app = FastAPI()
 
-BASE = pathlib.Path('C:/xampp/htdocs/Farmspot/ml_service')
+BASE = pathlib.Path(os.environ.get('ML_SERVICE_DIR', pathlib.Path(__file__).resolve().parent))
 UPLOADS = BASE / 'uploads'
 UPLOADS.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+dataset
+negatives
+runs
+uploads
+app
+*.jpg
+*.jpeg
+*.png
+*.log
+detect_log.txt

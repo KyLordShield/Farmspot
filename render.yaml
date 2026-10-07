@@ -56,3 +56,13 @@ services:
         value: file
       - key: QUEUE_CONNECTION
         value: sync
+
+  # The YOLO crop detector (ml_service). Small CPU image; torch is installed
+  # CPU-only to fit the free container. No secrets needed.
+  - type: web
+    name: farmspot-detect
+    runtime: docker
+    rootDir: ml_service
+    plan: free
+    region: singapore
+    healthCheckPath: /health
