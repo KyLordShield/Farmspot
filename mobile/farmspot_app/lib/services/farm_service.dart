@@ -424,6 +424,67 @@ class FarmService {
     _throwForError(response, 'Add farm photos failed.');
   }
 
+  /// Marks one farm photo as the farm's cover
+  /// (PUT /api/farms/{farmId}/photos/{photoId}/primary). Exactly one photo per
+  /// farm is the cover; the profile banner and the map thumbnail both read it.
+  /// Returns normally on success, or throws an Exception with a user-friendly
+  /// message, matching this file's other farm write calls.
+  static Future<void> setFarmPrimaryPhoto({
+    required String farmId,
+    required String photoId,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.put(
+        Uri.parse(
+          '${AuthService.baseUrl}/farms/$farmId/photos/$photoId/primary',
+        ),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    _throwForError(response, 'Update cover photo failed.');
+  }
+
+  /// Removes one of the authenticated seller's own farm photos
+  /// (DELETE /api/farms/{farmId}/photos/{photoId}).
+  ///
+  /// The server soft-promotes the oldest remaining photo when the deleted one
+  /// was the cover, so a farm with photos left keeps a banner; removing the
+  /// last photo leaves the farm with no banner and the app falls back to its
+  /// placeholder. The Cloudinary asset is destroyed with the row. Returns
+  /// normally on success, or throws an Exception with a user-friendly message.
+  static Future<void> removeFarmPhoto({
+    required String farmId,
+    required String photoId,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+
+    http.Response response;
+    try {
+      response = await http.delete(
+        Uri.parse('${AuthService.baseUrl}/farms/$farmId/photos/$photoId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    _throwForError(response, 'Remove farm photo failed.');
+  }
+
   /// Shared failure handling for the farm PATCH / photo-append endpoints:
   /// 403/404/422 map to their messages, else the fallback — throws an
   /// Exception so callers get a friendly message (never a raw http code).

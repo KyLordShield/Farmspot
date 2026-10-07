@@ -73,6 +73,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
 Route::delete('/farms/{farmId}', [FarmController::class, 'destroy']);
     Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);
+Route::put('/farms/{farmId}/photos/{photoId}/primary', [FarmController::class, 'setPrimaryPhoto']);
+Route::delete('/farms/{farmId}/photos/{photoId}', [FarmController::class, 'destroyPhoto']);
 
     // Farming assistant. Throttled per user to sit under the provider's free
     // 30 requests/minute, so one client cannot eat the shared budget.

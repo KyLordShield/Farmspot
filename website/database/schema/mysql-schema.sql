@@ -149,7 +149,8 @@ DROP TABLE IF EXISTS `farm_photo`;
 CREATE TABLE `farm_photo` (
   `FPHOTO_ID` char(6) NOT NULL COMMENT 'Unique photo record ID',
   `FPHOTO_FILE_PATH` varchar(500) NOT NULL COMMENT 'URL/path to farm photo',
-  `FPHOTO_UPLOADED_AT` datetime NOT NULL COMMENT 'When photo was uploaded',
+`FPHOTO_UPLOADED_AT` datetime NOT NULL COMMENT 'When photo was uploaded',
+  `FPHOTO_IS_PRIMARY` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Whether this photo is the farm cover (0 or 1)',
   `FRM_ID` char(6) NOT NULL COMMENT 'References the farm',
   PRIMARY KEY (`FPHOTO_ID`),
   KEY `FK_FARMPHOTO_FARM` (`FRM_ID`),

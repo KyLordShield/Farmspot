@@ -1,5 +1,32 @@
 import '../widgets/home_widgets.dart';
 import 'listing.dart';
+import 'listing_review.dart';
+
+/// One farm photo as the backend sends it: `{id, url, is_primary}`.
+///
+/// The backend orders the gallery so the cover (is_primary) comes first, which
+/// is what lets the profile banner treat the first entry as the banner. Keep
+/// the ordering when a screen shows the strip so the green ring on the cover
+/// always matches the big photo above it.
+class FarmPhotoEntry {
+  final String id;
+  final String url;
+  final bool isPrimary;
+
+  const FarmPhotoEntry({
+    required this.id,
+    required this.url,
+    this.isPrimary = false,
+  });
+
+  factory FarmPhotoEntry.fromJson(Map<String, dynamic> json) {
+    return FarmPhotoEntry(
+      id: json['id'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      isPrimary: json['is_primary'] == true,
+    );
+  }
+}
 
 /// Data model for a farm's public profile as returned by
 /// GET /api/farms/{id}/profile — the farm's details + photos plus ALL of its
@@ -13,8 +40,14 @@ class FarmProfileData {
   final double? latitude;
   final double? longitude;
   final String status;
-  final List<String> photos;
+  final List<FarmPhotoEntry> photos;
   final List<CropListing> listings;
+
+  /// Whole-farm rating, aggregated by the backend over the VISIBLE reviews of
+  /// every listing on this farm (`rating_average` / `rating_count` in the
+  /// payload). Absent when nothing is rated yet, so an unreviewed farm shows
+  /// nothing rather than "0.0".
+  final RatingSummary ratingSummary;
 
   /// The person who runs this farm, as returned by the backend's `owner` block.
   ///
@@ -35,6 +68,7 @@ class FarmProfileData {
     this.longitude,
     this.status = 'APPROVED',
     this.photos = const [],
+    this.ratingSummary = const RatingSummary.none(),
     this.listings = const [],
     this.ownerFarmerId,
     this.ownerUserId,
@@ -61,8 +95,8 @@ class FarmProfileData {
       latitude: _toDouble(farm['latitude']),
       longitude: _toDouble(farm['longitude']),
       status: farm['status'] as String? ?? 'APPROVED',
-      photos:
-          (farm['photos'] as List? ?? const []).whereType<String>().toList(),
+      photos: _farmPhotosFromJson(farm['photos']),
+      ratingSummary: RatingSummary.fromListingJson(Map<String, dynamic>.from(farm)),
       ownerFarmerId: owner?['farmer_id'] as String?,
       ownerUserId: owner?['user_id'] as String?,
       ownerName: owner?['name'] as String?,
@@ -77,12 +111,35 @@ class FarmProfileData {
     );
   }
 
+  /// Parses the payload's `photos` list into entries, ordered cover-first.
+  ///
+  /// The backend already sends the primary first; the stable re-sort is a
+  /// defensive guarantee for a payload that ever arrives unordered, so the
+  /// screens can keep trusting "index 0 is the banner".
+  static List<FarmPhotoEntry> _farmPhotosFromJson(Object? raw) {
+    if (raw is! List) return const [];
+    final entries = raw
+        .whereType<Map>()
+        .map((e) => FarmPhotoEntry.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    entries.sort((a, b) {
+      if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
+      return 0;
+    });
+    return entries;
+  }
+
   static double? _toDouble(dynamic value) =>
       value == null ? null : num.tryParse(value.toString())?.toDouble();
 
+  /// Every photo's URL in the backend's cover-first order. The thin seam the
+  /// photo viewer and the banner use — they only need URLs, not ids/flags.
+  List<String> get photoUrls => [for (final photo in photos) photo.url];
+
   /// First farm photo (used as the profile header banner), or null when the
-  /// farm has no photos uploaded yet.
-  String? get firstPhoto => photos.isNotEmpty ? photos.first : null;
+  /// farm has no photos uploaded yet. The gallery is cover-first by contract,
+  /// so this is the cover photo when one exists.
+  String? get firstPhoto => photoUrls.isNotEmpty ? photoUrls.first : null;
 
   /// Count of listings currently marked AVAILABLE_NOW.
   int get availableNowCount =>

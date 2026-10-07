@@ -6,21 +6,29 @@ import 'package:image_picker/image_picker.dart';
 import '../../models/farm_profile.dart';
 import '../../services/farm_service.dart';
 import '../../theme.dart';
+import '../../widgets/lottie_loader.dart';
 import '../../widgets/seller_widgets.dart';
 import '../../widgets/farmspot_loader.dart';
 
 /// Edit screen for the seller's own farm.
 ///
-/// Deliberately edit-ONLY for name and description, plus APPEND-ONLY photo
-/// uploads. There is no location UI here of any kind (no barangay, no
-/// latitude/longitude, no map): once a farm is approved its location is
-/// locked, so this screen reinforces that by not exposing those fields at all.
+/// Deliberately edit-ONLY for name and description, plus photo management.
+/// There is no location UI here of any kind (no barangay, no latitude/
+/// longitude, no map): once a farm is approved its location is locked, so this
+/// screen reinforces that by not exposing those fields at all.
 ///
 /// Loads the farm via the public profile endpoint, pre-fills the form, and on
 /// submit:
+///   * deletes any photos the seller removed (DELETE per photo),
+///   * marks the chosen photo as the cover when the seller tapped one
+///     (PUT .../primary),
 ///   * calls FarmService.updateFarm(...) only when name/description changed, and
 ///   * calls FarmService.addFarmPhotos(...) separately when new photos were
 ///     picked (the JSON PATCH and the multipart upload are separate calls).
+///
+/// A non-dismissible brand Lottie loader covers the screen for the whole save
+/// instead of a button spinner — photo uploads can take seconds, and a locked
+/// "Saving changes..." layer reads as progress rather than a hang.
 class EditFarmScreen extends StatefulWidget {
   final String farmId;
 
@@ -41,8 +49,22 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   late final TextEditingController _descriptionCtrl;
 
   final List<XFile> _newPhotos = [];
+  final Set<String> _removedPhotoIds = {};
+
+  /// The seller's explicit cover choice. Null until they tap a photo's star —
+  /// null keeps whatever primary the server has.
+  String? _coverChoice;
+
+  /// The primary photo id the farm loaded with, so a submit that re-taps the
+  /// existing cover is a no-op rather than a pointless round-trip.
+  String? _savedCoverId;
+
   bool _isSubmitting = false;
   String? _submitError;
+
+  /// Which photo reads as the cover right now: the explicit choice if the
+  /// seller made one, else the farm's stored primary.
+  String? get _currentCoverId => _coverChoice ?? _savedCoverId;
 
   @override
   void initState() {
@@ -73,6 +95,9 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
         _farm = farm;
         _nameCtrl.text = farm.name;
         _descriptionCtrl.text = farm.description;
+        _savedCoverId = _primaryPhotoId(farm);
+        _coverChoice = null;
+        _removedPhotoIds.clear();
       });
     } catch (e) {
       if (!mounted) return;
@@ -81,6 +106,14 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
         _loadError = _friendly(e);
       });
     }
+  }
+
+  /// The id of the entry the backend marks as the farm's cover, if any.
+  String? _primaryPhotoId(FarmProfileData farm) {
+    for (final photo in farm.photos) {
+      if (photo.isPrimary) return photo.id;
+    }
+    return null;
   }
 
   Future<void> _pickPhotos() async {
@@ -125,15 +158,48 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
     setState(() => _newPhotos.removeAt(index));
   }
 
+  /// Marks an existing photo as the cover. Also un-removes it, since a photo
+  /// the seller just chose as the cover cannot also be on the delete list.
+  void _makeCover(String photoId) {
+    setState(() {
+      _coverChoice = photoId;
+      _removedPhotoIds.remove(photoId);
+      _submitError = null;
+    });
+  }
+
+  /// Toggles an existing photo between "will be removed" and "kept". Removing
+  /// the chosen cover clears the choice — the server then auto-promotes the
+  /// oldest remaining photo, which is the least surprising outcome.
+  void _toggleRemove(String photoId) {
+    setState(() {
+      if (!_removedPhotoIds.add(photoId)) {
+        _removedPhotoIds.remove(photoId);
+      } else if (_coverChoice == photoId) {
+        _coverChoice = null;
+      }
+      _submitError = null;
+    });
+  }
+
   bool get _nameChanged =>
       _farm != null && _nameCtrl.text.trim() != _farm!.name.trim();
   bool get _descriptionChanged => _farm != null &&
       _descriptionCtrl.text.trim() != _farm!.description.trim();
 
+  /// Whether a submit would change the current cover. An explicit choice that
+  /// still points at the loaded primary is a no-op.
+  bool get _coverChanged =>
+      _coverChoice != null && _coverChoice != _savedCoverId;
+
   Future<void> _submit() async {
     if (_isSubmitting || _farm == null) return;
     // At least one field must actually change for the save to mean anything.
-    if (!_nameChanged && !_descriptionChanged && _newPhotos.isEmpty) {
+    if (!_nameChanged &&
+        !_descriptionChanged &&
+        _newPhotos.isEmpty &&
+        _removedPhotoIds.isEmpty &&
+        !_coverChanged) {
       setState(() => _submitError = 'No changes to save.');
       return;
     }
@@ -143,7 +209,28 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
       _submitError = null;
     });
 
+    // Full-screen brand loader while the farm saves. Popped on either outcome
+    // below. Shown before the first network call so a slow photo upload is a
+    // locked "Saving changes..." layer, not a screen that looks hung.
+    showFarmLottieLoading(context, message: 'Saving changes...');
+
     try {
+      // Deletes go first so a removed cover leaves only the rest to promote,
+      // and the explicit cover choice (below) lands last and wins.
+      for (final photoId in _removedPhotoIds) {
+        await FarmService.removeFarmPhoto(
+          farmId: widget.farmId,
+          photoId: photoId,
+        );
+      }
+
+      if (_coverChanged) {
+        await FarmService.setFarmPrimaryPhoto(
+          farmId: widget.farmId,
+          photoId: _coverChoice!,
+        );
+      }
+
       if (_nameChanged || _descriptionChanged) {
         await FarmService.updateFarm(
           farmId: widget.farmId,
@@ -160,9 +247,11 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
       }
 
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       setState(() {
         _isSubmitting = false;
         _submitError = _friendly(e);
@@ -217,6 +306,9 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
     }
 
     final farm = _farm!;
+    // Photos the farm already has, minus any the seller marked for removal.
+    final keptPhotos =
+        farm.photos.where((p) => !_removedPhotoIds.contains(p.id)).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       children: [
@@ -235,11 +327,11 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
           decoration: _inputDecoration(),
         ),
         const SizedBox(height: 18),
-        // Append-only photo section: existing photos are read-only (no
-        // delete/replace UI at this stage) and new ones are added alongside.
+        // Photo management: existing photos can be removed or promoted to the
+        // cover, and new ones are added alongside.
         const FieldLabel('FARM PHOTOS'),
         Text(
-          'Existing photos stay untouched.', 
+          'Tap a photo to set it as the cover. Use ✕ to remove a photo.',
           style: TextStyle(
             color: Colors.grey.shade500,
             fontSize: 12,
@@ -251,8 +343,14 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              for (final url in farm.photos) ...[
-                _ExistingPhoto(url: url),
+              for (final photo in keptPhotos) ...[
+                _EditableExistingPhoto(
+                  key: ValueKey('farm_photo_edit_${photo.id}'),
+                  url: photo.url,
+                  isCover: photo.id == _currentCoverId,
+                  onMakeCover: () => _makeCover(photo.id),
+                  onRemove: () => _toggleRemove(photo.id),
+                ),
                 const SizedBox(width: 10),
               ],
               for (int i = 0; i < _newPhotos.length; i++) ...[
@@ -262,12 +360,39 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
                 ),
                 const SizedBox(width: 10),
               ],
-              if (farm.photos.isNotEmpty || _newPhotos.isNotEmpty)
+              if (keptPhotos.isNotEmpty || _newPhotos.isNotEmpty)
                 const SizedBox(width: 4),
               PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
             ],
           ),
         ),
+        if (_removedPhotoIds.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(
+            '${_removedPhotoIds.length} existing photo(s) will be removed. '
+            'Tap one below to restore it.',
+            style: const TextStyle(color: Colors.black45, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 60,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final photo in farm.photos
+                    .where((p) => _removedPhotoIds.contains(p.id)))
+                  Padding(
+                    key: ValueKey('farm_photo_removed_${photo.id}'),
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _RemovedPhotoThumb(
+                      url: photo.url,
+                      onRestore: () => _toggleRemove(photo.id),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         if (_newPhotos.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(
@@ -324,7 +449,11 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   /// before discarding those.
   bool get _hasUnsavedChanges =>
       _farm != null &&
-      (_nameChanged || _descriptionChanged || _newPhotos.isNotEmpty);
+      (_nameChanged ||
+          _descriptionChanged ||
+          _newPhotos.isNotEmpty ||
+          _removedPhotoIds.isNotEmpty ||
+          _coverChanged);
 
   /// Top-left back: pops straight out when nothing changed, and asks for
   /// confirmation otherwise (Cancel / red "Discard", matching the app's
@@ -360,41 +489,180 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   }
 }
 
-/// Read-only thumbnail of an EXISTING farm photo (from the stored Cloudinary
-/// URL). No remove affordance — photos are append-only at this stage.
-class _ExistingPhoto extends StatelessWidget {
+/// Interactive thumbnail of an EXISTING farm photo (from the stored Cloudinary
+/// URL). The star promotes it to the cover (green ring + filled star when it
+/// already is); ✕ marks it for removal.
+class _EditableExistingPhoto extends StatelessWidget {
   final String url;
+  final bool isCover;
+  final VoidCallback onMakeCover;
+  final VoidCallback onRemove;
 
-  const _ExistingPhoto({required this.url});
+  const _EditableExistingPhoto({
+    super.key,
+    required this.url,
+    required this.isCover,
+    required this.onMakeCover,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
+    return GestureDetector(
+      onTap: isCover ? null : onMakeCover,
+      child: Container(
         width: 96,
         height: 96,
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stack) => Container(
-            color: Colors.grey.shade200,
-            child: const Icon(Icons.broken_image_outlined,
-                color: Colors.grey, size: 24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isCover ? AppColors.primaryGreen : Colors.transparent,
+            width: 2,
           ),
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Container(
-              color: Colors.grey.shade200,
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => Container(
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.broken_image_outlined,
+                      color: Colors.grey, size: 24),
+                ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: Colors.grey.shade200,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              if (isCover)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: AppColors.primaryGreen,
+                      borderRadius: BorderRadius.only(
+                        bottomRight: Radius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'COVER',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(10),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(Icons.close,
+                        size: 16, color: Colors.white),
+                  ),
                 ),
               ),
-            );
-          },
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: isCover ? null : onMakeCover,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isCover
+                          ? AppColors.primaryGreen
+                          : Colors.black54,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(10),
+                      ),
+                    ),
+                    child: Icon(
+                      isCover ? Icons.star : Icons.star_border,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A dimmed thumbnail of an existing photo the seller marked for removal.
+/// Tapping it restores the photo (removing it from the delete list).
+class _RemovedPhotoThumb extends StatelessWidget {
+  final String url;
+  final VoidCallback onRestore;
+
+  const _RemovedPhotoThumb({required this.url, required this.onRestore});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onRestore,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 60,
+          height: 60,
+          child: Opacity(
+            opacity: 0.45,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) => Container(
+                    color: Colors.grey.shade300,
+                    child: const Icon(Icons.broken_image_outlined,
+                        color: Colors.grey, size: 24),
+                  ),
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(color: Colors.grey.shade300);
+                  },
+                ),
+                const Center(
+                  child: Icon(Icons.restore, color: Colors.white, size: 24),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

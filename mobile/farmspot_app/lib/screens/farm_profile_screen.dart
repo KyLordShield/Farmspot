@@ -160,7 +160,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FullScreenPhotoViewer(
-          urls: profile.photos,
+          urls: profile.photoUrls,
           initialIndex: index,
         ),
       ),
@@ -249,7 +249,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: profile.photos.length > 1
+              onTap: profile.photoUrls.length > 1
                   ? () => _openPhotoViewer(profile, 0)
                   : null,
               child: hasPhoto
@@ -304,7 +304,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               ),
             ),
           ),
-          if (profile.photos.length > 1)
+          if (profile.photoUrls.length > 1)
             Positioned(
               top: 12,
               right: 16,
@@ -372,7 +372,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
   /// when the farm has more than one. Each thumb opens the full-screen viewer
   /// on that photo (the same viewer the product detail screen uses).
   Widget _buildPhotoStrip(FarmProfileData profile) {
-    final urls = profile.photos;
+    final urls = profile.photoUrls;
     if (urls.length < 2) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -408,10 +408,15 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               itemCount: urls.length,
               separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
+                // The ring sits on the actual cover row (isPrimary), not on a
+                // fixed index — the gallery contract is cover-first, but a
+                // malformed payload should draw the ring where the flag is.
+                final isCover = i < profile.photos.length &&
+                    profile.photos[i].isPrimary;
                 return _FarmStripThumb(
                   key: ValueKey('farm_photo_thumb_$i'),
                   url: urls[i],
-                  isCover: i == 0,
+                  isCover: isCover,
                   onTap: () => _openPhotoViewer(profile, i),
                 );
               },
@@ -430,7 +435,7 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
     return Padding(
       key: FarmProfileScreen.statsRowKey,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      // Expanded per stat so the two pairs always share the row width
+      // Expanded per stat so the stat pairs always share the row width
       // proportionally; a long distance label can never push past the row's
       // bounds (e.g. 18px overflow on a 360px phone), truncating instead.
       child: Row(
@@ -442,6 +447,19 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               label: 'Available Now',
             ),
           ),
+          // Whole-farm rating, aggregated over this farm's listings. Hidden
+          // entirely until the farm has been rated — a "0.0" claim on a brand
+          // new farm is a review nobody has written.
+          if (profile.ratingSummary.hasRatings) ...[
+            const SizedBox(width: 24),
+            Expanded(
+              child: _StatPair(
+                icon: Icons.star,
+                value: profile.ratingSummary.averageLabel,
+                label: profile.ratingSummary.countLabel,
+              ),
+            ),
+          ],
           if (distance != null || _distanceResolving) ...[
             const SizedBox(width: 24),
             Expanded(

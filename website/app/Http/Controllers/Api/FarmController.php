@@ -9,8 +9,10 @@ use App\Models\Farm;
 use App\Models\FarmPhoto;
 use App\Models\FarmVisitLog;
 use App\Models\Listing;
+use App\Models\ListingReview;
 use App\Models\Whitelist;
 use App\Services\NotificationService;
+use App\Support\CloudinaryImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -140,7 +142,7 @@ class FarmController extends Controller
 
                 $urls = [];
 
-                foreach ($validated['photos'] as $photo) {
+                foreach ($validated['photos'] as $index => $photo) {
                     $extension = $photo->getClientOriginalExtension() ?: 'jpg';
                     $path = "farm-photos/{$farmId}/" . uniqid() . ".{$extension}";
 
@@ -152,6 +154,8 @@ class FarmController extends Controller
                         'FPHOTO_ID' => $this->uniqueId('farm_photo', 'FPHOTO_ID'),
                         'FPHOTO_FILE_PATH' => $url,
                         'FPHOTO_UPLOADED_AT' => now(),
+                        // A brand-new farm's first upload is its cover.
+                        'FPHOTO_IS_PRIMARY' => $index === 0 ? 1 : 0,
                         'FRM_ID' => $farm->FRM_ID,
                     ]);
 
@@ -234,15 +238,24 @@ class FarmController extends Controller
             ->get();
 
         return response()->json([
-            'farms' => $farms->map(fn ($farm) => [
-                'id' => $farm->FRM_ID,
-                'name' => $farm->FRM_NAME,
-                'barangay' => $farm->FRM_BARANGAY,
-                'latitude' => $farm->FRM_LATITUDE,
-                'longitude' => $farm->FRM_LONGITUDE,
-                'active_listings_count' => $farm->active_listings_count,
-                'photo_url' => $farm->photos->first()?->FPHOTO_FILE_PATH,
-            ]),
+            'farms' => $farms->map(function ($farm) {
+                // The farm's cover photo is the map thumbnail: the primary is
+                // preferred, falling back to the first upload for the legacy
+                // rows that predate the FPHOTO_IS_PRIMARY column.
+                $primary = $farm->photos
+                    ->first(fn ($photo) => (int) $photo->FPHOTO_IS_PRIMARY === 1)
+                    ?? $farm->photos->first();
+
+                return [
+                    'id' => $farm->FRM_ID,
+                    'name' => $farm->FRM_NAME,
+                    'barangay' => $farm->FRM_BARANGAY,
+                    'latitude' => $farm->FRM_LATITUDE,
+                    'longitude' => $farm->FRM_LONGITUDE,
+                    'active_listings_count' => $farm->active_listings_count,
+                    'photo_url' => $primary?->FPHOTO_FILE_PATH,
+                ];
+            }),
         ]);
     }
 
@@ -286,8 +299,27 @@ class FarmController extends Controller
             ->get()
             ->map(fn ($listing) => $this->formatListing($listing));
 
+        $farmData = $this->formatFarm($farm);
+
+        // Whole-farm rating: the VISIBLE reviews across every one of this
+        // farm's listings, averaged as one score. A buyer on the profile sees a
+        // single "★ 4.4" for the farm rather than having to open crop after
+        // crop, and it is the same visible-only rule the per-listing summary
+        // uses, so hiding one review moves both numbers together.
+        $rating = ListingReview::whereHas('listing', function ($query) use ($farm) {
+            $query->where('FRM_ID', $farm->FRM_ID);
+        })
+            ->visible()
+            ->selectRaw('AVG(LRV_RATING) AS rating_avg, COUNT(*) AS rating_count')
+            ->first();
+
+        $farmData['rating_average'] = $rating->rating_avg === null
+            ? null
+            : round((float) $rating->rating_avg, 2);
+        $farmData['rating_count'] = (int) $rating->rating_count;
+
         return response()->json([
-            'farm' => $this->formatFarm($farm),
+            'farm' => $farmData,
             'owner' => $this->formatFarmOwner($farm),
             'listings' => $listings,
         ]);
@@ -458,7 +490,11 @@ class FarmController extends Controller
             'photos.*' => ['image', 'max:5120'],
         ]);
 
-        foreach ($validated['photos'] as $photo) {
+        // A farm with no photos yet gets its first new upload as the cover,
+        // mirroring the create flow.
+        $hasAnyPhoto = FarmPhoto::where('FRM_ID', $farm->FRM_ID)->exists();
+
+        foreach ($validated['photos'] as $index => $photo) {
             $extension = $photo->getClientOriginalExtension() ?: 'jpg';
             $path = "farm-photos/{$farm->FRM_ID}/" . uniqid() . ".{$extension}";
 
@@ -468,12 +504,106 @@ class FarmController extends Controller
                 'FPHOTO_ID' => $this->uniqueId('farm_photo', 'FPHOTO_ID'),
                 'FPHOTO_FILE_PATH' => Storage::disk('cloudinary')->url($path),
                 'FPHOTO_UPLOADED_AT' => now(),
+                'FPHOTO_IS_PRIMARY' => (! $hasAnyPhoto && $index === 0) ? 1 : 0,
                 'FRM_ID' => $farm->FRM_ID,
             ]);
         }
 
         return response()->json([
             'message' => 'Farm photos added successfully.',
+            'farm' => $this->formatFarm(Farm::with('photos')->find($farm->FRM_ID)),
+        ]);
+    }
+
+    /**
+     * Mark one farm photo as the farm's cover (PUT /api/farms/{farmId}/photos/{photoId}/primary).
+     *
+     * Exactly one photo per farm has FPHOTO_IS_PRIMARY = 1; the banner on the
+     * buyer-facing profile and the map thumbnail both read that photo. Mirrors
+     * the listing gallery's set-primary behaviour.
+     */
+    public function setPrimaryPhoto(Request $request, $farmId, $photoId)
+    {
+        [$farm, $error] = $this->resolveOwnedFarm($request, $farmId);
+
+        if ($error) {
+            return $error;
+        }
+
+        $photo = FarmPhoto::where('FRM_ID', $farm->FRM_ID)
+            ->where('FPHOTO_ID', $photoId)
+            ->first();
+
+        if (! $photo) {
+            return response()->json([
+                'message' => 'Photo not found on this farm.',
+            ], 404);
+        }
+
+        DB::transaction(function () use ($farm, $photo) {
+            FarmPhoto::where('FRM_ID', $farm->FRM_ID)
+                ->update(['FPHOTO_IS_PRIMARY' => 0]);
+
+            $photo->FPHOTO_IS_PRIMARY = 1;
+            $photo->save();
+        });
+
+        return response()->json([
+            'message' => 'Cover photo updated successfully.',
+            'farm' => $this->formatFarm(Farm::with('photos')->find($farm->FRM_ID)),
+        ]);
+    }
+
+    /**
+     * Delete one of the authenticated seller's own farm photos
+     * (DELETE /api/farms/{farmId}/photos/{photoId}).
+     *
+     * If the deleted photo was the cover, the oldest remaining photo is
+     * auto-promoted so a farm with photos left always keeps a banner; a farm
+     * whose last photo is removed simply has no banner (the app falls back to
+     * the placeholder icon). The Cloudinary asset is destroyed with the row.
+     */
+    public function destroyPhoto(Request $request, $farmId, $photoId)
+    {
+        [$farm, $error] = $this->resolveOwnedFarm($request, $farmId);
+
+        if ($error) {
+            return $error;
+        }
+
+        $photo = FarmPhoto::where('FRM_ID', $farm->FRM_ID)
+            ->where('FPHOTO_ID', $photoId)
+            ->first();
+
+        if (! $photo) {
+            return response()->json([
+                'message' => 'Photo not found on this farm.',
+            ], 404);
+        }
+
+        $wasPrimary = (int) $photo->FPHOTO_IS_PRIMARY === 1;
+        $deletedUrl = $photo->FPHOTO_FILE_PATH;
+
+        DB::transaction(function () use ($farm, $photo, $wasPrimary) {
+            $photo->delete();
+
+            if ($wasPrimary) {
+                $next = FarmPhoto::where('FRM_ID', $farm->FRM_ID)
+                    ->orderBy('FPHOTO_UPLOADED_AT')
+                    ->orderBy('FPHOTO_ID')
+                    ->first();
+
+                if ($next) {
+                    $next->FPHOTO_IS_PRIMARY = 1;
+                    $next->save();
+                }
+            }
+        });
+
+        CloudinaryImage::deleteByUrl($deletedUrl);
+
+        return response()->json([
+            'message' => 'Farm photo deleted successfully.',
             'farm' => $this->formatFarm(Farm::with('photos')->find($farm->FRM_ID)),
         ]);
     }
@@ -591,6 +721,12 @@ class FarmController extends Controller
      * Shape a Farm model into the structured farm object the public profile
      * and the farm-edit endpoints share (id, name, description, barangay,
      * coordinates, status, photos).
+     *
+     * `photos` is the full gallery as [{id, url, is_primary}], ordered so the
+     * cover photo comes first — a single photo's `formatFarm` consumer
+     * (profile banner, edit strip) can keep treating index 0 as the banner
+     * without its own ordering pass. The primary is never duplicated: exactly
+     * one row per farm carries is_primary = true.
      */
     private function formatFarm(Farm $farm): array
     {
@@ -602,7 +738,18 @@ class FarmController extends Controller
             'latitude' => $farm->FRM_LATITUDE,
             'longitude' => $farm->FRM_LONGITUDE,
             'status' => $farm->FRM_STATUS,
-            'photos' => $farm->photos->pluck('FPHOTO_FILE_PATH'),
+            'photos' => $farm->photos
+                ->sortBy([
+                    fn ($photo) => (int) $photo->FPHOTO_IS_PRIMARY ? 0 : 1,
+                    fn ($photo) => $photo->FPHOTO_UPLOADED_AT,
+                    fn ($photo) => $photo->FPHOTO_ID,
+                ])
+                ->values()
+                ->map(fn ($photo) => [
+                    'id' => $photo->FPHOTO_ID,
+                    'url' => $photo->FPHOTO_FILE_PATH,
+                    'is_primary' => (bool) $photo->FPHOTO_IS_PRIMARY,
+                ]),
         ];
     }
 
@@ -630,6 +777,27 @@ class FarmController extends Controller
             'user_id' => $farmer->buyer?->user?->USR_ID,
             'name' => $farmer->buyer?->user?->USR_NAME,
         ];
+    }
+
+    private function resolveOwnedFarm(Request $request, $farmId): array
+    {
+        $farm = Farm::find($farmId);
+
+        if (! $farm) {
+            return [null, response()->json([
+                'message' => 'Farm not found.',
+            ], 404)];
+        }
+
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer || $farm->FMR_ID !== $farmer->FMR_ID) {
+            return [null, response()->json([
+                'message' => 'You do not own this farm.',
+            ], 403)];
+        }
+
+        return [$farm, null];
     }
 
     private function uniqueId($table, $column): string

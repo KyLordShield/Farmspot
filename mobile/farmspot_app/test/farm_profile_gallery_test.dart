@@ -12,10 +12,14 @@ import 'package:farmspot_app/widgets/home_widgets.dart';
 // photo-less farms keep the old banner-only look with no strip and no hint.
 // Offline env: Image.network falls back gracefully through errorBuilder.
 
-const _photos = [
-  'https://example.invalid/1.jpg',
-  'https://example.invalid/2.jpg',
-  'https://example.invalid/3.jpg',
+final _photos = [
+  FarmPhotoEntry(
+    id: 'PH1',
+    url: 'https://example.invalid/1.jpg',
+    isPrimary: true,
+  ),
+  const FarmPhotoEntry(id: 'PH2', url: 'https://example.invalid/2.jpg'),
+  const FarmPhotoEntry(id: 'PH3', url: 'https://example.invalid/3.jpg'),
 ];
 
 CropListing _crop(String status) => CropListing(
@@ -30,7 +34,8 @@ CropListing _crop(String status) => CropListing(
       distance: '0.4 km away',
     );
 
-FarmProfileData _profile({List<String> photos = const []}) => FarmProfileData(
+FarmProfileData _profile({List<FarmPhotoEntry> photos = const []}) =>
+    FarmProfileData(
       id: 'FRMA',
       name: 'Mr. A Farm',
       barangay: 'Sudlon II',
@@ -41,7 +46,7 @@ FarmProfileData _profile({List<String> photos = const []}) => FarmProfileData(
       ],
     );
 
-Future<void> _pump(WidgetTester tester, List<String> photos) async {
+Future<void> _pump(WidgetTester tester, List<FarmPhotoEntry> photos) async {
   await tester.binding.setSurfaceSize(const Size(800, 1200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
