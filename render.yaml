@@ -1,0 +1,58 @@
+# The one-click deployment blueprint for Render. Create a web service from the
+# render.yaml at the repo root (Render auto-detects rootDir website + Dockerfile).
+
+services:
+  - type: web
+    name: farmspot-api
+    runtime: docker
+    rootDir: website
+    plan: free
+    region: singapore
+    healthCheckPath: /api/farms/public
+
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        value: https://farmspot-api.onrender.com
+
+      # Secret values: leave `sync: false — Render prompts you to fill these
+      # in the dashboard on first deploy, so nothing secret lives in git.
+      - key: APP_KEY
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ONESIGNAL_APP_ID
+        sync: false
+      - key: ONESIGNAL_REST_API_KEY
+        sync: false
+
+      # Aiven cloud database (connect over TLS, CA bundle baked into the image).
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        value: mysql-3fbf2fea-farmspot02.b.aivencloud.com
+      - key: DB_PORT
+        value: "13107"
+      - key: DB_DATABASE
+        value: capstone_db
+      - key: DB_USERNAME
+        value: avnadmin
+      - key: MYSQL_ATTR_SSL_CA
+        value: /app/storage/aiven-ca.pem
+
+      # Demo-grade runtime settings (single instance, no queue workers/redis).
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: SESSION_DRIVER
+        value: file
+      - key: CACHE_STORE
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
