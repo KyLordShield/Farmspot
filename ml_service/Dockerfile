@@ -4,6 +4,18 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# OpenCV (pulled in by ultralytics) imports its GUI backend at import time and
+# needs these shared libraries, none of which exist on python:slim.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 \
+        libxcb1 \
+        libxext6 \
+        libxrender1 \
+        libsm6 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Torch on CPU only. The default PyPI wheel bundles CUDA libs (multi-GB) that
 # Render's free CPU instances cannot use; the CPU wheel keeps the image small
 # enough for the free container disk and is what ulralytics actually runs on.
