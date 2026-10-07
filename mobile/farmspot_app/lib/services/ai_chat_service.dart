@@ -111,7 +111,7 @@ String stripMarkdown(String text) {
 /// The app never calls Groq directly. That keeps the key server-side and lets
 /// the server enforce the token limits the free tier imposes.
 class AiChatService implements AiGateway {
-  static const String baseUrl = AuthService.baseUrl;
+  static final String baseUrl = AuthService.baseUrl;
 
   static final AiChatService instance = AiChatService();
 

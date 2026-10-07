@@ -43,7 +43,7 @@ abstract class ReviewsGateway {
 
 /// Talks to the Laravel backend's /api/listings/{id}/reviews.
 class ReviewService implements ReviewsGateway {
-  static const String baseUrl = AuthService.baseUrl;
+  static final String baseUrl = AuthService.baseUrl;
 
   /// Shared instance, so screens default to the real backend while tests pass
   /// their own implementation.

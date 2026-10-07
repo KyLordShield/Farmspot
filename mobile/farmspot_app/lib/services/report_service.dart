@@ -20,7 +20,7 @@ abstract class ReportsGateway {
 
 /// Talks to the Laravel backend's POST /api/reports.
 class ReportService implements ReportsGateway {
-  static const String baseUrl = AuthService.baseUrl;
+  static final String baseUrl = AuthService.baseUrl;
 
   /// Shared instance, so screens default to the real backend while tests pass
   /// their own implementation.

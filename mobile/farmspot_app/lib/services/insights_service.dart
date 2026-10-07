@@ -6,7 +6,7 @@ import '../models/insights.dart';
 import 'api_config.dart';
 
 class InsightsService {
-  static const String baseUrl = ApiConfig.apiBaseUrl;
+  static final String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Fetches the Insights dashboard payload (GET /api/insights). Public
   /// endpoint — no auth token needed. Returns the parsed payload on success,

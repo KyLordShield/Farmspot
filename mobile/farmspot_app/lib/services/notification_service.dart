@@ -57,7 +57,7 @@ abstract class NotificationsGateway {
 /// their own unread badge, and the two must never be merged or the bell becomes
 /// unreadable.
 class NotificationService implements NotificationsGateway {
-  static const String baseUrl = AuthService.baseUrl;
+  static final String baseUrl = AuthService.baseUrl;
 
   /// Shared instance, so screens default to the real backend while tests pass
   /// their own implementation or their own [client].

@@ -5,7 +5,7 @@ import 'api_config.dart';
 
 /// Talks to the Python YOLO service (ml_service/app.py).
 class ImageDetectService {
-  static const String _baseUrl = ApiConfig.imageDetectBaseUrl;
+  static final String _baseUrl = ApiConfig.imageDetectBaseUrl;
 
   /// Sends a photo and returns every crop the model found in it (multiple
   /// crops per image are expected), each with its confidence. One entry per

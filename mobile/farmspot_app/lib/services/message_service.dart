@@ -35,7 +35,7 @@ abstract class MessagesGateway {
 /// every few seconds while it is open, asking only for messages newer than the
 /// last one it holds. No WebSocket server, no second process to keep alive.
 class MessageService implements MessagesGateway {
-  static const String baseUrl = AuthService.baseUrl;
+  static final String baseUrl = AuthService.baseUrl;
 
   /// Shared instance, so screens can default to the real backend while tests
   /// pass their own implementation.

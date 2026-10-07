@@ -12,7 +12,7 @@ import 'auth_service.dart';
 import 'api_config.dart';
 
 class ListingService {
-  static const String baseUrl = ApiConfig.apiBaseUrl;
+  static final String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Fetches the browse feed. Returns the list on success, or throws
   /// an Exception with a user-friendly message on failure.

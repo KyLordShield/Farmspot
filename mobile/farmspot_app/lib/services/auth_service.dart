@@ -69,7 +69,7 @@ class PasswordResetRequestResult {
 }
 
 class AuthService {
-  static const String baseUrl = ApiConfig.apiBaseUrl;
+  static final String baseUrl = ApiConfig.apiBaseUrl;
 
   /// Attempts login. Returns null on success, or an error message string on failure.
   static Future<String?> login(String email, String password) async {
