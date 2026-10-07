@@ -2,12 +2,22 @@
     <!-- Geolocation (geolocator): fine is used when both are declared. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- In-app live camera preview for image search (camera plugin). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Recent-photos strip / full gallery for image search (photo_manager).
+         Android 10-12 path; Android 13+ uses READ_MEDIA_IMAGES / the photo
+         picker. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- Required to load OpenStreetMap tiles and talk to the Farmspot API. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="farmspot_app"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

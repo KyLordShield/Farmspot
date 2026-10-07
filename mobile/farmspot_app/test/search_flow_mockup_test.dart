@@ -1,8 +1,9 @@
 import 'dart:async';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +18,7 @@ import 'package:farmspot_app/screens/product_detail_screen.dart';
 import 'package:farmspot_app/screens/search_results_screen.dart';
 import 'package:farmspot_app/screens/search_screen.dart';
 import 'package:farmspot_app/services/image_detect_service.dart';
+import 'package:farmspot_app/services/live_camera.dart';
 import 'package:farmspot_app/services/recent_searches.dart';
 import 'package:farmspot_app/widgets/search_widgets.dart';
 
@@ -43,6 +45,56 @@ Listing _listing(
 
 FarmPin _pin(String id, double lat, double lon) {
   return FarmPin(id: id, name: 'Farm $id', latitude: lat, longitude: lon);
+}
+
+class _FakeLiveCamera implements LiveCamera {
+  _FakeLiveCamera({this.shot});
+
+  final XFile? shot;
+  int captures = 0;
+
+  @override
+  Widget buildPreview() =>
+      const ColoredBox(key: Key('fake-preview'), color: Colors.black);
+
+  @override
+  Future<XFile?> capture() async {
+    captures++;
+    return shot;
+  }
+
+  @override
+  Future<LiveCamera?> flip() async => null;
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// Widget tests run in fake async, so real platform-channel calls (the camera
+/// plugin's `availableCameras` and photo_manager) never resolve and would leave
+/// ImageSearchScreen stuck on its white "starting" frame. Mocking the channels
+/// makes the default seams resolve instantly, exactly like a device with no
+/// camera and no gallery permission.
+const _cameraChannel = MethodChannel('plugins.flutter.io/camera');
+const _photoManagerChannel = MethodChannel('com.fluttercandies/photo_manager');
+
+void _mockMissingPlugins() {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(_cameraChannel, (call) async {
+    if (call.method == 'availableCameras') return const <Object?>[];
+    return null;
+  });
+  messenger.setMockMethodCallHandler(_photoManagerChannel, (call) async {
+    throw PlatformException(code: 'unavailable', message: 'No gallery in tests');
+  });
+}
+
+void _clearPluginMocks() {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(_cameraChannel, null);
+  messenger.setMockMethodCallHandler(_photoManagerChannel, null);
 }
 
 void main() {
@@ -676,17 +728,29 @@ void main() {
   });
 
   group('ImageSearchScreen (Screen 3) — capture -> identify -> results', () {
-    testWidgets('capture step shows viewfinder and Camera/Gallery', (
-      tester,
-    ) async {
-      await tester.pumpWidget(const MaterialApp(home: ImageSearchScreen()));
+    testWidgets(
+      'opens on a clean white screen with no fake viewfinder, then the '
+      'unavailable state when no camera exists (tests/desktops)',
+      (tester) async {
+        _mockMissingPlugins();
+        addTearDown(_clearPluginMocks);
+        await tester.pumpWidget(const MaterialApp(home: ImageSearchScreen()));
 
-      expect(find.text('Identify crop'), findsOneWidget);
-      expect(find.text('Camera'), findsOneWidget);
-      expect(find.text('Gallery'), findsOneWidget);
-      expect(find.textContaining('Point your camera'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        // First frame: the white transition — no fake viewfinder, no buttons.
+        expect(find.text('Identify crop'), findsOneWidget);
+        expect(find.text('Camera'), findsNothing);
+        expect(find.text('Gallery'), findsNothing);
+
+        // Once the (missing) camera resolves: a minimal message, still no old
+        // picker buttons.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(find.textContaining("Camera isn't available"), findsOneWidget);
+        expect(find.text('Camera'), findsNothing);
+        expect(find.text('Gallery'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('Camera advances to scanning, then jumps straight to the '
         'live multi-crop results screen', (tester) async {
@@ -700,7 +764,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ImageSearchScreen(
-            pickImage: (_) async => XFile('/tmp/crop.jpg'),
+            createCamera: () async => _FakeLiveCamera(
+              shot: XFile('/tmp/crop.jpg'),
+            ),
+            loadPhotos: ({int? limit}) async => const [],
             detect: (_) async => [
               DetectedCrop(name: 'Carrots', confidence: 0.94),
               DetectedCrop(name: 'Lettuce', confidence: 0.77),
@@ -725,7 +792,11 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Camera'));
+      // The live camera resolves and replaces the white transition.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byKey(const Key('image-search-shutter')));
       await tester.pump();
       expect(find.text('Scanning Image'), findsOneWidget);
 
@@ -757,13 +828,18 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: ImageSearchScreen(
-              pickImage: (_) async => XFile('/tmp/crop.jpg'),
+              createCamera: () async => _FakeLiveCamera(
+                shot: XFile('/tmp/crop.jpg'),
+              ),
+              loadPhotos: ({int? limit}) async => const [],
               detect: (_) async => <DetectedCrop>[],
             ),
           ),
         );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-        await tester.tap(find.text('Camera'));
+        await tester.tap(find.byKey(const Key('image-search-shutter')));
         await tester.pumpAndSettle();
 
         expect(find.text('Identify crop'), findsOneWidget);
@@ -785,6 +861,10 @@ void main() {
             '{"USR_ID":"TTTTTT","USR_NAME":"Tester",'
             '"USR_MOBILE_NUMBER":"09170000000","USR_IS_SELLER":0}',
       });
+      // ImageSearchScreen can be pushed from home; its plugin-backed seams
+      // must resolve in fake async or pumpAndSettle hangs on the spinner.
+      _mockMissingPlugins();
+      addTearDown(_clearPluginMocks);
       await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 200));
