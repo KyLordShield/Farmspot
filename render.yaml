@@ -66,3 +66,13 @@ services:
     plan: free
     region: singapore
     healthCheckPath: /health
+
+    envVars:
+      # 960 is the tuned default in app.py and is what the phone would get if
+      # this were unset, but it does not fit the free container: the process is
+      # killed mid-inference and the scan comes back as HTTP 502. 640 runs
+      # (measured ~2 minutes per scan on free-tier shared CPU, vs sub-second on
+      # a dedicated core) and is only meaningfully worse on small background
+      # crops. Raise this back to 960 if the plan is ever upgraded.
+      - key: IMGSZ
+        value: "640"
