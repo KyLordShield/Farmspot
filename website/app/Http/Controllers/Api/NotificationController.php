@@ -9,7 +9,9 @@ use Illuminate\Http\Request;
 /**
  * The signed-in user's notification inbox.
  *
- * Four endpoints, and the only ones that read or write NOTIFICATION.
+ * Four endpoints, and the only ones that read or write the `notification`
+ * table (declared lowercase in UserNotification — see that model for why the
+ * case matters).
  *
  * The scope rule is the important part: every query is rooted at
  * $request->user()->USR_ID and nothing else. A notification id is a guessable

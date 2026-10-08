@@ -93,7 +93,9 @@ Route::delete('/farms/{farmId}/photos/{photoId}', [FarmController::class, 'destr
     // dropped connection does not become a second row.
 Route::post('/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
 
-    // The notification inbox, served from the NOTIFICATION table.
+    // The notification inbox, served from the `notification` table (lowercase,
+    // as UserNotification declares it — MySQL on Linux compares table names
+    // case-sensitively, and an uppercase spelling here is a production-only 500).
     //
     // This replaces the two placeholder routes that used to sit here
     // (GET /notifications and POST /notifications/read), which read Laravel's

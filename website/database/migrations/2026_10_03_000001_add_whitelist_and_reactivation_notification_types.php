@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +15,10 @@ use Illuminate\Support\Facades\DB;
  * spelled out. Every existing value is repeated in both directions, so the
  * two new ones are added, never substituted.
  *
- * NOTIFICATION is upper case because that is the table's real name in this
- * legacy schema, where most tables are upper case and prefixed.
+ * Table name is `notification`, lowercase, which is what the schema dump
+ * creates and what UserNotification queries. MySQL on Linux compares table
+ * names case-sensitively, so the uppercase spelling this used to carry only
+ * ever resolved on Windows.
  */
 return new class extends Migration
 {
@@ -48,7 +50,7 @@ return new class extends Migration
     public function up(): void
     {
         DB::statement(sprintf(
-            "ALTER TABLE `NOTIFICATION` MODIFY `NOTIF_TYPE` ENUM('%s') NOT NULL COMMENT %s",
+            "ALTER TABLE `notification` MODIFY `NOTIF_TYPE` ENUM('%s') NOT NULL COMMENT %s",
             implode("','", array_merge(self::ORIGINAL_TYPES, self::NEW_TYPES)),
             "'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished, whitelist approval, seller reactivation'",
         ));
@@ -61,7 +63,7 @@ return new class extends Migration
         // narrower enum, so they go first rather than silently truncating to ''
         // and leaving unreadable rows behind.
         DB::statement(sprintf(
-            "ALTER TABLE `NOTIFICATION` MODIFY `NOTIF_TYPE` ENUM('%s') NOT NULL COMMENT %s",
+            "ALTER TABLE `notification` MODIFY `NOTIF_TYPE` ENUM('%s') NOT NULL COMMENT %s",
             implode("','", self::ORIGINAL_TYPES),
             "'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished'",
         ));

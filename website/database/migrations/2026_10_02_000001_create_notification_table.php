@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -21,20 +21,25 @@ use Illuminate\Support\Facades\Schema;
  *   - "how many unread does this person have?" A boolean column beats a nullable
  *     timestamp, because read_at = null also means "never rendered".
  *
+ * The table is created lowercase (`notification`) to match the schema dump.
+ * On Windows this made no difference; on the Linux MySQL the API runs against,
+ * table names are case-sensitive, and an uppercase name here meant the model
+ * could never find the table.
+ *
  * So this table is flat, prefixed like every other table in this schema
  * (NOTIF_), and keys off USR_ID. It is the source of truth: the push that
  * NotificationService also sends is a best-effort extra, and if the phone is
  * offline the row is still waiting when the app next opens.
  *
  * NOTIF_REF_ID points at whatever the notification is about, normally an LST_ID.
- * It is not a foreign key on purpose — the same column has to be able to hold a
+ * It is not a foreign key on purpose â€” the same column has to be able to hold a
  * WLST_ID, an RPT_ID or a USR_ID depending on NOTIF_TYPE, and a foreign key
  * spanning four tables cannot be expressed. (report.RPT_TARGET_ID solves the same
  * problem the same way.)
  *
  * There is intentionally no message/chat type here. Chat lives in the separate
  * message table with its own unread badge, and a chat message must never appear
- * in this inbox — mixing the two would make the bell unreadable.
+ * in this inbox â€” mixing the two would make the bell unreadable.
  */
 return new class extends Migration
 {
@@ -60,9 +65,9 @@ return new class extends Migration
         // A failed earlier run can leave the table behind without the migration
         // being recorded, which then makes every retry fail on "already exists".
         // Same guard as the report_action migration.
-        Schema::dropIfExists('NOTIFICATION');
+        Schema::dropIfExists('notification');
 
-        Schema::create('NOTIFICATION', function (Blueprint $table) {
+        Schema::create('notification', function (Blueprint $table) {
             $table->char('NOTIF_ID', 6)->comment('Unique notification ID');
 
             // utf8mb4_general_ci to match the legacy dump. The user table came
@@ -111,13 +116,13 @@ return new class extends Migration
         // the same flag. Stated here instead of inline because Blueprint has no
         // display-width argument.
         DB::statement(
-            'ALTER TABLE `NOTIFICATION` MODIFY `NOTIF_IS_READ` tinyint(1) NOT NULL DEFAULT 0 '
+            'ALTER TABLE `notification` MODIFY `NOTIF_IS_READ` tinyint(1) NOT NULL DEFAULT 0 '
             ."COMMENT 'Whether the user has opened it (0 or 1)'"
         );
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('NOTIFICATION');
+        Schema::dropIfExists('notification');
     }
 };

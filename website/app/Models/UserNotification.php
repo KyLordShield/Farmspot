@@ -17,7 +17,16 @@ use Illuminate\Database\Eloquent\Model;
  */
 class UserNotification extends Model
 {
-    protected $table = 'NOTIFICATION';
+    /**
+     * Lowercase, matching the table the schema dump actually creates.
+     *
+     * Windows (where this is developed) stores and compares table names
+     * case-insensitively, so the uppercase name this used to carry worked
+     * locally. Linux MySQL does not, and every read and write against this
+     * model came back as "Table 'capstone_db.NOTIFICATION' doesn't exist" ->
+     * HTTP 500 on the whole inbox once the app was deployed.
+     */
+    protected $table = 'notification';
 
     protected $primaryKey = 'NOTIF_ID';
 
