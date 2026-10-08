@@ -141,9 +141,23 @@ class NotificationService implements NotificationsGateway {
     };
   }
 
-  /// Unwraps the body, turning a non-2xx response into the server's own
-  /// message so the UI can show something specific instead of "failed".
+  /// Unwraps the body, turning a non-2xx response into something the UI can
+  /// show as-is instead of "failed".
   static Map<String, dynamic> _data(http.Response response) {
+    // Checked before the body is parsed: a gateway failure (502, 504) often
+    // arrives as HTML from the proxy rather than JSON from Laravel, and the
+    // user still deserves the sentence below instead of "unexpected response".
+    //
+    // A 5xx is our own backend failing, not a decision the server made about
+    // this request. Laravel's stock "Server Error" reads as a connectivity
+    // problem, so people go and restart their wifi instead of retrying.
+    if (response.statusCode >= 500) {
+      throw Exception(
+        'The server had a problem loading your notifications. '
+        'Please try again in a moment.',
+      );
+    }
+
     final Map<String, dynamic> body;
     try {
       body = jsonDecode(response.body) as Map<String, dynamic>;

@@ -406,11 +406,38 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
   /// Sends [photo] to the YOLO service, then jumps straight to the live
   /// results screen (one section per crop the model found). Bounces back to
   /// capture with an error toast if no crop was confidently identified.
+  ///
+  /// A scan that could not be *performed* (service down, timed out, answered
+  /// with an error) is reported separately from a scan that ran and found
+  /// nothing, because they call for different advice: "check your connection"
+  /// is useless for a photo the model simply could not place, and "try a
+  /// clearer photo" is misleading when the request never arrived.
   Future<void> _identifyPhoto(XFile photo) async {
     setState(() => _step = _ImageSearchStep.identifying);
 
     final detect = widget.detect ?? (p) => ImageDetectService.detectCrops(p);
-    final crops = await detect(photo);
+
+    final List<DetectedCrop> crops;
+    try {
+      crops = await detect(photo);
+    } on ImageDetectException catch (e) {
+      if (!mounted) return;
+      showFarmSpotSnackBar(context, e.message, isError: true);
+      setState(() => _step = _ImageSearchStep.capture);
+      return;
+    } catch (_) {
+      // Anything else the seam can throw (an unexpected plugin failure, a
+      // test double that throws) still lands the user back on capture with
+      // something actionable instead of an unhandled async error.
+      if (!mounted) return;
+      showFarmSpotSnackBar(
+        context,
+        'Could not reach the crop scanner. Check your connection and try again.',
+        isError: true,
+      );
+      setState(() => _step = _ImageSearchStep.capture);
+      return;
+    }
     if (!mounted) return;
 
     if (crops.isEmpty) {
