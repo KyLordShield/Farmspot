@@ -8,10 +8,12 @@ import 'api_config.dart';
 
 /// How long one scan may take end to end.
 ///
-/// Long enough to cover the detector waking up from cold (the service sleeps
-/// when idle, and waking it costs roughly 40s) plus the inference itself, and
-/// short enough that the user is not left staring at the spinner for minutes.
-const Duration _detectTimeout = Duration(seconds: 90);
+/// Long by design: the detector sleeps when idle, waking it costs roughly 40s,
+/// and the free-tier instance it runs on takes around two minutes to work
+/// through one photo (the same inference is sub-second on a normal core).
+/// Anything shorter aborts scans that would otherwise have succeeded, and the
+/// user is left with a spinner and a "try again" that fails the same way.
+const Duration _detectTimeout = Duration(seconds: 180);
 
 /// Talks to the Python YOLO service (ml_service/app.py).
 class ImageDetectService {
