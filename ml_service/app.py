@@ -148,6 +148,11 @@ RECLASSIFY = {
 }
 
 _lock = threading.Lock()
+# Inference is serialised on purpose. The container this runs in has one weak,
+# shared core and a small memory budget; two scans in flight at once cost more
+# than they save and risk getting the whole process OOM-killed, which is worse
+# than the second scan waiting.
+_infer_lock = threading.Lock()
 _model = None
 
 
@@ -315,14 +320,26 @@ def health():
 
 
 @app.post('/detect')
-async def detect(
+def detect(
     file: UploadFile,
     conf: float | None = Query(default=None, ge=0.0, le=1.0),
     augment: bool | None = Query(default=None),
     imgsz: int | None = Query(default=None, ge=320, le=2560),
     reclassify: bool | None = Query(default=None),
 ):
-    photo = await file.read()
+    # A plain `def`, not `async def`: FastAPI runs synchronous handlers in a
+    # worker thread, so the event loop stays free while inference runs.
+    #
+    # Declared `async def`, this body blocked the loop for the whole inference
+    # (tens of seconds on this container). During that window uvicorn served
+    # nothing - Render's health checks timed out, the instance was marked
+    # unhealthy, and the edge returned HTTP 502 for every request including the
+    # detect doing the work. That is why a photo that returns a correct crop
+    # here still read as "could not identify the crop" in the app.
+    #
+    # Uploads are therefore read through the sync file object; `await file.read()`
+    # is an async API this handler can no longer use.
+    photo = file.file.read()
     (UPLOADS / f'{time.time_ns()}.jpg').write_bytes(photo)
     image = Image.open(io.BytesIO(photo)).convert('RGB')
 
@@ -346,15 +363,16 @@ async def detect(
 
     # The floor is deliberately the LOWEST bar, not min(bars.values()) across a
     # narrow range, so nothing is thrown away before its own bar is applied.
-    result = model.predict(
-        image,
-        conf=settings['conf_floor'],
-        iou=settings['iou'],
-        imgsz=settings['imgsz'],
-        augment=settings['augment'],
-        max_det=settings['max_det'],
-        verbose=False,
-    )[0]
+    with _infer_lock:
+        result = model.predict(
+            image,
+            conf=settings['conf_floor'],
+            iou=settings['iou'],
+            imgsz=settings['imgsz'],
+            augment=settings['augment'],
+            max_det=settings['max_det'],
+            verbose=False,
+        )[0]
 
     # Keep the single best box per crop name, but never drop a class outright:
     best = {}
@@ -387,7 +405,8 @@ async def detect(
     # Second pass over rejected regions (experimental, off unless enabled).
     # Only classes pass 1 did not already find are added, so the best score for
     # a crop always comes from the pass that is most confident about it.
-    promoted = _reclassify_rejects(model, image, settings, bars, reclassify_cfg)
+    with _infer_lock:
+        promoted = _reclassify_rejects(model, image, settings, bars, reclassify_cfg)
     for name, (score, box) in promoted.items():
         cname = name
         if cname not in best:
