@@ -14,7 +14,7 @@
     <!-- Required to load OpenStreetMap tiles and talk to the Farmspot API. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="farmspot_app"
+        android:label="Farmspot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
@@ -60,3 +60,4 @@
         </intent>
     </queries>
 </manifest>
+
