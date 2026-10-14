@@ -109,7 +109,10 @@ class ExpireListings extends Command
             return;
         }
 
-        $crop = $cropNames[$listing->CAT_ID] ?? 'produce';
+        // The crop the farmer typed names the listing; the category is only a
+        // fallback for a blank name, since "your Vegetable expired" does not say
+        // which crop to update.
+        $crop = $listing->LST_CROP_ICON ?: ($cropNames[$listing->CAT_ID] ?? 'produce');
 
         app(NotificationService::class)->notify(
             $ownerId,

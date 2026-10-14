@@ -26,10 +26,13 @@ class FarmController extends Controller
     /**
      * Create a new farm for the authenticated seller.
      *
-     * A seller may own several farms: the system design is one account to many
-     * farms, and the schema already allows it (farm.FMR_ID is not unique). Each
-     * farm is reviewed on its own, so approval, map pinning and stats are all
-     * per farm rather than per account.
+     * A seller may own up to three farms: the system design is one account to
+     * several farms, and the schema already allows it (farm.FMR_ID is not
+     * unique). Each farm is reviewed on its own, so approval, map pinning and
+     * stats are all per farm rather than per account. The cap is enforced
+     * here, on the server, counting only APPROVED + PENDING_REVIEW farms
+     * (archived/removed and rejected farms do not consume a slot), so it
+     * cannot be bypassed by calling the API directly.
      *
      * Whitelist approval is decided here, at submission time: whitelisted users
      * get an instant-approve farm (FRM_STATUS=APPROVED) and have their seller
@@ -48,6 +51,20 @@ class FarmController extends Controller
         if (! $farmer) {
             return response()->json([
                 'message' => 'Start the seller setup first.',
+            ], 403);
+        }
+
+        // Hard cap of three farms per account. Counts only farms that are actually
+        // standing as sellable/live: APPROVED or PENDING_REVIEW. Archived
+        // (removed) and REJECTED farms are excluded, so neither a removal nor
+        // an admin rejection can permanently consume one of the three slots —
+        // a rejected farm is invisible in My Farm and cannot be removed, so it
+        // must also never count.
+        if ($farmer->farms()
+            ->whereNotIn('FRM_STATUS', ['ARCHIVED', 'REJECTED'])
+            ->count() >= 3) {
+            return response()->json([
+                'message' => 'You can have up to 3 farms per account. Remove one before adding another.',
             ], 403);
         }
 

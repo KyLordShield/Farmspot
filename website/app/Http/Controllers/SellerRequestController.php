@@ -130,7 +130,9 @@ class SellerRequestController extends Controller
     /**
      * Reject a pending seller request: flips FRM_STATUS to REJECTED without
      * touching the owner's seller flags (a rejected user stays a plain buyer).
-     * Accepts an optional reason, but there is no column to persist it for now.
+     * The optional reason is not persisted on the farm (no reason column yet),
+     * but it is carried inside the rejection notification so the seller reads
+     * an actual explanation rather than a bare status change.
      */
     public function reject($farmId, Request $request)
     {
@@ -144,8 +146,7 @@ class SellerRequestController extends Controller
                 ->with('error', 'Farm not found or not pending review.');
         }
 
-        // Optional reason accepted but not persisted (no reason column yet).
-        $request->validate([
+        $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -157,6 +158,29 @@ class SellerRequestController extends Controller
         } catch (\Throwable $e) {
             return redirect()->route('seller-requests')
                 ->with('error', 'Failed to reject seller request.');
+        }
+
+        $user = $farm->farmer->buyer->user ?? null;
+
+        // Same rejection notification as the API route, deliberately routed
+        // through the same NotificationService method: the wording lives in one
+        // place, and the de-duplication is on the farm id, so even if both
+        // routes somehow ran for the same farm the seller is told once.
+        if ($user) {
+            try {
+                app(NotificationService::class)->notifyFarmRejected(
+                    $user->USR_ID,
+                    $farm->FRM_ID,
+                    $farm->FRM_NAME,
+                    $validated['reason'] ?? null,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('[notifications] farm-rejected notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'farm_id' => $farm->FRM_ID,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         return redirect()->route('seller-requests')

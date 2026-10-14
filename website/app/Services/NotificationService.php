@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\UserNotification;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Symfony\Component\Process\PhpExecutableFinder;
 
 /**
@@ -103,6 +104,50 @@ class NotificationService
             : "{$farmName} is now on the map. Add a crop so buyers can find it.";
 
         $this->notify($usrId, 'SETUP_COMPLETE', $title, $body, $farmId);
+    }
+
+    /**
+     * Tell a seller their farm was not approved.
+     *
+     * The mirror of notifyFarmLive(): the API and the web portal both route a
+     * rejection through here so the wording and the de-duplication live in one
+     * place. Unlike a live farm there is nothing to open — a rejected farm is
+     * hidden from My Farm and the map — so the tap just marks the row read;
+     * the body carries the optional reason so the seller gets an actual
+     * explanation rather than a bare status change.
+     *
+     * De-duplication is on NOTIF_REF_ID = FRM_ID, same as the live
+     * announcement. A farm can only be rejected while pending, so a repeat
+     * write is at worst a double-fire from a retried admin request.
+     */
+    public function notifyFarmRejected(
+        string $usrId,
+        string $farmId,
+        string $farmName,
+        ?string $reason
+    ): void {
+        $alreadySent = UserNotification::where('USR_ID', $usrId)
+            ->where('NOTIF_TYPE', 'FARM_REJECTED')
+            ->where('NOTIF_REF_ID', $farmId)
+            ->exists();
+
+        if ($alreadySent) {
+            return;
+        }
+
+        $title = 'Your farm was rejected';
+
+        // NOTIF_BODY is 300 characters while the reason is free text up to
+        // 500, so the combined sentence is hard-truncated to fit rather than
+        // risking a write error on a column the schema has capped. Str::substr
+        // (not Str::limit) on purpose: limit appends a trailing ellipsis that
+        // would push the truncation back over the 300-character boundary.
+        $reason = trim((string) $reason);
+        $body = $reason === ''
+            ? "Your farm {$farmName} was rejected. You can submit a new farm from My Farm."
+            : "Your farm {$farmName} was rejected. Reason: {$reason}";
+
+        $this->notify($usrId, 'FARM_REJECTED', $title, Str::substr($body, 0, 300), $farmId);
     }
 
     /**

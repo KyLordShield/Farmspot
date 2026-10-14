@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,10 +20,10 @@ enum AvailabilityStatus {
 
   /// Exact strings the backend expects for LST_STATUS.
   String get backendValue => switch (this) {
-        AvailabilityStatus.availableNow => 'AVAILABLE_NOW',
-        AvailabilityStatus.soonToHarvest => 'SOON_TO_HARVEST',
-        AvailabilityStatus.notAvailable => 'NOT_AVAILABLE',
-      };
+    AvailabilityStatus.availableNow => 'AVAILABLE_NOW',
+    AvailabilityStatus.soonToHarvest => 'SOON_TO_HARVEST',
+    AvailabilityStatus.notAvailable => 'NOT_AVAILABLE',
+  };
 }
 
 class AddCropScreen extends StatefulWidget {
@@ -155,7 +155,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _cropLabelCtrl.text = existing.cropIcon ?? '';
       _descCtrl.text = existing.description ?? '';
       _status = _statusFromBackend(existing.status);
-      _harvestDate = DateTime.tryParse(existing.harvestDate ?? '');
+      // A date only belongs to a soon-to-harvest crop. An available-now or
+      // not-available listing must not carry the date over, otherwise saving
+      // would keep re-attaching it.
+      _harvestDate = _status == AvailabilityStatus.soonToHarvest
+          ? DateTime.tryParse(existing.harvestDate ?? '')
+          : null;
       _editPrimaryId = _baselinePrimaryId;
     } else if (!widget.isFirstCrop) {
       _loadFarms();
@@ -181,8 +186,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
       // Auto-select the first farm (getFarms() sorts APPROVED first, so this
       // is the operational farm under the one-farm rule) but keep every farm
       // visible/selectable in the UI.
-      _selectedFarmId ??=
-          farms.isNotEmpty ? farms.first['FRM_ID']?.toString() : null;
+      _selectedFarmId ??= farms.isNotEmpty
+          ? farms.first['FRM_ID']?.toString()
+          : null;
     });
   }
 
@@ -321,9 +327,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   Future<void> _pickHarvestDate() async {
     final now = DateTime.now();
+    // Clamp the seed date: a stored harvest date that is already in the past
+    // would be outside the picker's range and trip its assertion.
+    final initial = (_harvestDate != null && _harvestDate!.isAfter(now))
+        ? _harvestDate!
+        : now;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _harvestDate ?? now,
+      initialDate: initial,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365 * 2)),
     );
@@ -347,13 +358,22 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
     final farmId = _farmIdForSubmit;
     if (farmId.isEmpty) {
-      setState(() => _submitError = widget.isFirstCrop
-          ? 'Farm not found. Please complete the farm setup first.'
-          : 'Please select a farm.');
+      setState(
+        () => _submitError = widget.isFirstCrop
+            ? 'Farm not found. Please complete the farm setup first.'
+            : 'Please select a farm.',
+      );
       return;
     }
     if (_selectedCategoryIndex < 0 || _categories.isEmpty) {
       setState(() => _submitError = 'Please select a crop category.');
+      return;
+    }
+    if (_status == AvailabilityStatus.soonToHarvest && _harvestDate == null) {
+      setState(
+        () => _submitError =
+            'Please pick a harvest date for "Soon to Harvest".',
+      );
       return;
     }
     final category = _categories[_selectedCategoryIndex];
@@ -436,13 +456,20 @@ class _AddCropScreenState extends State<AddCropScreen> {
   bool get _hasUnsavedChanges {
     final existing = widget.existingListing;
     if (existing != null) {
+      final baselineStatus = _statusFromBackend(existing.status);
       final dateStr = _harvestDate != null ? _dateOnly(_harvestDate!) : null;
       final baseline = existing.harvestDate;
-      final baselineDateStr = (baseline == null || baseline.length < 10)
-          ? null
-          : baseline.substring(0, 10);
+      // The stored date only counts as a baseline while the listing was soon
+      // to harvest; for any other status it is treated as absent, so opening
+      // such a listing is not falsely reported as already having changes.
+      final baselineDateStr =
+          baselineStatus == AvailabilityStatus.soonToHarvest &&
+              baseline != null &&
+              baseline.length >= 10
+          ? baseline.substring(0, 10)
+          : null;
       return _cropLabelCtrl.text.trim() != (existing.cropIcon ?? '') ||
-          _status != _statusFromBackend(existing.status) ||
+          _status != baselineStatus ||
           dateStr != baselineDateStr ||
           _newPhotos.isNotEmpty ||
           _descCtrl.text.trim() != (existing.description ?? '') ||
@@ -499,6 +526,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
       setState(() => _submitError = 'Please select a crop category.');
       return;
     }
+    final soon = _status == AvailabilityStatus.soonToHarvest;
+    if (soon && _harvestDate == null) {
+      setState(
+        () => _submitError =
+            'Please pick a harvest date for "Soon to Harvest".',
+      );
+      return;
+    }
     final category = _categories[_selectedCategoryIndex];
     final label = _cropLabelCtrl.text.trim();
 
@@ -513,8 +548,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
         listingId: existing.id,
         categoryId: category.id,
         cropIcon: label.isEmpty ? null : label,
-        harvestDate:
-            _harvestDate != null ? _dateOnly(_harvestDate!) : null,
+        // Only a soon-to-harvest crop carries a date; any other status sends
+        // an empty value so the server clears whatever date was stored.
+        harvestDate: soon ? _dateOnly(_harvestDate!) : '',
         status: _status.backendValue,
         description: _descCtrl.text,
       );
@@ -563,8 +599,18 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   static String _formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
@@ -629,8 +675,8 @@ class _AddCropScreenState extends State<AddCropScreen> {
               subtitle: _isEditing
                   ? 'Update crop details and availability'
                   : (widget.isFirstCrop
-                      ? 'What are you selling this harvest?'
-                      : 'Pick farm, crop, and availability'),
+                        ? 'What are you selling this harvest?'
+                        : 'Pick farm, crop, and availability'),
               onBack: _maybePop,
             ),
             Expanded(
@@ -660,7 +706,8 @@ class _AddCropScreenState extends State<AddCropScreen> {
                           subtitle: farm['FRM_BARANGAY']?.toString() ?? '',
                           selected: _selectedFarmId == farm['FRM_ID'],
                           onTap: () => setState(
-                              () => _selectedFarmId = farm['FRM_ID']?.toString()),
+                            () => _selectedFarmId = farm['FRM_ID']?.toString(),
+                          ),
                         ),
                     const SizedBox(height: 8),
                   ],
@@ -673,7 +720,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   else if (_categoriesError != null)
                     Text(
                       _categoriesError!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
                     )
                   else if (_categories.isEmpty)
                     const Text(
@@ -734,53 +784,69 @@ class _AddCropScreenState extends State<AddCropScreen> {
                     title: 'Available Now',
                     subtitle: 'Ready for buyers to contact you',
                     selected: _status == AvailabilityStatus.availableNow,
-                    onTap: () =>
-                        setState(() => _status = AvailabilityStatus.availableNow),
+                    onTap: () => setState(() {
+                      _status = AvailabilityStatus.availableNow;
+                      // A date only makes sense while soon to harvest, so it
+                      // cannot be left attached to an available-now crop.
+                      _harvestDate = null;
+                    }),
                   ),
                   SelectableOptionTile(
                     icon: Icons.schedule,
                     title: 'Soon to Harvest',
-                    subtitle: "Let buyers know it's coming",
+                    subtitle:
+                        _status == AvailabilityStatus.soonToHarvest &&
+                            _harvestDate != null
+                        ? 'Ready around ${_formatDate(_harvestDate!)}'
+                        : "Let buyers know it's coming",
                     selected: _status == AvailabilityStatus.soonToHarvest,
-                    onTap: () =>
-                        setState(() => _status = AvailabilityStatus.soonToHarvest),
+                    onTap: () async {
+                      final alreadySelected =
+                          _status == AvailabilityStatus.soonToHarvest;
+                      setState(
+                        () => _status = AvailabilityStatus.soonToHarvest,
+                      );
+                      // Always (re)pick in add mode, where this tile is the only
+                      // date control. In edit mode the section below handles a
+                      // change, so the picker only opens on first selection.
+                      if (!_isEditing || !alreadySelected || _harvestDate == null) {
+                        await _pickHarvestDate();
+                      }
+                    },
                   ),
-                  SelectableOptionTile(
-                    icon: Icons.bedtime_outlined,
-                    title: 'Not Available',
-                    subtitle: 'Hidden from marketplace',
-                    selected: _status == AvailabilityStatus.notAvailable,
-                    onTap: () =>
-                        setState(() => _status = AvailabilityStatus.notAvailable),
-                  ),
-                  const SizedBox(height: 18),
-                  const FieldLabel(
-                    'HARVEST DATE',
-                    badge: '(optional)',
-                    badgeColor: Colors.black38,
-                  ),
-                  SelectableOptionTile(
-                    icon: Icons.calendar_today_outlined,
-                    title: _harvestDate != null
-                        ? _formatDate(_harvestDate!)
-                        : 'Pick a date',
-                    subtitle: _harvestDate != null
-                        ? 'Tap to change the date'
-                        : 'When will the crop be ready?',
-                    selected: _harvestDate != null,
-                    onTap: _pickHarvestDate,
-                  ),
-                  if (_harvestDate != null)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => setState(() => _harvestDate = null),
-                        child: const Text(
-                          'Clear date',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
+                  // "Not Available" is only offered while editing: a brand new
+                  // crop is added either available or soon to harvest.
+                  if (_isEditing)
+                    SelectableOptionTile(
+                      icon: Icons.bedtime_outlined,
+                      title: 'Not Available',
+                      subtitle: 'Hidden from marketplace',
+                      selected: _status == AvailabilityStatus.notAvailable,
+                      onTap: () => setState(() {
+                        _status = AvailabilityStatus.notAvailable;
+                        _harvestDate = null;
+                      }),
                     ),
+                  // The dedicated date control exists only in edit mode, and
+                  // only while soon to harvest — it can never set a date on an
+                  // available-now crop. In add mode the date is set by tapping
+                  // "Soon to Harvest" above.
+                  if (_isEditing &&
+                      _status == AvailabilityStatus.soonToHarvest) ...[
+                    const SizedBox(height: 18),
+                    const FieldLabel('HARVEST DATE'),
+                    SelectableOptionTile(
+                      icon: Icons.calendar_today_outlined,
+                      title: _harvestDate != null
+                          ? _formatDate(_harvestDate!)
+                          : 'Pick a date',
+                      subtitle: _harvestDate != null
+                          ? 'Tap to change the date'
+                          : 'When will the crop be ready?',
+                      selected: _harvestDate != null,
+                      onTap: _pickHarvestDate,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   const FieldLabel(
                     'CROP PHOTO',
@@ -797,14 +863,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         // backend orders photos (oldest first) so the "marked"
                         // index maths on save line up.
                         if (_isEditing)
-                          for (final photo in widget.existingListing!.photos) ...[
+                          for (final photo
+                              in widget.existingListing!.photos) ...[
                             _ExistingPhotoTile(
                               key: ObjectKey(photo.id),
                               url: photo.url,
                               primary: _editPrimaryId == photo.id,
                               busy: _primaryBusy && _editPrimaryId == photo.id,
-                              onPrimaryTap: () =>
-                                  _setExistingPrimary(photo.id),
+                              onPrimaryTap: () => _setExistingPrimary(photo.id),
                             ),
                             const SizedBox(width: 12),
                           ],
@@ -828,10 +894,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   const SizedBox(height: 6),
                   Text(
                     _photoCaption,
-                    style: const TextStyle(
-                      color: Colors.black45,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.black45, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
                   if (_submitError != null) ...[
@@ -846,8 +909,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   WizardNextButton(
                     label: _isSubmitting
                         ? 'Saving...'
-                        : (_isEditing ? 'Save Changes' : (
-                            widget.isFirstCrop ? 'Add Crop & Go Live' : 'Add Crop')),
+                        : (_isEditing
+                              ? 'Save Changes'
+                              : (widget.isFirstCrop
+                                    ? 'Add Crop & Go Live'
+                                    : 'Add Crop')),
                     icon: Icons.check,
                     onPressed: _isSubmitting ? () {} : _submit,
                   ),
@@ -918,8 +984,11 @@ class _ExistingPhotoTile extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stack) => Container(
                   color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey, size: 24),
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.grey,
+                    size: 24,
+                  ),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
@@ -937,11 +1006,7 @@ class _ExistingPhotoTile extends StatelessWidget {
               ),
               _photoBorder(primary: primary),
               if (primary)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  child: _PrimaryBadge(),
-                ),
+                const Positioned(top: 0, left: 0, child: _PrimaryBadge()),
               if (busy)
                 Positioned.fill(
                   child: ColoredBox(
@@ -1013,7 +1078,11 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
                 future: _bytes,
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
-                    return Image.memory(snapshot.data!, cacheWidth: 200, fit: BoxFit.cover);
+                    return Image.memory(
+                      snapshot.data!,
+                      cacheWidth: 200,
+                      fit: BoxFit.cover,
+                    );
                   }
                   if (snapshot.hasError) {
                     return Container(
@@ -1039,11 +1108,7 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
               ),
               _photoBorder(primary: widget.primary),
               if (widget.primary)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  child: _PrimaryBadge(),
-                ),
+                const Positioned(top: 0, left: 0, child: _PrimaryBadge()),
               Positioned(
                 top: 0,
                 right: 0,
@@ -1057,7 +1122,11 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
                       ),
                     ),
                     padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.close, size: 16, color: Colors.white),
+                    child: const Icon(
+                      Icons.close,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),

@@ -405,7 +405,7 @@ class FarmerListingController extends Controller
             'category_id' => ['nullable', 'string', 'exists:crop_category,CAT_ID'],
             'crop_icon' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
-            'harvest_date' => ['nullable', 'date'],
+            'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
             'status' => ['nullable', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
         ]);
 

@@ -94,6 +94,23 @@ enum NotificationTarget { listing, profile, myFarm, none }
         target: NotificationTarget.myFarm,
       );
 
+    // A rejected farm has nowhere to open: it is hidden from My Farm and the
+    // map, so the row renders the reason and marks itself read rather than
+    // dead-ending a tap on a screen that cannot load it (same reasoning as
+    // LISTING_REMOVED).
+    case 'FARM_REJECTED':
+      return (
+        icon: Icons.dangerous_outlined,
+        color: AppColors.errorTerracotta,
+        target: NotificationTarget.none,
+      );
+    case 'LISTING_AVAILABLE':
+      return (
+        icon: Icons.check_circle_outline_rounded,
+        color: AppColors.primaryGreen,
+        target: NotificationTarget.listing,
+      );
+
     // Whitelist gate. Both are about the person being allowed to sell, and both
     // point at the profile, which is where seller mode is switched on — the
     // backend deliberately does not flip those flags for them (see

@@ -76,6 +76,8 @@ class UserNotification extends Model
         'SETUP_COMPLETE',
         'WHITELIST_APPROVED',
         'SELLER_REACTIVATED',
+        'FARM_REJECTED',
+        'LISTING_AVAILABLE',
     ];
 
     public function user()

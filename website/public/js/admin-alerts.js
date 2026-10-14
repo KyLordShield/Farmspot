@@ -163,26 +163,44 @@
 
     function wireButtonConfirms() {
         document.addEventListener('click', function (event) {
-            var button = event.target.closest('[data-confirm-title], [data-confirm-text]');
-            if (!button) {
+            // Only a click on the control that actually submits the request may
+            // raise the confirm dialog. The attributes live on the enclosing
+            // form (seller-request decision forms, report action forms, logout),
+            // so a plain closest() search would treat a click inside the reject
+            // reason textarea or the report note field as a confirmation click
+            // and pop the dialog instead of letting the admin type. Resolving
+            // the submit control first means a field click finds no button and
+            // falls through to normal focus behaviour.
+            var activator = event.target.closest(
+                'button[type="submit"], button:not([type]), input[type="submit"], input[type="image"]'
+            );
+            if (!activator) {
                 return;
             }
-            var form = button.closest('form');
+
+            var form = activator.closest('form');
             if (!form) {
                 return;
             }
             if (form.getAttribute('data-confirm-handled') === '1') {
                 return;
             }
-            var title = button.getAttribute('data-confirm-title');
-            var text = button.getAttribute('data-confirm-text');
+            // The attributes may sit on the button or on the form; in both
+            // layouts the click came from the submit control, so the button's
+            // own wording wins and the form's is the fallback.
+            var title = activator.getAttribute('data-confirm-title')
+                || form.getAttribute('data-confirm-title');
+            var text = activator.getAttribute('data-confirm-text')
+                || form.getAttribute('data-confirm-text');
             if (!title && !text) {
                 return;
             }
             event.preventDefault();
             event.stopPropagation();
 
-            var tone = (button.getAttribute('data-confirm-tone') || form.getAttribute('data-confirm-tone') || 'primary');
+            var tone = (activator.getAttribute('data-confirm-tone')
+                || form.getAttribute('data-confirm-tone')
+                || 'primary');
             ask(title || 'Are you sure?', text, tone).then(function (confirmed) {
                 if (confirmed) {
                     proceedWithForm(form);

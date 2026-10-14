@@ -41,7 +41,7 @@ class ListingCreateController extends Controller
             'crop_icon' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
-            'harvest_date' => ['nullable', 'date'],
+            'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
             'photo' => ['nullable', 'image', 'max:5120'],
         ]);
 

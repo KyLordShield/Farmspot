@@ -109,7 +109,9 @@ class SellerRequestController extends Controller
     /**
      * Reject a pending seller request: flips FRM_STATUS to REJECTED without
      * touching the owner's seller flags (a rejected user stays a plain buyer).
-     * Accepts an optional reason, but there is no column to persist it for now.
+     * The optional reason is not persisted on the farm (no reason column yet),
+     * but it is carried inside the rejection notification so the seller reads
+     * an actual explanation rather than a bare status change.
      */
     public function reject($farmId, Request $request)
     {
@@ -124,8 +126,7 @@ class SellerRequestController extends Controller
             ], 404);
         }
 
-        // Optional reason accepted but not persisted (no reason column yet).
-        $request->validate([
+        $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -138,6 +139,31 @@ class SellerRequestController extends Controller
             return response()->json([
                 'message' => 'Failed to reject seller request.',
             ], 500);
+        }
+
+        $user = $farm->farmer->buyer->user ?? null;
+
+        // Mirror of the approve path (and of the web portal's reject below):
+        // the seller gets an inbox row plus a best-effort push telling them
+        // the farm was rejected and, when supplied, why. The status flip has
+        // already committed, so losing the notification must not unwind the
+        // rejection — the seller being told late is better than the admin's
+        // decision appearing to have been ignored.
+        if ($user) {
+            try {
+                app(NotificationService::class)->notifyFarmRejected(
+                    $user->USR_ID,
+                    $farm->FRM_ID,
+                    $farm->FRM_NAME,
+                    $validated['reason'] ?? null,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('[notifications] farm-rejected notification failed', [
+                    'usr_id' => $user->USR_ID,
+                    'farm_id' => $farm->FRM_ID,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([

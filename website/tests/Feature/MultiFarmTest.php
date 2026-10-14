@@ -567,4 +567,125 @@ class MultiFarmTest extends TestCase
 
         $this->assertSame('PENDING_REVIEW', $this->farmNamed('First Farm')->FRM_STATUS);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Three-farm cap
+    |--------------------------------------------------------------------------
+    |
+    | A seller may own up to three farms per account. The cap is enforced on
+    | the server (the API is the authority, not the button) and counts only
+    | APPROVED + PENDING_REVIEW farms. Archived and rejected farms free up a
+    | slot: neither a "Remove a farm" nor an admin rejection may permanently
+    | consume one of the three, and a rejected farm is invisible in My Farm and
+    | cannot be removed, so it must never count.
+    |
+    */
+
+    private function submitFarmNamed(string $name): void
+    {
+        $this->postFarm([
+            'name' => $name,
+            'barangay' => 'Barangay ' . ucfirst(strtolower($name)),
+            'latitude' => 10.5,
+            'longitude' => 121.5,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertCreated();
+    }
+
+    public function test_a_seller_cannot_submit_a_fourth_farm(): void
+    {
+        $this->postFarm($this->firstFarmPayload())->assertCreated();
+        $this->submitFarmNamed('Second Farm');
+        $this->submitFarmNamed('Third Farm');
+
+        $response = $this->postFarm([
+            'name' => 'Fourth Farm',
+            'barangay' => 'Barangay Kwatro',
+            'latitude' => 10.6,
+            'longitude' => 121.6,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertForbidden();
+
+        $this->assertStringContainsString('3 farms', $response->json('message'));
+
+        // Nothing was created: the seller still owns exactly three farms.
+        $this->assertSame(
+            3,
+            Farm::where('FMR_ID', $this->farmerId)
+                ->where('FRM_STATUS', '!=', 'ARCHIVED')
+                ->count()
+        );
+    }
+
+    public function test_an_archived_farm_frees_up_a_slot(): void
+    {
+        $this->postFarm($this->firstFarmPayload())->assertCreated();
+        $this->submitFarmNamed('Second Farm');
+        $thirdId = $this->postFarm([
+            'name' => 'Third Farm',
+            'barangay' => 'Barangay Tres',
+            'latitude' => 10.5,
+            'longitude' => 121.5,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->json('farm_id');
+
+        // At the cap, so a new farm is refused...
+        $this->postFarm([
+            'name' => 'Replacement Farm',
+            'barangay' => 'Barangay Kapalit',
+            'latitude' => 10.6,
+            'longitude' => 121.6,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertForbidden();
+
+        // ...until one of the three is removed. Archiving excludes it from the
+        // count, so the slot comes straight back.
+        $this->deleteFarm($thirdId)->assertOk();
+
+        $this->postFarm([
+            'name' => 'Replacement Farm',
+            'barangay' => 'Barangay Kapalit',
+            'latitude' => 10.6,
+            'longitude' => 121.6,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertCreated();
+    }
+
+    public function test_a_rejected_farm_frees_up_a_slot(): void
+    {
+        $this->postFarm($this->firstFarmPayload())->assertCreated();
+        $this->submitFarmNamed('Second Farm');
+        $thirdId = $this->postFarm([
+            'name' => 'Third Farm',
+            'barangay' => 'Barangay Tres',
+            'latitude' => 10.5,
+            'longitude' => 121.5,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->json('farm_id');
+
+        // At the cap, a new farm is refused...
+        $this->postFarm([
+            'name' => 'Replacement Farm',
+            'barangay' => 'Barangay Kapalit',
+            'latitude' => 10.6,
+            'longitude' => 121.6,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertForbidden();
+
+        // ...but an admin rejection frees the slot on its own. The seller has
+        // no way to remove a rejected farm (it is invisible in My Farm), so it
+        // must never consume one of the three slots.
+        $farm = Farm::find($thirdId);
+        $farm->FRM_STATUS = 'REJECTED';
+        $farm->save();
+
+        $this->postFarm([
+            'name' => 'Replacement Farm',
+            'barangay' => 'Barangay Kapalit',
+            'latitude' => 10.6,
+            'longitude' => 121.6,
+            'photos' => [UploadedFile::fake()->create('upload.jpg', 10, 'image/jpeg')],
+        ])->assertCreated();
+    }
 }

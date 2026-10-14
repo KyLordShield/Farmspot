@@ -25,3 +25,6 @@ Schedule::command('listings:notify-expiring')->hourly();
 // de-duplicated per listing per harvest date, so running it hourly is free -
 // the second and third runs find nothing new.
 Schedule::command('listings:remind-harvest')->hourly();
+
+// Flip SOON_TO_HARVEST listings whose harvest date has arrived to AVAILABLE_NOW.
+Schedule::command('listings:harvest')->hourly();

@@ -171,15 +171,25 @@ class ListingOwnerState {
   const ListingOwnerState({required this.listing, this.hiddenByAdmin = false});
 
   /// LST_EXPIRY_DATE in the past, which is what `listings:expire` acts on.
+  ///
+  /// Only a listing that is actually on sale (AVAILABLE_NOW) counts. A seller
+  /// who has set the crop to SOON_TO_HARVEST or NOT_AVAILABLE has moved it out
+  /// of the live state themselves, so a "3 days left" countdown — or a red
+  /// Expired chip and a Renew button — would describe a rule they are no longer
+  /// inside and just reads as the status change having failed.
   bool get isExpired {
+    if (listing.status != 'AVAILABLE_NOW') return false;
     final raw = listing.expiryDate;
     if (raw == null || raw.isEmpty) return false;
     final expiry = DateTime.tryParse(raw);
     return expiry != null && expiry.isBefore(DateTime.now());
   }
 
-  /// True while the listing is still inside its 3-day window.
-  bool get hasExpiryCountdown => !isExpired && listing.expiryDate != null;
+  /// True while the listing is on sale and still inside its 3-day window.
+  bool get hasExpiryCountdown =>
+      listing.status == 'AVAILABLE_NOW' &&
+      !isExpired &&
+      listing.expiryDate != null;
 
   /// "Expires in 2 days", "Expires today", or null when the date is missing or
   /// already past — an expired listing shows the red Expired chip instead, and a

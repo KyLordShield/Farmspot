@@ -419,6 +419,10 @@ class ListingService {
   /// JSON-only — only the provided fields are sent, an absent one is left
   /// untouched on the server. Returns the updated Listing on success, or
   /// throws an Exception carrying a user-friendly message.
+  ///
+  /// [harvestDate] is tri-state: a date string sets it, an empty string clears
+  /// it on the server (the backend nulls a blank field), and null leaves it
+  /// untouched.
   static Future<Listing> updateListing({
     required String listingId,
     String? categoryId,
@@ -443,8 +447,7 @@ class ListingService {
             'category_id': categoryId.trim(),
           if (cropIcon != null && cropIcon.trim().isNotEmpty)
             'crop_icon': cropIcon.trim(),
-          if (harvestDate != null && harvestDate.trim().isNotEmpty)
-            'harvest_date': harvestDate.trim(),
+          if (harvestDate != null) 'harvest_date': harvestDate.trim(),
           if (status != null && status.trim().isNotEmpty)
             'status': status.trim(),
           if (description != null) 'description': description.trim(),

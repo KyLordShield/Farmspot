@@ -74,7 +74,9 @@ class NotifyExpiringListings extends Command
                 continue;
             }
 
-            $crop = $cropNames[$listing->CAT_ID] ?? 'produce';
+            // Name the actual crop so the farmer knows which listing to update;
+            // the category is only a fallback for a blank crop name.
+            $crop = $listing->LST_CROP_ICON ?: ($cropNames[$listing->CAT_ID] ?? 'produce');
 
             // Stored per listing: the inbox row is the record of which crop was
             // actually warned about.

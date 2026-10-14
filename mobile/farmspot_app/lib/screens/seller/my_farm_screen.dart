@@ -571,6 +571,31 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       ),
     );
     if (picked == null || picked == current || !mounted) return;
+    if (picked == 'SOON_TO_HARVEST') {
+      final now = DateTime.now();
+      final harvestDate = await showDatePicker(
+        context: context,
+        initialDate: now,
+        firstDate: now,
+        lastDate: now.add(const Duration(days: 365 * 2)),
+        helpText: 'When will this crop be ready?',
+        confirmText: 'Set',
+        cancelText: 'Cancel',
+      );
+      if (harvestDate == null) {
+        return;
+      }
+      final dateStr =
+          '${harvestDate.year.toString().padLeft(4, '0')}-'
+          '${harvestDate.month.toString().padLeft(2, '0')}-'
+          '${harvestDate.day.toString().padLeft(2, '0')}';
+      await _changeStatusWithHarvest(listing, picked, dateStr);
+      return;
+    }
+    if (picked == 'AVAILABLE_NOW' || picked == 'NOT_AVAILABLE') {
+      await _changeStatus(listing, picked);
+      return;
+    }
     await _changeStatus(listing, picked);
   }
 
@@ -599,10 +624,22 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   Future<void> _changeStatus(Listing listing, String status) async {
     setState(() => _updatingId = listing.id);
     try {
-      await ListingService.updateListingStatus(
-        listingId: listing.id,
-        status: status,
-      );
+      if (status == 'SOON_TO_HARVEST') {
+        // Status-only: the endpoint requires a soon-to-harvest listing to keep
+        // its existing harvest date, so this path must not touch it.
+        await ListingService.updateListingStatus(
+          listingId: listing.id,
+          status: status,
+        );
+      } else {
+        // Available Now / Not Available carry no date, so clear any stored one
+        // rather than leaving a stale harvest date on the listing.
+        await ListingService.updateListing(
+          listingId: listing.id,
+          status: status,
+          harvestDate: '',
+        );
+      }
       if (!mounted) return;
       setState(() => _updatingId = null);
       // Refetch rather than patching the row in place. Every status update also
@@ -615,6 +652,30 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       if (!mounted) return;
       setState(() => _updatingId = null);
       // Keep the previous state; just tell the user it failed.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+    }
+  }
+
+  Future<void> _changeStatusWithHarvest(
+    Listing listing,
+    String status,
+    String harvestDate,
+  ) async {
+    setState(() => _updatingId = listing.id);
+    try {
+      await ListingService.updateListing(
+        listingId: listing.id,
+        status: status,
+        harvestDate: harvestDate,
+      );
+      if (!mounted) return;
+      setState(() => _updatingId = null);
+      await _loadListings(reset: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _updatingId = null);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
@@ -1026,27 +1087,33 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          // A seller can run more than one farm, so there is always a way to
-          // start another from the screen that lists them.
-          TextButton.icon(
-            onPressed: _addFarm,
-            icon: const Icon(
-              Icons.add_home_work,
-              size: 16,
-              color: Colors.white,
-            ),
-            label: const Text(
-              'Add Farm',
-              style: TextStyle(
+          // A seller can run up to three farms. The backend hard-caps the
+          // fourth, so at the cap this button is hidden rather than shown
+          // disabled — the screen never invites an action that cannot work
+          // (same pattern as the single-farm remove action below).
+          if (!_farmsLoading && _farms.length < 3)
+            TextButton.icon(
+              onPressed: _addFarm,
+              icon: const Icon(
+                Icons.add_home_work,
+                size: 16,
                 color: Colors.white,
-                fontWeight: FontWeight.w600,
+              ),
+              label: const Text(
+                'Add Farm',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
               ),
             ),
-            style: TextButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.15),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            ),
-          ),
         ],
       ),
     );

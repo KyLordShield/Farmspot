@@ -830,6 +830,37 @@ void main() {
     expect(find.text('Renew'), findsNothing);
   });
 
+  testWidgets('a listing off sale shows no expiry countdown', (tester) async {
+    // Same live window as the test above, but the seller has moved the crop to
+    // Soon to Harvest / Not Available. The 3-day countdown belongs to a listing
+    // that is actually on sale, so neither row may show it.
+    final liveExpiry = DateTime.now()
+        .add(const Duration(days: 2))
+        .toIso8601String();
+
+    gateway.pages[1] = aPage(
+      listings: [
+        aListing(
+          'LST001',
+          'Tomato',
+          status: 'SOON_TO_HARVEST',
+          expiryDate: liveExpiry,
+        ),
+        aListing(
+          'LST002',
+          'Cabbage',
+          status: 'NOT_AVAILABLE',
+          expiryDate: liveExpiry,
+        ),
+      ],
+    );
+    await pumpScreen(tester);
+
+    await reveal(tester, find.text('Tomato'));
+
+    expect(find.text('Expires in 2 days'), findsNothing);
+  });
+
   testWidgets('each LST_STATUS keeps its own label and colour source', (
     tester,
   ) async {

@@ -123,7 +123,9 @@ protected $signature = 'listings:remind-harvest';
                 continue;
             }
 
-            $crop = $cropNames[$listing->CAT_ID] ?? 'produce';
+            // Name the actual crop so the farmer knows which one is due; the
+            // category is only a fallback for a blank crop name.
+            $crop = $listing->LST_CROP_ICON ?: ($cropNames[$listing->CAT_ID] ?? 'produce');
 
             $when = $harvestOn === $todayKey ? 'today' : 'tomorrow';
 
