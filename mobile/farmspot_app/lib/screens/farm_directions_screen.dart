@@ -12,10 +12,12 @@ import '../models/farm_profile.dart';
 import '../models/listing.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
+import '../services/message_service.dart';
 import '../services/routing_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/map_tile_layer.dart';
+import 'in_app_messages_screen.dart';
 
 /// Cebu City — the buyer position used whenever GPS is unavailable or denied.
 /// Never throws: any geolocator failure falls back to this center so routing
@@ -86,6 +88,11 @@ class FarmDirectionsScreen extends StatefulWidget {
   final Future<void> Function({required String number, required String method})?
   contactAction;
 
+  /// In-app messaging for the arrived screen's "Message" button, so it opens the
+  /// same real buyer <-> seller thread as the product detail screen. Injectable
+  /// for tests; defaults to the real backend service.
+  final MessagesGateway? messagesGateway;
+
   /// When true, "Start Navigation" feeds fake positions along the route
   /// geometry instead of real GPS — useful for quick visual demos on the
   /// phone without walking around. Only shown in debug builds.
@@ -104,6 +111,7 @@ class FarmDirectionsScreen extends StatefulWidget {
     this.routing,
     this.contactLogger,
     this.contactAction,
+    this.messagesGateway,
     this.simulate = false,
   });
 
@@ -128,6 +136,10 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   String _farmName = '';
   FarmProfileData? _profile;
   Listing? _listing;
+
+  /// True while the arrived screen is opening the seller conversation, so the
+  /// Message button can show progress instead of firing twice.
+  bool _startingThread = false;
 
   RoutePlan? _footPlan;
   RoutePlan? _carPlan;
@@ -578,8 +590,28 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     return 'Turn in ${_formatDistance(_distance(_live, position))}';
   }
 
-  CropListing? get _pickup {
-    if (_listing != null) return _listing!.toCropListing();
+  /// The crop the buyer is picking up.
+  ///
+  /// Only present when navigation started from a specific listing (the caller
+  /// passed [FarmDirectionsScreen.listingId]). Navigating straight from the map
+  /// or a farm profile is not tied to any crop, so nothing is shown as a pickup
+  /// rather than guessing at the farm's first available listing.
+  CropListing? get _pickup => _listing?.toCropListing();
+
+  bool get _fromListing => _listing != null;
+
+  String get _pickupCrop => _pickup?.cropName ?? _farmName;
+
+  String get _pickupStatusLabel =>
+      _statusLabel(_pickup?.status ?? 'NOT_AVAILABLE');
+
+  /// The farm's own listing used as the contact fallback.
+  ///
+  /// Reaching the farmer is useful even on a map-first trip with no specific
+  /// pickup, so the CONTACT FARMERS block falls back to the farm profile's
+  /// listings. This never feeds the pickup card — that still requires an
+  /// explicit [FarmDirectionsScreen.listingId].
+  CropListing? get _fallbackContactListing {
     for (final listing in _profile?.listings ?? const <CropListing>[]) {
       if (listing.status == 'AVAILABLE_NOW') return listing;
     }
@@ -587,26 +619,29 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     return listings.isNotEmpty ? listings.first : null;
   }
 
-  String get _pickupCrop => _pickup?.cropName ?? _farmName;
+  static bool _isUsableNumber(String number) =>
+      number.trim().isNotEmpty && number != 'N/A';
 
-  String get _pickupStatusLabel =>
-      _statusLabel(_pickup?.status ?? 'NOT_AVAILABLE');
-
-  String get _farmerName =>
-      _listing?.farmerName ??
-      (_pickup?.farmName.isNotEmpty ?? false ? _pickup!.farmName : _farmName);
-
-  String get _contactNumber {
-    final number = _pickup?.contactNumber ?? '';
-    if (number.trim().isEmpty || number == 'N/A') return '';
-    return number;
+  String get _farmerName {
+    final name = _listing?.farmerName ?? '';
+    if (name.trim().isNotEmpty) return name;
+    final fallbackFarm = _fallbackContactListing?.farmName ?? '';
+    return fallbackFarm.trim().isNotEmpty ? fallbackFarm : _farmName;
   }
 
-  String? get _contactListingId =>
-      _pickup?.listingId?.isNotEmpty ?? false ? _pickup!.listingId : null;
+  String get _contactNumber {
+    final fromListing = _listing?.farmerMobileNumber ?? '';
+    if (_isUsableNumber(fromListing)) return fromListing;
+    final fallback = _fallbackContactListing?.contactNumber ?? '';
+    return _isUsableNumber(fallback) ? fallback : '';
+  }
 
-  String get _subtitle =>
-      '$_farmName · ${_profile?.barangay ?? 'farm location'}';
+  String? get _contactListingId {
+    final id = _listing?.id;
+    if (id != null && id.isNotEmpty) return id;
+    final fallbackId = _fallbackContactListing?.listingId;
+    return (fallbackId != null && fallbackId.isNotEmpty) ? fallbackId : null;
+  }
 
   Future<void> _launchContact(String method) async {
     final number = _contactNumber;
@@ -626,6 +661,49 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       unawaited(_contactLogger(listingId: listingId, method: method));
     }
     await _contactAction(number: number, method: method);
+  }
+
+  /// Opens the real in-app conversation with the seller, the same thread the
+  /// product detail screen's "Message Seller" opens.
+  Future<void> _openMessages() async {
+    final listingId = _contactListingId;
+    if (listingId == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Messaging is only available for a specific crop.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+    setState(() => _startingThread = true);
+    try {
+      final gateway = widget.messagesGateway ?? MessageService.instance;
+      final conversation = await gateway.startConversation(listingId);
+      if (!mounted) return;
+      setState(() => _startingThread = false);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => InAppMessagesScreen(
+            conversation: conversation,
+            gateway: widget.messagesGateway,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _startingThread = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
   }
 
   @override
@@ -1071,152 +1149,30 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   Widget _buildArrived() {
     final canContact = _contactNumber.isNotEmpty;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.searchBackground,
       body: SafeArea(
         child: Column(
           children: [
-            Container(
-              width: double.infinity,
-              color: AppColors.primaryGreen,
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: const Column(
-                children: [
-                  Icon(Icons.celebration, color: Colors.white, size: 44),
-                  SizedBox(height: 10),
-                  Text(
-                    "You've Arrived!",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                _subtitle,
-                style: const TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-            ),
+            _arrivedHeader(),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                 children: [
-                  const Text(
-                    "YOU'RE HERE TO PICKUP",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: Colors.green.shade50,
-                          child: const Icon(Icons.eco, color: Colors.green),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _pickupCrop,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                _pickupStatusLabel,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'CONTACT FARMERS',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+                  if (_fromListing) ...[
+                    _sectionLabel("YOU'RE HERE TO PICK UP"),
+                    const SizedBox(height: 8),
+                    _pickupCard(),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    _noPickupCard(),
+                    const SizedBox(height: 24),
+                  ],
+                  _sectionLabel('CONTACT FARMERS'),
                   const SizedBox(height: 8),
                   if (canContact)
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.primaryGreen),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _farmerName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryGreen,
-                                  ),
-                                ),
-                                Text(
-                                  _contactNumber,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _circleIconButton(
-                            icon: Icons.phone,
-                            tooltip: 'Call farmer',
-                            onPressed: () => _launchContact('CALL'),
-                          ),
-                          const SizedBox(width: 8),
-                          _circleIconButton(
-                            icon: Icons.chat_bubble_outline,
-                            tooltip: 'Send SMS',
-                            onPressed: () => _launchContact('SMS'),
-                          ),
-                        ],
-                      ),
-                    )
+                    _contactCard()
                   else
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'No contact number is linked to this farm yet.',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                    ),
+                    _emptyContactCard(),
                 ],
               ),
             ),
@@ -1224,16 +1180,20 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
               padding: const EdgeInsets.all(20),
               child: SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
+                child: FilledButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.explore_outlined),
                   label: const Text('Back to Browse'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black87,
-                    side: BorderSide(color: Colors.grey.shade300),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
@@ -1245,21 +1205,337 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     );
   }
 
-  Widget _circleIconButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.primaryGreen,
-          child: Icon(icon, color: Colors.white, size: 16),
+  Widget _arrivedHeader() {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryGreen, AppColors.darkGreen],
         ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 30),
+      child: Column(
+        children: [
+          Container(
+            width: 78,
+            height: 78,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle,
+              color: Colors.white,
+              size: 48,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            "You've Arrived!",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _farmName,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.place_outlined,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.75),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _profile?.barangay ?? 'farm location',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+        letterSpacing: 0.6,
+        color: AppColors.mutedGreen,
+      ),
+    );
+  }
+
+  Widget _pickupCard() {
+    final status = _pickup?.status ?? 'NOT_AVAILABLE';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.successSoft, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.successSoft,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _pickupCrop,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _statusChip(status, _pickupStatusLabel),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(String status, String label) {
+    final Color color;
+    final Color fill;
+    switch (status) {
+      case 'AVAILABLE_NOW':
+        color = AppColors.primaryGreen;
+        fill = AppColors.successSoft;
+        break;
+      case 'SOON_TO_HARVEST':
+        color = AppColors.warningAmber;
+        fill = AppColors.warningSoft;
+        break;
+      default:
+        color = AppColors.infoSage;
+        fill = AppColors.infoSoft;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _noPickupCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.infoSoft,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.directions_walk,
+              color: AppColors.infoSage,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Text(
+              'You navigated straight to this farm, so no specific crop is '
+              'selected for pickup.',
+              style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contactCard() {
+    final initial = _farmerName.trim().isEmpty
+        ? 'F'
+        : _farmerName.trim().characters.first.toUpperCase();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.successSoft, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.successSoft,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: AppColors.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _farmerName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _contactNumber,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _launchContact('CALL'),
+                  icon: const Icon(Icons.phone, size: 18),
+                  label: const Text('Call'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryGreen,
+                    side: const BorderSide(color: AppColors.primaryGreen),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _startingThread ? null : _openMessages,
+                  icon: _startingThread
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.chat_bubble_outline, size: 18),
+                  label: Text(_startingThread ? 'Opening...' : 'Message'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyContactCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.phone_disabled, color: Colors.black38, size: 20),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'No contact number is linked to this farm yet.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ),
+        ],
       ),
     );
   }

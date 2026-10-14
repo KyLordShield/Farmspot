@@ -17,6 +17,7 @@ import '../widgets/home_widgets.dart';
 import '../widgets/listing_reviews_section.dart';
 import '../widgets/rating_stars.dart';
 import '../widgets/report_sheet.dart';
+import 'farm_directions_screen.dart';
 import 'farm_profile_screen.dart';
 import 'in_app_messages_screen.dart';
 
@@ -243,6 +244,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  /// Starts turn-by-turn navigation to this listing's farm.
+  ///
+  /// The listing id is passed through so the arrival screen knows the buyer
+  /// came here for this specific crop and can show it as the pickup. Without a
+  /// farm id there is nowhere to route to, so the action is a no-op.
+  void _openDirections() {
+    final farmId = listing.farmId;
+    if (farmId == null || farmId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FarmDirectionsScreen(
+          farmId: farmId,
+          farmName: listing.farmName,
+          listingId: listing.listingId,
+        ),
+      ),
+    );
+  }
+
   /// Opens the full-screen photo viewer starting at [index].
   void _openViewer(int index) {
     final urls = _photoUrls;
@@ -382,60 +402,96 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: _openFarmProfile,
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            color: AppColors.primaryGreen,
-                            size: 20,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              GestureDetector(
+                                onTap: _openFarmProfile,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.location_on,
+                                      color: AppColors.primaryGreen,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        listing.barangay,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (listing.sitio.trim().isNotEmpty) ...[
+                                      const SizedBox(width: 16),
+                                      Flexible(
+                                        child: Text(
+                                          listing.sitio,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (_distanceResolving)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 26),
+                                  child: SizedBox(
+                                    height: 16,
+                                    child: FarmSpotLoader(size: 16),
+                                  ),
+                                )
+                              else if (_distance != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 26),
+                                  child: Text(
+                                    _distance!,
+                                    style: const TextStyle(
+                                      color: Colors.black45,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              listing.barangay,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                        ),
+                        if ((listing.farmId ?? '').isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: _openDirections,
+                            icon: const Icon(Icons.directions, size: 18),
+                            label: const Text('Directions'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primaryGreen,
+                              side: const BorderSide(
+                                color: AppColors.primaryGreen,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          if (listing.sitio.trim().isNotEmpty)
-                            Flexible(
-                              child: Text(
-                                listing.sitio,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.black54),
-                              ),
-                            ),
                         ],
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    if (_distanceResolving)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 26),
-                        child: SizedBox(
-                          height: 16,
-                          child: FarmSpotLoader(size: 16),
-                        ),
-                      )
-                    else if (_distance != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 26),
-                        child: Text(
-                          _distance!,
-                          style: const TextStyle(
-                            color: Colors.black45,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
                     const SizedBox(height: 16),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -636,4 +636,25 @@ class ListingReviewTest extends TestCase
         $this->assertSame(5.0, (float) $payload['rating_average']);
         $this->assertSame(1, (int) $payload['rating_count']);
     }
+
+    public function test_the_farm_profile_listings_carry_the_farmer_to_contact(): void
+    {
+        $seller = $this->makeListing();
+
+        $response = $this->getJson("/api/farms/{$seller['farm']->FRM_ID}/profile");
+        $response->assertOk();
+
+        $payload = collect($response->json('listings'))
+            ->firstWhere('id', $seller['listing']->LST_ID);
+
+        $this->assertNotNull($payload, 'The farm profile should carry the listing.');
+        // A buyer who navigates to a farm straight from the map still needs a
+        // way to reach the farmer, so the profile listings must carry the same
+        // contact block the buyer feed does.
+        $this->assertSame('React A', $payload['farmer']['name'] ?? null);
+        $this->assertSame(
+            $seller['user']->USR_MOBILE_NUMBER,
+            $payload['farmer']['mobile_number'] ?? null,
+        );
+    }
 }

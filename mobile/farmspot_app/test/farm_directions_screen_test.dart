@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +9,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:farmspot_app/models/conversation.dart';
 import 'package:farmspot_app/models/farm_profile.dart';
 import 'package:farmspot_app/models/listing.dart';
 import 'package:farmspot_app/screens/farm_directions_screen.dart';
+import 'package:farmspot_app/screens/in_app_messages_screen.dart';
+import 'package:farmspot_app/services/message_service.dart';
 import 'package:farmspot_app/services/routing_service.dart';
 import 'package:farmspot_app/widgets/home_widgets.dart';
 
@@ -125,6 +129,57 @@ FarmProfileData _profile({List<CropListing> listings = const []}) {
   );
 }
 
+/// Stand-in messaging backend that records the listing it opened and hands back
+/// a ready-made conversation, so the arrived screen's Message button can be
+/// verified without a server.
+class _FakeMessagesGateway implements MessagesGateway {
+  _FakeMessagesGateway(this.conversation);
+
+  final Conversation conversation;
+  String? lastListingId;
+
+  @override
+  Future<Conversation> startConversation(String listingId) async {
+    lastListingId = listingId;
+    return conversation;
+  }
+
+  @override
+  Future<List<Conversation>> fetchConversations() async => [];
+
+  @override
+  Future<List<ChatMessage>> fetchMessages(String conversationId,
+          {String? after}) async =>
+      [];
+
+  @override
+  Future<ChatMessage> sendMessage(String conversationId, String content,
+          {XFile? image}) async =>
+      throw UnimplementedError();
+}
+
+Conversation _conversation(String listingId) => Conversation.fromJson({
+      'id': 'CNV0001',
+      'listing_id': listingId,
+      'buyer_id': 'BUY0001',
+      'seller_farmer_id': 'FMR0001',
+      'farm_id': 'F1',
+      'last_message': null,
+      'last_message_at': null,
+      'created_at': DateTime.now().toIso8601String(),
+      'unread_count': 0,
+      'my_role': 'BUYER',
+      'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
+      'other_party': {'id': 'USR0002', 'name': 'Juan Dela Cruz', 'photo': null},
+      'listing': {
+        'id': listingId,
+        'crop_icon': 'Cabbage',
+        'image': null,
+        'category': {'id': 'CAT0001', 'name': 'Vegetable'},
+        'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
+      },
+    });
+
 Future<void> _pump(
   WidgetTester tester, {
   required StreamController<LatLng> stream,
@@ -135,6 +190,7 @@ Future<void> _pump(
   contactLogger,
   Future<void> Function({required String number, required String method})?
   contactAction,
+  MessagesGateway? messagesGateway,
   String? listingId,
   LatLng? farmPosition,
   bool passFarmPosition = true,
@@ -156,6 +212,7 @@ Future<void> _pump(
         routing: routing ?? _routing(ferry: ferry),
         contactLogger: contactLogger,
         contactAction: contactAction,
+        messagesGateway: messagesGateway,
         simulate: simulate,
       ),
     ),
@@ -414,9 +471,50 @@ void main() {
     },
   );
 
-  testWidgets('call and SMS log contact against the real listing', (
-    tester,
-  ) async {
+  testWidgets(
+    'navigating straight from the map never guesses a pickup crop',
+    (tester) async {
+      final stream = StreamController<LatLng>();
+      await _pump(
+        tester,
+        stream: stream,
+        // The farm profile has an available listing, but navigation did not
+        // start from it, so it must NOT be shown as the pickup.
+        loadFarmProfile: (_) async => _profile(
+          listings: const [
+            CropListing(
+              cropName: 'Cabbage',
+              farmName: 'Sitio Maraag Farm',
+              status: 'AVAILABLE_NOW',
+              contactNumber: '0917-000-0000',
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Start Navigation'));
+      await tester.pump();
+      await tester.tap(find.text('Mark as Arrived'));
+      await tester.pump();
+
+      expect(find.text("You've Arrived!"), findsOneWidget);
+      expect(
+        find.text('Cabbage'),
+        findsNothing,
+        reason: 'no crop is picked up when navigation did not start from one',
+      );
+      expect(find.text("YOU'RE HERE TO PICK UP"), findsNothing);
+      expect(find.textContaining('no specific crop'), findsOneWidget);
+      expect(
+        find.text('0917-000-0000'),
+        findsOneWidget,
+        reason: 'the farm contact must still be reachable on a map-first trip',
+      );
+    },
+  );
+
+  testWidgets('Call dials the seller and logs contact against the real listing',
+      (tester) async {
     final stream = StreamController<LatLng>();
     final logs = <String>[];
     final actions = <String>[];
@@ -449,17 +547,49 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.phone));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
-    await tester.pump();
 
     expect(logs, [
       'L9:CALL',
-      'L9:SMS',
-    ], reason: 'both actions must be logged against the real listing');
+    ], reason: 'the call must be logged against the real listing');
     expect(actions, [
       '0917-000-0000:CALL',
-      '0917-000-0000:SMS',
     ], reason: 'the real phone number is passed to the launcher');
+  });
+
+  testWidgets('Message opens the real in-app thread for the listing',
+      (tester) async {
+    final stream = StreamController<LatLng>();
+    final gateway = _FakeMessagesGateway(_conversation('L9'));
+    final listing = Listing(
+      id: 'L9',
+      cropIcon: 'Cabbage',
+      status: 'AVAILABLE_NOW',
+      farmerName: 'Juan Dela Cruz',
+      farmerMobileNumber: '0917-000-0000',
+      categoryName: 'Vegetable',
+    );
+    await _pump(
+      tester,
+      stream: stream,
+      listingId: 'L9',
+      loadListing: (_) async => listing,
+      messagesGateway: gateway,
+    );
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    await tester.tap(find.text('Mark as Arrived'));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(gateway.lastListingId, 'L9',
+        reason: 'the thread is opened for the listing being picked up');
+    expect(find.byType(InAppMessagesScreen), findsOneWidget);
+    expect(find.text('Juan Dela Cruz'), findsWidgets,
+        reason: 'the chat screen shows the seller from the server');
   });
 
   testWidgets('GPS failure falls back to the default area without crashing', (

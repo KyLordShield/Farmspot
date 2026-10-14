@@ -299,7 +299,7 @@ class FarmController extends Controller
             ], 404);
         }
 
-        $listings = Listing::with(['category', 'farm', 'photos'])
+        $listings = Listing::with(['category', 'farm', 'farmer.buyer.user', 'photos'])
 // Same single-query rating summary the feed and detail use, so a
             // listing card looks the same wherever it is opened from. The map
             // itself lists farms rather than listings; it reaches these through
