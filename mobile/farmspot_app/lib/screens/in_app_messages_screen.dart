@@ -211,6 +211,19 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     final text = _input.text.trim();
     if (text.isEmpty || _sending) return;
 
+    if (widget.conversation.otherPartyStatus != null &&
+        widget.conversation.otherPartyStatus != 'ACTIVE') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.conversation.otherPartyStatus == 'DEACTIVATED'
+              ? 'This user has been deactivated and can no longer receive messages.'
+              : 'This user is no longer active and can no longer receive messages.'),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+      return;
+    }
+
     setState(() => _sending = true);
     try {
       final saved = await _api.sendMessage(widget.conversation.id, text);
@@ -244,6 +257,19 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   /// is opening would start a second pick and a second send.
   Future<void> _pickAndSendPhoto() async {
     if (_sending) return;
+
+    if (widget.conversation.otherPartyStatus != null &&
+        widget.conversation.otherPartyStatus != 'ACTIVE') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.conversation.otherPartyStatus == 'DEACTIVATED'
+              ? 'This user has been deactivated and can no longer receive messages.'
+              : 'This user is no longer active and can no longer receive messages.'),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+      return;
+    }
 
     setState(() => _sending = true);
 
@@ -571,14 +597,19 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
               Expanded(
                 child: TextField(
                   controller: _input,
-                  enabled: !_sending,
+                  enabled: !_sending &&
+                      !(widget.conversation.otherPartyStatus != null &&
+                          widget.conversation.otherPartyStatus != 'ACTIVE'),
                   minLines: 1,
                   maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(
-                    hintText: 'Type a message...',
+                    hintText: (widget.conversation.otherPartyStatus != null &&
+                            widget.conversation.otherPartyStatus != 'ACTIVE')
+                        ? 'This user is no longer active'
+                        : 'Type a message...',
                     hintStyle: const TextStyle(color: Colors.black38),
                     filled: true,
                     fillColor: bg,
@@ -593,11 +624,19 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
               ),
               const SizedBox(width: 8),
               Material(
-                color: _sending ? green.withValues(alpha: 0.5) : green,
+                color: (_sending ||
+                        (widget.conversation.otherPartyStatus != null &&
+                            widget.conversation.otherPartyStatus != 'ACTIVE'))
+                    ? green.withValues(alpha: 0.5)
+                    : green,
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: _sending ? null : _send,
+                  onTap: _sending ||
+                          (widget.conversation.otherPartyStatus != null &&
+                              widget.conversation.otherPartyStatus != 'ACTIVE')
+                      ? null
+                      : _send,
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: _sending

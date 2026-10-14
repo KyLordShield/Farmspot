@@ -39,6 +39,7 @@ class Conversation {
 
   /// 'BUYER' or 'SELLER' — which side of this thread the signed-in user is on.
   final String myRole;
+  final String? otherPartyStatus;
 
   const Conversation({
     required this.id,
@@ -55,9 +56,11 @@ class Conversation {
     this.lastMessageAt,
     this.unreadCount = 0,
     this.myRole = 'BUYER',
+    this.otherPartyStatus,
   });
 
   bool get isSellerSide => myRole == 'SELLER';
+  bool get otherPartyIsActive => otherPartyStatus == 'ACTIVE';
 
   /// The report target for the other person in this thread, or null when the
   /// server did not send a usable id.
@@ -122,6 +125,7 @@ class Conversation {
       lastMessageAt: _parseDate(json['last_message_at']),
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       myRole: json['my_role'] as String? ?? 'BUYER',
+      otherPartyStatus: other?['status'] as String?,
     );
   }
 

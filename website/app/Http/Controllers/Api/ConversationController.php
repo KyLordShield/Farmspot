@@ -9,6 +9,7 @@ use App\Models\Conversation;
 use App\Models\Farmer;
 use App\Models\Listing;
 use App\Models\Message;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -231,6 +232,18 @@ class ConversationController extends Controller
             ], 403);
         }
 
+        // Check if the other party in the conversation is still active.
+        // If they have been deactivated or blocked, prevent sending new messages
+        // and inform the sender clearly.
+        $otherUser = $this->getOtherPartyUser($conversation, $request->user());
+        if ($otherUser && $otherUser->USR_STATUS !== 'ACTIVE') {
+            $status = $otherUser->USR_STATUS;
+            $message = $status === 'DEACTIVATED'
+                ? 'This user has been deactivated and can no longer receive messages.'
+                : 'This user is no longer active and can no longer receive messages.';
+            return response()->json(['message' => $message], 403);
+        }
+
         $validated = $request->validate([
             'content' => ['nullable', 'string', 'max:1000'],
             'photo' => ['nullable', 'image', 'max:5120'],
@@ -296,6 +309,32 @@ class ConversationController extends Controller
         return response()->json([
             'message' => $this->formatMessage($message, $user->USR_ID),
         ], 201);
+    }
+
+    /**
+     * Get the other party user in the conversation (the person the viewer is chatting with).
+     */
+    private function getOtherPartyUser(Conversation $conversation, $viewer): ?User
+    {
+        $viewerBuyerId = $this->myBuyerId($viewer->USR_ID);
+        $viewerIsBuyer = $viewerBuyerId !== null
+            && $conversation->BUY_ID === $viewerBuyerId;
+
+        if ($viewerIsBuyer) {
+            // Other party is the seller
+            $listing = $conversation->listing()->first();
+            if ($listing && $listing->farmer && $listing->farmer->buyer && $listing->farmer->buyer->user) {
+                return $listing->farmer->buyer->user;
+            }
+            // Fallback: load via relations
+            $conversation->load(['listing.farmer.buyer.user']);
+            $listing = $conversation->listing;
+            return $listing?->farmer?->buyer?->user;
+        } else {
+            // Other party is the buyer
+            $buyer = Buyer::with('user')->find($conversation->BUY_ID);
+            return $buyer?->user;
+        }
     }
 
     /**
@@ -448,6 +487,7 @@ class ConversationController extends Controller
                 'id' => $otherUser?->USR_ID,
                 'name' => $otherUser?->USR_NAME,
                 'photo' => $otherUser?->USR_PHOTO_PATH,
+                'status' => $otherUser?->USR_STATUS,
             ],
         ];
     }
