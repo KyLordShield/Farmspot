@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _emailError;
   String? _passwordError;
 
@@ -174,66 +175,86 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const FarmSpotHeader(),
-            const SizedBox(height: 8),
-            const FarmSpotLogo(size: 190),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-              child: Column(
-                children: [
-                  FarmSpotTextField(
-                    hint: 'email',
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    errorText: _emailError,
-                    onChanged: (_) {
-                      if (_emailError != null) {
-                        setState(() => _emailError = null);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  FarmSpotTextField(
-                    hint: 'password',
-                    controller: _passwordController,
-                    obscureText: true,
-                    errorText: _passwordError,
-                    onChanged: (_) {
-                      if (_passwordError != null) {
-                        setState(() => _passwordError = null);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 26),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _goToForgotPassword,
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          color: AppColors.primaryGreen,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const FarmSpotLogo(size: 190),
+                    const SizedBox(height: 28),
+                    FarmSpotTextField(
+                      hint: 'email',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      errorText: _emailError,
+                      onChanged: (_) {
+                        if (_emailError != null) {
+                          setState(() => _emailError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    FarmSpotTextField(
+                      hint: 'password',
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      errorText: _passwordError,
+                      onChanged: (_) {
+                        if (_passwordError != null) {
+                          setState(() => _passwordError = null);
+                        }
+                      },
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: Colors.black45,
+                        ),
+                        onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _goToForgotPassword,
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  FarmSpotButton(
-                    label: _isLoading ? 'Logging in...' : 'Log In',
-                    onPressed: _isLoading ? () {} : () => _handleLogin(),
-                  ),
-                  const SizedBox(height: 20),
-                  FarmSpotSwitchLink(
-                    question: "----- Don't have an Account?-----",
-                    actionLabel: 'Create Account',
-                    onTap: _goToSignUp,
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    FarmSpotButton(
+                      label: _isLoading ? 'Logging in...' : 'Log In',
+                      onPressed: _isLoading ? () {} : () => _handleLogin(),
+                    ),
+                    const SizedBox(height: 18),
+                    FarmSpotSwitchLink(
+                      question: "----- Don't have an Account?-----",
+                      actionLabel: 'Create Account',
+                      onTap: _goToSignUp,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

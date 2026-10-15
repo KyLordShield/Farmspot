@@ -109,6 +109,17 @@
             background-color: #16351e;
             color: #ffffff;
         }
+        .password-toggle {
+            background-color: #ffffff;
+            border-left: none;
+            color: #1e4d2b;
+        }
+        .password-toggle:hover,
+        .password-toggle:focus {
+            background-color: #ffffff;
+            color: #16351e;
+            box-shadow: none;
+        }
         .footer-note {
             font-size: 0.8rem;
             color: #94a3b8;
@@ -168,6 +179,11 @@
                         <input id="password" type="password" name="password"
                                class="form-control @error('password') is-invalid @enderror"
                                required autocomplete="current-password">
+                        <button type="button" class="btn password-toggle"
+                                id="togglePassword" tabindex="-1"
+                                aria-label="Show password">
+                            <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                        </button>
                     </div>
                     @error('password')
                         <div class="text-danger small mt-1">{{ $message }}</div>
@@ -187,6 +203,22 @@
     </div>
 
 </div>
+
+<script>
+    (function () {
+        var toggle = document.getElementById('togglePassword');
+        var field = document.getElementById('password');
+        var icon = document.getElementById('togglePasswordIcon');
+        if (!toggle || !field || !icon) return;
+        toggle.addEventListener('click', function () {
+            var showing = field.type === 'text';
+            field.type = showing ? 'password' : 'text';
+            icon.classList.toggle('bi-eye', showing);
+            icon.classList.toggle('bi-eye-slash', !showing);
+            toggle.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+        });
+    })();
+</script>
 
 </body>
 </html>

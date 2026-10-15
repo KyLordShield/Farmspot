@@ -238,12 +238,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        // Keep the bottom-most content (the "Log In" switch link) reachable:
-        // on gesture/button nav phones the home bar overlaps the last row, so
-        // the SafeArea reserves that inset and the extra bottom padding lets
-        // the form scroll fully above it. Top inset is left alone — the
-        // FarmSpotHeader already reserves the status bar with its own padding.
-        top: false,
+        // Reserve the status bar with the SafeArea itself now that the branded
+        // header is gone, and keep the bottom-most content (the "Log In" switch
+        // link) reachable: on gesture/button nav phones the home bar overlaps
+        // the last row, so the extra bottom padding lets the form scroll fully
+        // above it.
+        top: true,
         bottom: true,
         child: SingleChildScrollView(
           padding: EdgeInsets.only(
@@ -251,8 +251,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
           child: Column(
             children: [
-              const FarmSpotHeader(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 24),
               const FarmSpotLogo(size: 190),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
