@@ -261,9 +261,12 @@ a {
 }
 
 /* Current page — applied by public/js/global.js from the browser path so the
-   server does not need a blade-side helper. */
+   server does not need a blade-side helper. A solid light bar down the left
+   edge is the primary cue; the lifted background and bolder white text make
+   the contrast obvious even at a glance. */
 .menu li a.active {
-    background: rgba(255, 255, 255, 0.13);
+    position: relative;
+    background: rgba(255, 255, 255, 0.16);
     color: #ffffff;
     font-weight: 600;
     box-shadow: inset 3px 0 0 var(--brand-300);
@@ -271,6 +274,20 @@ a {
 
 .menu li a.active i {
     color: #ffffff;
+}
+
+/* Small dot on the right edge as a second, colour-independent cue (helps the
+   highlight read for anyone who cannot rely on the green accent alone). */
+.menu li a.active::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: var(--brand-300);
 }
 
 /* ==========================================================================
@@ -347,20 +364,20 @@ a {
     justify-content: center;
     width: 100%;
     padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid #ffffff;
     border-radius: 8px;
-    background: transparent;
-    color: #cbd8ce;
+    background: #ffffff;
+    color: var(--brand-800);
     font-size: 13px;
-    font-weight: 550;
+    font-weight: 600;
     text-decoration: none;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .btn-logout:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.3);
-    color: #ffffff;
+    background: #e8f1ea;
+    border-color: #e8f1ea;
+    color: var(--brand-900);
 }
 
 /* ==========================================================================
@@ -1105,4 +1122,555 @@ a.stat-card:focus-visible {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* ==========================================================================
+   Personal dashboard — calendar, notes, attention, quick actions, activity
+   ========================================================================== */
+
+/* --- Calendar ------------------------------------------------------------- */
+
+.cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cal-label {
+    min-width: 132px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text);
+}
+
+.event-form {
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fbfcfb;
+}
+
+.cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 12px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
+.cal-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.cal-dow {
+    padding: 4px 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-faint);
+}
+
+.cal-day {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 6px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #fafbfa;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.cal-day:hover {
+    background: var(--brand-50);
+    border-color: var(--brand-300);
+}
+
+.cal-day.is-empty {
+    visibility: hidden;
+    cursor: default;
+}
+
+.cal-day.is-today {
+    border-color: var(--brand-400);
+}
+
+.cal-day.is-selected {
+    background: var(--brand-700);
+    border-color: var(--brand-700);
+}
+
+.cal-day.is-selected .cal-daynum {
+    color: #ffffff;
+}
+
+.cal-daynum {
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.cal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: auto;
+    padding-top: 6px;
+}
+
+.cal-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.dot-event { background: var(--brand-600); }
+.dot-note  { background: var(--amber); }
+.dot-task  { background: var(--slate); }
+
+.is-selected .cal-dot {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+.cal-detail {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.cal-detail-head {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-heading);
+}
+
+.cal-detail-empty {
+    font-size: 13px;
+    color: var(--text-faint);
+}
+
+.cal-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 7px;
+    font-size: 13.5px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+a.cal-detail-item:hover {
+    background: #f7faf8;
+}
+
+.cal-detail-item .bi-arrow-right {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.cal-chip {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.cal-chip-event { background: var(--green-bg); color: var(--green); }
+.cal-chip-note  { background: var(--amber-bg); color: var(--amber-text); }
+.cal-chip-task  { background: var(--slate-bg); color: var(--slate-text); }
+
+.cal-chip-title {
+    flex: 1;
+    min-width: 0;
+}
+
+/* --- Notes & reminders ---------------------------------------------------- */
+
+.note-add {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.note-add-row {
+    display: flex;
+    gap: 8px;
+}
+
+.note-add-row .form-control {
+    flex: 1;
+}
+
+.note-viewport {
+    overflow: hidden;
+}
+
+.note-track {
+    display: flex;
+    transition: transform 240ms ease;
+}
+
+.note-page {
+    flex: 0 0 100%;
+    min-width: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.note-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.note-page-label {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.note-pager .btn-icon:disabled {
+    opacity: .35;
+    cursor: default;
+    pointer-events: none;
+}
+
+.note-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 6px;
+    border-radius: 8px;
+}
+
+.note-item:hover {
+    background: #f7faf8;
+}
+
+.note-item.is-done .note-title {
+    text-decoration: line-through;
+    color: var(--text-faint);
+}
+
+.note-toggle-form {
+    margin: 0;
+    padding-top: 1px;
+}
+
+.note-check {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--brand-600);
+}
+
+.note-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.note-title {
+    font-size: 13.5px;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.note-due {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    font-size: 11.5px;
+    color: var(--text-faint);
+}
+
+.note-due.overdue {
+    color: var(--red);
+    font-weight: 600;
+}
+
+/* --- Needs attention ------------------------------------------------------ */
+
+.attention-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    color: inherit;
+    text-decoration: none;
+    transition: background var(--ease);
+}
+
+.attention-item:last-child {
+    border-bottom: none;
+}
+
+.attention-item:hover {
+    background: #f7faf8;
+}
+
+.attention-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--slate-bg);
+    color: var(--slate-text);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.attention-count.is-active {
+    background: var(--red-bg);
+    color: var(--red);
+}
+
+.attention-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.attention-label strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.attention-label small {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.attention-item .bi-chevron-right {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+/* --- Quick actions -------------------------------------------------------- */
+
+.quick-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.quick-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 8px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.quick-btn i {
+    font-size: 18px;
+    color: var(--brand-600);
+}
+
+.quick-btn:hover {
+    background: var(--brand-50);
+    border-color: var(--brand-300);
+    color: var(--brand-700);
+}
+
+/* --- My recent activity --------------------------------------------------- */
+
+.activity-item {
+    display: flex;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--green-bg);
+    color: var(--green);
+    font-size: 13px;
+}
+
+.activity-text {
+    font-size: 13px;
+    color: var(--text);
+}
+
+.activity-time {
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--text-faint);
+}
+
+@media (max-width: 991.98px) {
+    .cal-day {
+        min-height: 44px;
+        padding: 4px;
+    }
+
+    .cal-label {
+        min-width: 104px;
+    }
+}
+
+/* --- Weather widget ------------------------------------------------------- */
+
+.weather-current {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.weather-current-icon {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 auto;
+}
+
+.weather-temp {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--text);
+}
+
+.weather-unit {
+    margin-left: 1px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.weather-condition {
+    margin-top: 3px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.weather-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+.weather-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.weather-meta i {
+    color: var(--text-faint);
+}
+
+.weather-forecast {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.weather-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 9px 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.weather-day-name {
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-faint);
+}
+
+.weather-day-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.weather-day-temp {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.weather-day-temp small {
+    margin-left: 2px;
+    font-weight: 500;
+    color: var(--text-faint);
+}
+
+.weather-day-rain {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--brand-600);
 }

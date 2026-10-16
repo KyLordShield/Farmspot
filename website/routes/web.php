@@ -23,6 +23,16 @@ Route::get('/', function () {
 // theoretical one.
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // The admin's personal planner, written from the dashboard. Notes and
+    // events share one table and one controller; every row is owned by the
+    // signed-in admin, and the controller scopes on that id so one admin
+    // cannot read or change another's.
+    Route::post('/planner', [\App\Http\Controllers\AdminPlannerController::class, 'store'])->name('planner.store');
+    Route::put('/planner/{id}', [\App\Http\Controllers\AdminPlannerController::class, 'update'])->name('planner.update');
+    Route::patch('/planner/{id}/toggle', [\App\Http\Controllers\AdminPlannerController::class, 'toggle'])->name('planner.toggle');
+    Route::delete('/planner/{id}', [\App\Http\Controllers\AdminPlannerController::class, 'destroy'])->name('planner.destroy');
+
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
     Route::get('/listings', [ListingController::class, 'index'])->name('listings');
     Route::get('/listings/{id}/edit', [ListingController::class, 'edit'])->name('listings.edit');

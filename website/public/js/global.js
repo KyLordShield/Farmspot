@@ -46,17 +46,18 @@
     // Active nav item. Matched against the browser path so the server does not
     // need a per-route active helper: /listings, /listings/12 and
     // /listings/12/edit all highlight "Listings".
+    //
+    // link.pathname, not getAttribute('href'): Blade's route() renders an
+    // absolute URL ("http://host/dashboard"), and comparing that against
+    // window.location.pathname never matched, so the highlight silently never
+    // appeared. The pathname property gives just the "/dashboard" part.
     var path = window.location.pathname.replace(/\/+$/, '') || '/';
     var bestLink = null;
     var bestLength = 0;
 
     if (sidebar) {
         sidebar.querySelectorAll('.menu a').forEach(function (link) {
-            var href = link.getAttribute('href');
-            if (!href) {
-                return;
-            }
-            var linkPath = href.replace(/\/+$/, '') || '/';
+            var linkPath = (link.pathname || '').replace(/\/+$/, '') || '/';
 
             var matches = path === linkPath ||
                 (linkPath !== '/' && path.indexOf(linkPath) === 0);

@@ -18,7 +18,10 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+    {{-- Versioned by file mtime. Without it the browser happily serves a
+         cached style.css after a deploy, which is how a new widget can render
+         completely unstyled until a hard refresh. --}}
+    <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ @filemtime(public_path('css/style.css')) ?: '1' }}">
 
     {{-- Page-specific stylesheets. Two stacks rather than one because a partial
          that pushes into 'scripts' for JS would otherwise have to push its CSS
@@ -188,13 +191,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script src="{{ asset('js/global.js') }}"></script>
+<script src="{{ asset('js/global.js') }}?v={{ @filemtime(public_path('js/global.js')) ?: '1' }}"></script>
 
 {{-- SweetAlert2 for confirmations and toasts. Pinned to an exact version so a
      future CDN release cannot change the behaviour of the helper below. --}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
 
-<script src="{{ asset('js/admin-alerts.js') }}"></script>
+<script src="{{ asset('js/admin-alerts.js') }}?v={{ @filemtime(public_path('js/admin-alerts.js')) ?: '1' }}"></script>
 
 @stack('scripts')
 

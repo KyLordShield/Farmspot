@@ -23,4 +23,33 @@ return [
 
     'report_threshold' => env('FARMSPOT_REPORT_THRESHOLD', 10),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Weather widget
+    |--------------------------------------------------------------------------
+    |
+    | The admin dashboard shows a small forecast for the association's area.
+    | It uses Open-Meteo, which needs no API key and no account — the panel is
+    | read-only decoration and a missing key would only ever mean the widget
+    | silently disappears, so a keyless source is the right trade.
+    |
+    | The coordinates default to Cebu City, where the farms in this pilot
+    | cluster; they are env-overridable so another association can point the
+    | widget at its own area without a code change. The response is cached so
+    | the dashboard never calls the API on every page load, and a failure is
+    | swallowed rather than allowed to break the page.
+    |
+    */
+
+    'weather' => [
+        'enabled' => env('FARMSPOT_WEATHER_ENABLED', true),
+        'label' => env('FARMSPOT_WEATHER_LABEL', 'Cebu City, Philippines'),
+        'latitude' => (float) env('FARMSPOT_WEATHER_LAT', 10.3157),
+        'longitude' => (float) env('FARMSPOT_WEATHER_LNG', 123.8854),
+        'timezone' => env('FARMSPOT_WEATHER_TZ', 'Asia/Manila'),
+        'endpoint' => 'https://api.open-meteo.com/v1/forecast',
+        'days' => (int) env('FARMSPOT_WEATHER_DAYS', 4),
+        'cache_minutes' => (int) env('FARMSPOT_WEATHER_CACHE_MINUTES', 30),
+    ],
+
 ];
