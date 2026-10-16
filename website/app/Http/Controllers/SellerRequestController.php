@@ -13,8 +13,7 @@ class SellerRequestController extends Controller
     /**
      * List all farms awaiting review (FRM_STATUS = 'PENDING_REVIEW'), oldest
      * first, eager-loading the applicant's user details and the farm's photos.
-     * Supports the same ?search= pattern as the whitelist screen (search by
-     * farm name or owner name).
+     * Supports a ?search= filter (search by farm name or owner name).
      */
     public function index(Request $request)
     {

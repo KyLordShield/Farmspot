@@ -25,12 +25,12 @@ class SellerController extends Controller
      *
      * Case B — the user has no APPROVED farm yet (first-timer, or their only
      * farm is PENDING_REVIEW/REJECTED). This is NOT the approval gate anymore
-     * — whitelist approval happens later, at farm-submission time
-     * (POST /api/farms). So everyone gets past here into the wizard, and
+     * — every farm is reviewed after submission (POST /api/farms), so everyone
+     * gets past here into the wizard, and
      * FMR_SELLER_MODE_ACTIVE / USR_IS_SELLER are NOT flipped. Those flags are
-     * set only inside FarmController@store when a farm is actually approved
-     * (whitelisted instant-approve path), so a user who calls activate() but
-     * never gets an approved farm won't incorrectly show as an active seller.
+     * set only when an admin approves the farm from the Seller Requests queue
+     * (SellerRequestController), so a user who calls activate() but never gets
+     * an approved farm won't incorrectly show as an active seller.
      * Responds with 'reactivated' => false.
      */
     public function activate(Request $request)

@@ -70,10 +70,10 @@ class SellerRequestController extends Controller
             ], 500);
         }
 
-        // This is the second way a farm goes live: a non-whitelisted farmer submits
-        // PENDING_REVIEW and an admin approves it here. Same notification as the
-        // instant-approval path in FarmController@store, and the same
-        // first-vs-additional test — is this the farmer's earliest farm?
+        // This is the only way a farm goes live now: the farmer submits it as
+        // PENDING_REVIEW and an admin approves it here, which is when the farmer
+        // is told. The test is the same first-vs-additional one — is this the
+        // farmer's earliest farm?
         $isFirstFarm = $farmer->farms()
             ->orderBy('FRM_CREATED_AT')
             ->orderBy('FRM_ID')

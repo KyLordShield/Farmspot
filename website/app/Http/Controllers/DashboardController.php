@@ -11,7 +11,6 @@ use App\Models\Listing;
 use App\Models\Report;
 use App\Models\ReviewRequest;
 use App\Models\User;
-use App\Models\Whitelist;
 use App\Services\MassReportService;
 use App\Services\WeatherService;
 use Illuminate\Support\Facades\Auth;
@@ -65,7 +64,6 @@ class DashboardController extends Controller
             'farmers' => Farmer::count(),
             'listings' => Listing::count(),
             'reports' => Report::where('RPT_STATUS', 'New')->count(),
-            'whitelist' => Whitelist::count(),
 
             'recentUsers' => User::orderBy('USR_CREATED_AT', 'desc')->take(5)->get(),
 

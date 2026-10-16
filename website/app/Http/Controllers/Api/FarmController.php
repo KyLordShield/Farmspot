@@ -10,8 +10,6 @@ use App\Models\FarmPhoto;
 use App\Models\FarmVisitLog;
 use App\Models\Listing;
 use App\Models\ListingReview;
-use App\Models\Whitelist;
-use App\Services\NotificationService;
 use App\Support\CloudinaryImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,11 +32,12 @@ class FarmController extends Controller
      * (archived/removed and rejected farms do not consume a slot), so it
      * cannot be bypassed by calling the API directly.
      *
-     * Whitelist approval is decided here, at submission time: whitelisted users
-     * get an instant-approve farm (FRM_STATUS=APPROVED) and have their seller
-     * flags flipped, everyone else gets FRM_STATUS=PENDING_REVIEW for admin
-     * review. The old FMR_SELLER_MODE_ACTIVE gate is gone because that flag is
-     * now only set on this approval path.
+     * Every farm is submitted for review: it is created as
+     * FRM_STATUS=PENDING_REVIEW with its map pin off, and an admin approves or
+     * rejects it from the Seller Requests queue (SellerRequestController), which
+     * is the only path that flips FMR_SELLER_MODE_ACTIVE and USR_IS_SELLER. The
+     * old FMR_SELLER_MODE_ACTIVE gate is gone because that flag is now only set
+     * on that approval path.
      */
     public function store(Request $request)
     {
@@ -102,14 +101,10 @@ class FarmController extends Controller
             ],
         ]);
 
-        $isWhitelisted = Whitelist::where('WLST_MOBILE_NUMBER', $user->USR_MOBILE_NUMBER)
-            ->where('WLST_IS_ACTIVE', 1)
-            ->exists();
-
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 
         try {
-            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $user, $isWhitelisted, $firstFarm, $isFirstFarm) {
+            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $firstFarm, $isFirstFarm) {
                 $verificationUrl = $firstFarm?->FRM_VERIFICATION_DOC_PATH;
                 $certificateUrl = $firstFarm?->FRM_FARM_CERTIFICATE_PATH;
 
@@ -140,22 +135,13 @@ class FarmController extends Controller
                     'FRM_BARANGAY' => $validated['barangay'],
                     'FRM_LATITUDE' => $validated['latitude'],
                     'FRM_LONGITUDE' => $validated['longitude'],
-                    'FRM_PIN_ACTIVE' => $isWhitelisted ? 1 : 0,
-                    'FRM_STATUS' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
+                    'FRM_PIN_ACTIVE' => 0,
+                    'FRM_STATUS' => 'PENDING_REVIEW',
                     'FRM_CREATED_AT' => now(),
                     'FRM_VERIFICATION_DOC_PATH' => $verificationUrl,
                     'FRM_FARM_CERTIFICATE_PATH' => $certificateUrl,
                     'FMR_ID' => $farmer->FMR_ID,
                 ]);
-
-                if ($isWhitelisted) {
-                    $farmer->FMR_SELLER_MODE_ACTIVE = 1;
-                    $farmer->FMR_VERIFIED_AT = $farmer->FMR_VERIFIED_AT ?? now();
-                    $farmer->save();
-
-                    $user->USR_IS_SELLER = 1;
-                    $user->save();
-                }
 
                 $urls = [];
 
@@ -191,33 +177,14 @@ class FarmController extends Controller
             ], 500);
         }
 
-        // Announced only after the transaction has committed, so a farm that
-        // failed to save can never produce a "your farm is live" notification.
-        // Wrapped because a notification is a courtesy: if the insert or the
-        // push fails, the farmer has a live farm they were not told about, which
-        // is a far better outcome than the request 500ing and them retrying a
-        // farm that already exists.
-        if ($isWhitelisted) {
-            try {
-                app(NotificationService::class)->notifyFarmLive(
-                    $user->USR_ID,
-                    $farmId,
-                    $validated['name'],
-                    $isFirstFarm,
-                );
-            } catch (\Throwable $e) {
-                Log::warning('[notifications] farm-live notification failed', [
-                    'usr_id' => $user->USR_ID,
-                    'farm_id' => $farmId,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
+        // The farm is PENDING_REVIEW from here, so there is nothing to announce:
+        // the "your farm is live" notification belongs to the approval path
+        // (SellerRequestController), which decides that a farm actually goes live.
 
         return response()->json([
             'message' => 'Farm created successfully.',
             'farm_id' => $farmId,
-            'frm_status' => $isWhitelisted ? 'APPROVED' : 'PENDING_REVIEW',
+            'frm_status' => 'PENDING_REVIEW',
             // Tells the app whether it should show the document step again. A
             // second farm inherits them, so it should not.
             'documents_required' => $isFirstFarm,

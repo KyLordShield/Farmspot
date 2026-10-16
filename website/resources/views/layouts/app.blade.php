@@ -109,13 +109,6 @@
             </li>
 
             <li>
-                <a href="{{ route('whitelist') }}">
-                    <i class="bi bi-check-circle"></i>
-                    Whitelist
-                </a>
-            </li>
-
-            <li>
                 <a href="{{ route('seller-requests') }}">
                     <i class="bi bi-person-check"></i>
                     Seller Requests

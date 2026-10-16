@@ -7,7 +7,6 @@ use App\Http\Controllers\CropCategoryController;
 use App\Http\Controllers\ListingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\WhitelistController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\SellerRequestController;
 use Illuminate\Support\Facades\Route;
@@ -18,7 +17,7 @@ Route::get('/', function () {
 
 // The whole block below is the admin panel. It was guarded by `auth` alone, so
 // any signed-in web account could open /reports and read reported message text
-// and the names of the people accused, or reach /users and /whitelist. Now that
+// and the names of the people accused, or reach /users. Now that
 // reports can be filed from the app, that is a real leak rather than a
 // theoretical one.
 Route::middleware(['auth', 'admin'])->group(function () {
@@ -79,11 +78,6 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::get('/users/{id}', [UserController::class, 'show'])->name('users.show');
-    Route::get('/whitelist', [WhitelistController::class, 'index'])->name('whitelist');
-    Route::get('/whitelist/create', [WhitelistController::class, 'create'])->name('whitelist.create');
-    Route::post('/whitelist', [WhitelistController::class, 'store'])->name('whitelist.store');
-    Route::get('/whitelist/{id}', [WhitelistController::class, 'show'])->name('whitelist.show');
-    Route::patch('/whitelist/{id}/toggle', [WhitelistController::class, 'toggleStatus'])->name('whitelist.toggle');
 
     // Reviews. Only /reviews and /reviews/{id}/visibility exist — a review can
     // be hidden or shown again and nothing else. No create/edit/delete, which
