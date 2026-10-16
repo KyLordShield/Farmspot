@@ -25,8 +25,20 @@ class SessionState extends ChangeNotifier {
   /// Must stay in sync with the key [AuthService] writes.
   static const String userPrefsKey = 'user_data';
 
+  /// Invoked when the server has stopped accepting the stored token, so the app
+  /// can drop back to the login screen. Set once by `main()` to a callback that
+  /// resets the root navigator — a plain `SessionState` cannot reach a navigator
+  /// itself, and clearing the user here would only rebuild the notifier's
+  /// listeners, not pop a stack of screens sitting on top of the login gate.
+  VoidCallback? onSessionExpired;
+
   Map<String, dynamic>? _user;
   bool _initialised = false;
+
+  /// Tells whoever wired [onSessionExpired] that the session is gone.
+  void notifySessionExpired() {
+    onSessionExpired?.call();
+  }
 
   /// False until [init] has run. Guards against a screen reading [isSeller]
   /// before the cache is seeded.

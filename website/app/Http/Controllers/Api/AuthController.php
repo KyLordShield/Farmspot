@@ -78,10 +78,31 @@ class AuthController extends Controller
         }
 
         if ($user->USR_STATUS !== 'ACTIVE') {
+            // A deactivation an admin recorded a reason for is a takedown the
+            // owner is entitled to contest, so the app needs more than "no":
+            // the code tells it which screen to show and the reason is the text
+            // on it. A deactivation with no reason is not appealable — there is
+            // no decision to point at — so it keeps the plain message and the
+            // app offers only "contact the Association". PENDING_VERIFICATION
+            // stays as it was; it is a wait, not a takedown.
+            if ($user->USR_STATUS === 'DEACTIVATED') {
+                if ($user->USR_TAKEDOWN_REASON !== null) {
+                    return response()->json([
+                        'message' => 'This account has been taken down.',
+                        'code' => 'ACCOUNT_TAKEN_DOWN',
+                        'reason' => $user->USR_TAKEDOWN_REASON,
+                    ], 403);
+                }
+
+                return response()->json([
+                    'message' => 'This account has been deactivated.',
+                    'code' => 'ACCOUNT_DEACTIVATED',
+                ], 403);
+            }
+
             return response()->json([
-                'message' => $user->USR_STATUS === 'DEACTIVATED'
-                    ? 'This account has been deactivated.'
-                    : 'This account is pending verification.',
+                'message' => 'This account is pending verification.',
+                'code' => 'ACCOUNT_PENDING_VERIFICATION',
             ], 403);
         }
 

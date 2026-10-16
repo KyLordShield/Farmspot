@@ -109,6 +109,22 @@
                 @enderror
             </div>
 
+            <div class="mb-3">
+                <label for="USR_TAKEDOWN_REASON" class="form-label">
+                    Reason for deactivation
+                </label>
+                <textarea class="form-control @error('USR_TAKEDOWN_REASON') is-invalid @enderror"
+                          id="USR_TAKEDOWN_REASON" name="USR_TAKEDOWN_REASON"
+                          rows="3" maxlength="500">{{ old('USR_TAKEDOWN_REASON', $user->USR_TAKEDOWN_REASON) }}</textarea>
+                <div class="form-text">
+                    Required when setting the status to <strong>Deactivated</strong>. The person sees
+                    this at their next sign-in and can request a re-evaluation. Leave blank otherwise.
+                </div>
+                @error('USR_TAKEDOWN_REASON')
+                    <div class="text-danger small mt-1">{{ $message }}</div>
+                @enderror
+            </div>
+
             <div class="alert alert-secondary d-flex align-items-center" role="alert">
                 <i class="bi bi-lock me-2"></i>
                 <div>

@@ -115,24 +115,70 @@
         return tone === 'danger' ? RED : BRAND;
     }
 
-    function ask(title, text, tone) {
+    // Resolves with `false` when the user cancels, `true` for a plain confirm,
+    // or the trimmed string the user typed when [inputLabel] asks for a reason.
+    // The reason variant is required by deactivation: the value is echoed back
+    // into the form as a hidden field before it submits, so the same modal that
+    // used to be a bare yes/no can carry the takedown reason the API insists on.
+    function ask(title, text, tone, inputLabel) {
         if (hasSwal()) {
             return new Promise(function (resolve) {
-                Swal.fire({
+                var options = {
                     title: title,
                     text: text || '',
                     icon: tone === 'danger' ? 'warning' : 'question',
                     showCancelButton: true,
-                    confirmButtonText: 'Continue',
+                    confirmButtonText: inputLabel ? 'Deactivate' : 'Continue',
                     confirmButtonColor: confirmToneColors(tone),
                     cancelButtonText: 'Cancel',
                     focusConfirm: false
-                }).then(function (result) {
-                    resolve(result.isConfirmed === true);
+                };
+                if (inputLabel) {
+                    options.input = 'textarea';
+                    options.inputLabel = inputLabel;
+                    options.inputPlaceholder = 'Shown to the person, and lets them request a re-evaluation.';
+                    options.inputValidator = function (value) {
+                        return (value && value.trim().length > 0) ? undefined : 'A reason is required.';
+                    };
+                }
+                Swal.fire(options).then(function (result) {
+                    if (result.isConfirmed !== true) {
+                        resolve(false);
+                        return;
+                    }
+                    resolve(inputLabel ? String(result.value || '').trim() : true);
                 });
             });
         }
+        if (inputLabel) {
+            var answer = window.prompt(inputLabel, '');
+            return Promise.resolve(answer && answer.trim() ? answer.trim() : false);
+        }
         return Promise.resolve(window.confirm(text || title));
+    }
+
+    // Puts the confirmed value into the form under the field name the server
+    // validates, creating the hidden input on first use.
+    function applyConfirmInput(form, name, value) {
+        var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+        if (!field) {
+            field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = name;
+            form.appendChild(field);
+        }
+        field.value = value;
+    }
+
+    function confirmInputName(activator, form) {
+        return (activator && activator.getAttribute('data-confirm-input'))
+            || form.getAttribute('data-confirm-input');
+    }
+
+    function confirmInputLabel(activator, form) {
+        return (activator && activator.getAttribute('data-confirm-input-label'))
+            || form.getAttribute('data-confirm-input-label')
+            || 'Reason';
     }
 
     function wireFormConfirms() {
@@ -153,10 +199,15 @@
             event.stopPropagation();
 
             var tone = form.getAttribute('data-confirm-tone') || 'primary';
-            ask(title || 'Are you sure?', text, tone).then(function (confirmed) {
-                if (confirmed) {
-                    proceedWithForm(form);
+            var inputName = confirmInputName(null, form);
+            ask(title || 'Are you sure?', text, tone, inputName ? confirmInputLabel(null, form) : null).then(function (result) {
+                if (result === false) {
+                    return;
                 }
+                if (inputName) {
+                    applyConfirmInput(form, inputName, String(result));
+                }
+                proceedWithForm(form);
             });
         }, true);
     }
@@ -201,10 +252,15 @@
             var tone = (activator.getAttribute('data-confirm-tone')
                 || form.getAttribute('data-confirm-tone')
                 || 'primary');
-            ask(title || 'Are you sure?', text, tone).then(function (confirmed) {
-                if (confirmed) {
-                    proceedWithForm(form);
+            var inputName = confirmInputName(activator, form);
+            ask(title || 'Are you sure?', text, tone, inputName ? confirmInputLabel(activator, form) : null).then(function (result) {
+                if (result === false) {
+                    return;
                 }
+                if (inputName) {
+                    applyConfirmInput(form, inputName, String(result));
+                }
+                proceedWithForm(form);
             });
         }, true);
     }

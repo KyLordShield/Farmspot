@@ -12,14 +12,22 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('farm_photo', function (Blueprint $table) {
-            $table->boolean('FPHOTO_IS_PRIMARY')->default(0);
-        });
+        // The committed base schema dump already carries FPHOTO_IS_PRIMARY, so
+        // on a database built from that dump (every test run, via migrate:fresh)
+        // an unconditional add would fail with "Duplicate column name". Guard it:
+        // the column only needs adding on a database that predates the dump.
+        if (! Schema::hasColumn('farm_photo', 'FPHOTO_IS_PRIMARY')) {
+            Schema::table('farm_photo', function (Blueprint $table) {
+                $table->boolean('FPHOTO_IS_PRIMARY')->default(0);
+            });
+        }
 
         // Backfill: give every farm that already has photos exactly one cover —
         // its oldest photo. Same rule the farm UI now enforces (adding a new
         // photo only marks it primary when the farm has none), so the data that
-        // predates the column and the behaviour that follows it agree.
+        // predates the column and the behaviour that follows it agree. Run
+        // whenever the column is present, so a dump-sourced database gets the
+        // same starting point as one the migration built from scratch.
         DB::table('farm_photo')
             ->select('FRM_ID')
             ->distinct()
@@ -44,8 +52,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('farm_photo', function (Blueprint $table) {
-            $table->dropColumn('FPHOTO_IS_PRIMARY');
-        });
+        if (Schema::hasColumn('farm_photo', 'FPHOTO_IS_PRIMARY')) {
+            Schema::table('farm_photo', function (Blueprint $table) {
+                $table->dropColumn('FPHOTO_IS_PRIMARY');
+            });
+        }
     }
 };

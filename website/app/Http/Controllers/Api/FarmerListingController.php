@@ -8,6 +8,7 @@ use App\Models\Listing;
 use App\Models\ListingPhoto;
 use App\Models\ListingReview;
 use App\Models\Report;
+use App\Models\ReviewRequest;
 use App\Support\CloudinaryImage;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -69,6 +70,8 @@ class FarmerListingController extends Controller
         'LST_EXPIRY_DATE',
         'LST_DESCRIPTION',
         'LST_IMAGE',
+        'LST_TAKEDOWN_REASON',
+        'LST_TAKEDOWN_AT',
         'LST_CREATED_AT',
         'LST_UPDATED_AT',
         'FMR_ID',
@@ -133,6 +136,13 @@ class FarmerListingController extends Controller
             // exactly the number a buyer does. Added AFTER select() so the
             // aggregate subqueries append to it instead of replacing it.
             ->select(self::LIST_COLUMNS)
+            ->addSelect([
+                'has_pending_appeal' => ReviewRequest::selectRaw('1')
+                    ->where('RRQ_TARGET_TYPE', ReviewRequest::TARGET_LISTING)
+                    ->whereColumn('RRQ_TARGET_ID', 'listing.LST_ID')
+                    ->where('RRQ_STATUS', 'PENDING')
+                    ->limit(1),
+            ])
             ->withRatingSummary()
             ->withExists(['reports as has_open_report' => fn ($q) => $q->whereIn('RPT_STATUS', Report::OPEN_STATUSES)]);
 

@@ -168,6 +168,22 @@ class ListingOwnerState {
   /// row and its chip to disagree about whether a report is open.
   bool get underReview => listing.hasOpenReport;
 
+  /// An admin took this listing down. Distinct from [hiddenByAdmin]: a takedown
+  /// carries a reason and can be appealed, where a plain removal cannot.
+  bool get isTakenDown => listing.isTakenDown;
+
+  /// The admin's reason, shown to the owner so they know what to answer.
+  String? get takedownReason => listing.takedownReason;
+
+  /// A re-evaluation request is already awaiting a decision. While this is true
+  /// the row says so and does not offer the button again.
+  bool get hasPendingAppeal => listing.hasPendingAppeal;
+
+  /// The owner may file a re-evaluation request: it was a takedown, and there
+  /// is not already one pending.
+  bool get canRequestReEvaluation =>
+      listing.isTakenDown && !listing.hasPendingAppeal;
+
   const ListingOwnerState({required this.listing, this.hiddenByAdmin = false});
 
   /// LST_EXPIRY_DATE in the past, which is what `listings:expire` acts on.

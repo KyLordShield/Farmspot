@@ -29,6 +29,48 @@ class MyFarmListingsService implements MyFarmListingsGateway {
   /// its own gateway. Same shape as ReviewService.instance.
   static final MyFarmListingsService instance = MyFarmListingsService();
 
+  /// Files a re-evaluation request for a listing an admin took down.
+  ///
+  /// Returns a record with a nullable [error] and the server's [message] so the
+  /// screen can show the confirmation or the refusal (already pending, previous
+  /// denial final, not appealable). Never throws.
+  static Future<({String? error, String? message})> requestReEvaluation({
+    required String listingId,
+    required String reason,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) return (error: 'Not logged in.', message: null);
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ListingService.baseUrl}/listings/$listingId/appeal'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: {'reason': reason.trim()},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        return (error: null, message: data['message'] as String?);
+      }
+
+      return (
+        error: data is Map && data['message'] is String
+            ? data['message'] as String
+            : 'Could not send the request. Please try again.',
+        message: null,
+      );
+    } catch (_) {
+      return (
+        error: 'Could not reach the server. Check your connection.',
+        message: null,
+      );
+    }
+  }
+
   @override
   Future<MyFarmListingPage> fetch({
     required int page,

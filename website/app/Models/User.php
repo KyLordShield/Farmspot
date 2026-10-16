@@ -47,6 +47,15 @@ class User extends Authenticatable
         'USR_ROLE',
         'USR_IS_SELLER',
         'USR_STATUS',
+        // Set when an admin deactivates the account through the report queue or
+        // the appeals panel. USR_TAKEDOWN_REASON is what the app shows the owner
+        // and the marker that separates an admin takedown (appealable) from an
+        // account switched off without a reason (not appealable). The other two
+        // remember when it happened and which listings the takedown itself hid,
+        // so restoring the account brings back only what we removed.
+        'USR_TAKEDOWN_REASON',
+        'USR_TAKEDOWN_AT',
+        'USR_HIDDEN_BY_TAKEDOWN',
         'USR_CREATED_AT',
     ];
 
@@ -99,4 +108,19 @@ class User extends Authenticatable
      * so we turn off automatic timestamp handling.
      */
     public $timestamps = false;
+
+    /**
+     * Deactivated by an admin with a reason the owner can see and contest.
+     *
+     * Narrower than a plain USR_STATUS check on purpose. An account can be
+     * DEACTIVATED with no reason at all — an old suspension, a manual toggle in
+     * the users panel before reasons existed — and there is nothing meaningful
+     * to appeal against in that case. Only a reason makes it a takedown with a
+     * case to answer, which is the same distinction the mobile login uses to
+     * decide between the appeal screen and "contact the Association".
+     */
+    public function isTakenDown(): bool
+    {
+        return $this->USR_STATUS === 'DEACTIVATED' && $this->USR_TAKEDOWN_REASON !== null;
+    }
 }

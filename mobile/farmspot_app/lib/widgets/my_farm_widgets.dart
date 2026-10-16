@@ -103,7 +103,21 @@ class ListingOwnerChips extends StatelessWidget {
             icon: Icons.schedule,
           ),
 
-        if (state.hiddenByAdmin)
+        if (state.isTakenDown)
+          MyFarmStatusChip(
+            label: 'Taken down',
+            color: AppColors.errorTerracotta,
+            background: AppColors.errorSoft,
+            icon: Icons.gpp_bad_outlined,
+            // The admin's reason, verbatim, so the farmer knows what they are
+            // answering before they request a re-evaluation. A takedown without
+            // a reason should not happen (the admin form requires one), but the
+            // fallback keeps the chip honest rather than printing "null".
+            explanation: (state.takedownReason?.trim().isNotEmpty ?? false)
+                ? 'Reason: ${state.takedownReason}'
+                : 'An admin took this listing down. You can request a review.',
+          )
+        else if (state.hiddenByAdmin)
           const MyFarmStatusChip(
             label: 'Hidden by admin',
             color: AppColors.errorTerracotta,
@@ -114,6 +128,17 @@ class ListingOwnerChips extends StatelessWidget {
             explanation:
                 'Buyers cannot see this listing. Contact the '
                 'Association Secretary.',
+          ),
+
+        if (state.hasPendingAppeal)
+          const MyFarmStatusChip(
+            label: 'Re-evaluation in review',
+            color: AppColors.infoSage,
+            background: AppColors.infoSoft,
+            icon: Icons.hourglass_top,
+            explanation:
+                'Your request is with the Association. You will be told the '
+                'outcome.',
           ),
 
         if (state.underReview)
@@ -290,6 +315,7 @@ class MyFarmListingRow extends StatelessWidget {
   final VoidCallback? onReviewsTap;
   final VoidCallback? onEditTap;
   final VoidCallback? onDeleteTap;
+  final VoidCallback? onAppealTap;
 
   const MyFarmListingRow({
     super.key,
@@ -302,6 +328,7 @@ class MyFarmListingRow extends StatelessWidget {
     this.onReviewsTap,
     this.onEditTap,
     this.onDeleteTap,
+    this.onAppealTap,
   });
 
   String get _label => listing.cropIcon ?? listing.categoryName ?? 'Crop';
@@ -382,6 +409,35 @@ class MyFarmListingRow extends StatelessWidget {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        // A taken-down listing gets one primary action: ask for it back. Shown
+        // only when it is appealable and nothing is pending, so it cannot be
+        // tapped twice or offered for a listing the farmer deleted themselves.
+        if (state.canRequestReEvaluation && onAppealTap != null)
+          GestureDetector(
+            onTap: onAppealTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.errorTerracotta,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.undo, size: 12, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text(
+                    'Request re-evaluation',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (onStatusTap != null)
           GestureDetector(
             onTap: onStatusTap,

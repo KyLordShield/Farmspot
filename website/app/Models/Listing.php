@@ -133,4 +133,17 @@ class Listing extends Model
     {
         return $this->LST_AVAILABILITY === self::AVAILABILITY_REMOVED;
     }
+
+    /**
+     * Removed by a moderator with a reason the owner can see and contest.
+     *
+     * This is the appealable state, and it is deliberately narrower than
+     * isRemoved(). A listing the farmer deleted themselves is also REMOVED but
+     * carries no LST_TAKEDOWN_REASON, and there is nothing to appeal: they made
+     * the decision, not us. The reason column is what separates the two.
+     */
+    public function isTakenDown(): bool
+    {
+        return $this->isRemoved() && $this->LST_TAKEDOWN_REASON !== null;
+    }
 }

@@ -560,6 +560,33 @@ a {
     margin-left: 3px;
 }
 
+/* Overview cards that navigate. The tag is an <a> instead of a <div>, so the
+   underline and the inherited link colour have to be reset or the card would
+   look nothing like the one beside it that does not navigate. */
+a.stat-card {
+    text-decoration: none;
+    color: inherit;
+}
+
+a.stat-card:focus-visible {
+    outline: none;
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+}
+
+/* Sidebar counts beside Reports. Red is the pile nobody has opened yet; orange
+   is how many targets have been piled on hard enough to reach the threshold,
+   and only shows at all when there is one. */
+.badge-count-new {
+    background: #dc3545;
+    color: #fff;
+}
+
+.badge-count-mass {
+    background: #fd7e14;
+    color: #fff;
+}
+
 /* ==========================================================================
    Panels (surface containers)
    ========================================================================== */

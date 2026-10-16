@@ -5,6 +5,7 @@ import '../widgets/lottie_loader.dart';
 import '../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
+import 'account_appeal_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -104,8 +105,22 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (result.statusCode == 403) {
-      final serverMessage = result.message ?? '';
-      if (serverMessage.contains('deactivated')) {
+      // Taken down by an admin: unlike a plain deactivation this is appealable,
+      // so send them to the re-evaluation form instead of a dead-end alert. The
+      // email they typed is carried over; the password is re-entered there.
+      if (result.isTakenDown) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AccountAppealScreen(
+              email: _emailController.text.trim(),
+              takedownReason: result.reason,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (result.isPlainlyDeactivated) {
         showFarmAlert(
           context,
           type: FarmAlertType.warning,
@@ -113,7 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
           message: 'Your account has been deactivated. Please contact your '
               'farm association for help.',
         );
-      } else if (serverMessage.contains('pending')) {
+        return;
+      }
+
+      final serverMessage = result.message ?? '';
+      if (serverMessage.contains('pending')) {
         showFarmAlert(
           context,
           type: FarmAlertType.info,

@@ -767,7 +767,7 @@ class ReportSubmissionTest extends TestCase
 
         $admin = $this->makeUser('Admin', 'admin@test.local', 'ADMIN');
         $this->actingAs($admin)
-            ->post("/reports/{$reportId}/action/LISTING_TAKEN_DOWN")
+            ->post("/reports/{$reportId}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason'])
             ->assertRedirect(route('reports.show', $reportId));
 
         $response = $this->actingAs($buyer['user'], 'sanctum')
@@ -811,7 +811,7 @@ class ReportSubmissionTest extends TestCase
         ])->assertCreated()->json('report.id');
 
         $admin = $this->makeUser('Admin', 'admin@test.local', 'ADMIN');
-        $this->actingAs($admin)->post("/reports/{$reportId}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$reportId}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->actingAs($nosy['user'], 'sanctum')
             ->getJson('/api/notifications')

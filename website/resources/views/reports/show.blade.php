@@ -16,6 +16,25 @@
     </div>
 </div>
 
+{{-- The wave-of-reports signal, on the detail page too: a moderator who jumped
+     straight to a report id should not have to go back to the list to learn
+     that this target is being hit repeatedly. --}}
+@if($report->RPT_FLAGGED_AT && in_array($report->RPT_STATUS, ['New', 'Reviewing'], true))
+    <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Flagged by mass reporting.</strong>
+        This target reached the threshold of distinct reporters
+        ({{ app(\App\Services\MassReportService::class)->threshold() }}) while still open.
+        Treat the volume as a signal to look, not as a verdict.
+        <div class="mt-2">
+            <a href="{{ route('reports.flaggedTarget', [$report->RPT_TARGET_TYPE, $report->RPT_TARGET_ID]) }}"
+               class="btn btn-sm btn-farm">
+                <i class="bi bi-people me-1"></i> See all reporters on this target
+            </a>
+        </div>
+    </div>
+@endif
+
 <div class="panel">
     <div class="panel-header">
         <h5 class="panel-title">
@@ -125,7 +144,9 @@
                 <tr>
                     <th>Status</th>
                     <td>
-                        @php($reportedListingStatus = $report->listing?->LST_STATUS ?? null)
+                        @php
+                            $reportedListingStatus = $report->listing?->LST_STATUS ?? null;
+                        @endphp
                         @if($reportedListingStatus === 'AVAILABLE_NOW')
                             <span class="badge badge-soft-success">Available Now</span>
                         @elseif($reportedListingStatus === 'SOON_TO_HARVEST')
@@ -235,7 +256,9 @@
                     <tr>
                         <th>Account status</th>
                         <td>
-                            @php($accusedStatus = $accused?->USR_STATUS ?? null)
+                            @php
+                                $accusedStatus = $accused?->USR_STATUS ?? null;
+                            @endphp
                             @if($accusedStatus === 'ACTIVE')
                                 <span class="badge badge-soft-success">Active</span>
                             @elseif($accusedStatus === 'PENDING_VERIFICATION')
@@ -349,7 +372,17 @@
                                 <span class="text-muted fw-normal">— affects {{ $option['subject'] }}</span>
                             </label>
                             <input type="text" class="form-control" id="note-{{ $option['action'] }}" name="note" maxlength="500"
-                                   placeholder="Note for the audit trail (optional)">
+                                   placeholder="{{ $option['requires_reason'] ? 'Reason shown to the owner (required)' : 'Note for the audit trail (optional)' }}"
+                                   {{ $option['requires_reason'] ? 'required' : '' }}>
+                            @if($option['requires_reason'])
+                                {{-- The owner sees this sentence when their
+                                     listing or account goes away, and it is
+                                     what they answer in a re-evaluation
+                                     request, so it is required. --}}
+                                <div class="form-text">
+                                    Shown to the owner as the reason for this action.
+                                </div>
+                            @endif
                         </div>
                         <div class="col-auto">
                             <button type="submit" class="btn btn-farm">

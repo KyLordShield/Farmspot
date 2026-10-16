@@ -83,6 +83,15 @@
                 <a href="{{ route('reports') }}">
                     <i class="bi bi-flag"></i>
                     Reports
+                    {{-- Red is the unopened work; orange is how many targets
+                         have been piled on hard enough to trip the threshold.
+                         Orange only ever appears when there is a mass report. --}}
+                    @if($sidebarNewReports ?? 0)
+                        <span class="badge badge-count-new ms-2">{{ $sidebarNewReports }}</span>
+                    @endif
+                    @if($sidebarMassReports ?? 0)
+                        <span class="badge badge-count-mass ms-1" title="Mass-report alerts">{{ $sidebarMassReports }}</span>
+                    @endif
                 </a>
             </li>
 
@@ -107,6 +116,16 @@
                 <a href="{{ route('seller-requests') }}">
                     <i class="bi bi-person-check"></i>
                     Seller Requests
+                </a>
+            </li>
+
+            <li>
+                <a href="{{ route('appeals') }}">
+                    <i class="bi bi-shield-exclamation"></i>
+                    Appeals
+                    @if($sidebarPendingAppeals ?? 0)
+                        <span class="badge bg-danger ms-2">{{ $sidebarPendingAppeals }}</span>
+                    @endif
                 </a>
             </li>
 

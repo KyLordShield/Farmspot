@@ -80,6 +80,18 @@
                 <td>{{ $user->USR_IS_SELLER ? 'Yes' : 'No' }}</td>
             </tr>
 
+            @if($user->USR_TAKEDOWN_REASON)
+                <tr>
+                    <th>Deactivation Reason</th>
+                    <td>
+                        {{ $user->USR_TAKEDOWN_REASON }}
+                        <div class="cell-secondary small mt-1">
+                            Shown to the user at sign-in; they can request a re-evaluation.
+                        </div>
+                    </td>
+                </tr>
+            @endif
+
             <tr>
                 <th>Registered</th>
                 <td class="cell-secondary">{{ $user->USR_CREATED_AT }}</td>

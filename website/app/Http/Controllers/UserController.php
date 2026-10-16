@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ModerationService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -103,41 +104,69 @@ class UserController extends Controller
             'USR_MOBILE_NUMBER' => ['required', 'string', 'max:20'],
             'USR_ROLE' => ['required', 'in:GENERAL_USER,ADMIN'],
             'USR_STATUS' => ['required', 'in:ACTIVE,PENDING_VERIFICATION,DEACTIVATED'],
+            // A deactivation from this panel is a takedown: the owner gets a
+            // reason they can read at the refused login and a re-evaluation they
+            // can request, exactly like one that arrives through the reports
+            // queue. Required only when the save is actually deactivating, so
+            // fixing a typo in a name never demands a reason.
+            'USR_TAKEDOWN_REASON' => ['nullable', 'string', 'max:500', 'required_if:USR_STATUS,DEACTIVATED'],
         ]);
+
+        $newStatus = $validated['USR_STATUS'];
 
         $user->update([
             'USR_NAME' => $validated['USR_NAME'],
             'USR_EMAIL' => $validated['USR_EMAIL'],
             'USR_MOBILE_NUMBER' => $validated['USR_MOBILE_NUMBER'],
             'USR_ROLE' => $validated['USR_ROLE'],
-            'USR_STATUS' => $validated['USR_STATUS'],
+            'USR_STATUS' => $newStatus,
         ]);
 
-        if ($validated['USR_STATUS'] === 'DEACTIVATED') {
+        if ($newStatus === 'DEACTIVATED') {
+            $user->update([
+                'USR_TAKEDOWN_REASON' => $validated['USR_TAKEDOWN_REASON'],
+                'USR_TAKEDOWN_AT' => now(),
+                'USR_HIDDEN_BY_TAKEDOWN' => true,
+            ]);
             $user->tokens()->delete();
+        } elseif ($previousStatus === 'DEACTIVATED' && $newStatus === 'ACTIVE') {
+            // Reinstating from this panel is the same act as approving an
+            // appeal, so it goes through the same service: the takedown markers
+            // are cleared and only the listings the takedown hid come back.
+            // Sharing the code keeps the two doors from drifting apart.
+            app(ModerationService::class)->restoreAccount($user);
         }
 
-        $this->notifyStatusChange($user, $previousStatus, $validated['USR_STATUS']);
+        $this->notifyStatusChange($user, $previousStatus, $newStatus);
 
         return redirect()->route('users')->with('success', 'User updated successfully.');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $user = User::where('USR_ID', $id)->firstOrFail();
 
+        // Same rule as the edit form: the quick deactivate button collects a
+        // reason in its confirm dialog and posts it as a hidden field, so a
+        // one-click deactivation is still an appealable takedown.
+        $validated = $request->validate([
+            'USR_TAKEDOWN_REASON' => ['required', 'string', 'max:500'],
+        ]);
+
         $previousStatus = $user->USR_STATUS;
 
-        $user->USR_STATUS = 'DEACTIVATED';
-        $user->save();
+        $user->update([
+            'USR_STATUS' => 'DEACTIVATED',
+            'USR_TAKEDOWN_REASON' => $validated['USR_TAKEDOWN_REASON'],
+            'USR_TAKEDOWN_AT' => now(),
+            'USR_HIDDEN_BY_TAKEDOWN' => true,
+        ]);
 
         // If a user is being deactivated, they must not stay signed in on any
         // device. Setting USR_STATUS alone blocks the next login, but tokens
         // issued before this call would still work — which is the exact reason
         // the report action also revokes them.
-        if ($user->USR_STATUS === 'DEACTIVATED') {
-            $user->tokens()->delete();
-        }
+        $user->tokens()->delete();
 
         $this->notifyStatusChange($user, $previousStatus, 'DEACTIVATED');
 
@@ -176,7 +205,12 @@ class UserController extends Controller
         if ($newStatus === 'DEACTIVATED') {
             $type = 'ACCOUNT_SUSPENDED';
             $title = 'Your account was deactivated';
-            $body = 'Please contact your Association Secretary for help.';
+            // When the deactivation carries a reason it is an appealable
+            // takedown, so the message points at the re-evaluation instead of
+            // sending the person to the Association first.
+            $body = $user->USR_TAKEDOWN_REASON !== null
+                ? 'Reason: '.$user->USR_TAKEDOWN_REASON.' You can request a re-evaluation from the login screen.'
+                : 'Please contact your Association Secretary for help.';
         } elseif ($previousStatus === 'DEACTIVATED' && $newStatus === 'ACTIVE') {
             $type = 'ACCOUNT_REACTIVATED';
             $title = 'Your account is active again';

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -156,7 +157,44 @@ class Report extends Model
         'RPT_REASON_CODE',
         'RPT_DETAILS',
         'RPT_ID',
+        // Set by MassReportService when one target collects enough reports from
+        // enough different people to warrant a second look. Also written back to
+        // null when the queue resolves those reports, so a fresh wave of reports
+        // after that can flag the target again.
+        'RPT_FLAGGED_AT',
     ];
+
+    /**
+     * Reports still awaiting a moderator decision.
+     *
+     * The same two states the seller's "Under review" chip uses, kept as a
+     * scope as well so the mass-report query and the My Farm query cannot drift
+     * apart on what "open" means.
+     */
+    public function scopeOpen(Builder $query): Builder
+    {
+        return $query->whereIn('RPT_STATUS', self::OPEN_STATUSES);
+    }
+
+    /**
+     * Reports that share this one's target.
+     *
+     * Keyed on the target pair (type + id), never on the reporting user or the
+     * listing context. A listing report and a person report are about different
+     * things and must not be added together when deciding whether something is
+     * a mass report.
+     */
+    public function scopeForSameTarget(Builder $query, Report $report): Builder
+    {
+        return $query
+            ->where('RPT_TARGET_TYPE', $report->RPT_TARGET_TYPE)
+            ->where('RPT_TARGET_ID', $report->RPT_TARGET_ID);
+    }
+
+    public function isFlagged(): bool
+    {
+        return $this->RPT_FLAGGED_AT !== null;
+    }
 
     /**
      * Every enforcement step applied to this report, oldest first.

@@ -119,6 +119,20 @@ class ReportController extends Controller
         // duplicate branch below, which formats a model that was read back.
         $report->refresh();
 
+        // After the report is safely stored, see whether this target has now
+        // collected enough reports from enough different people to warrant a
+        // second look. This only flags the queue — it never hides or suspends
+        // anything — so a failure here must not fail the report the buyer just
+        // filed. The buyer is told "thanks"; the moderator gets the signal.
+        try {
+            app(\App\Services\MassReportService::class)->flagIfThresholdReached($report);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('[reports] mass-report check failed', [
+                'rpt_id' => $report->RPT_ID,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
             'message' => 'Thanks. Our team will review this.',
             'report' => $this->format($report),

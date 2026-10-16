@@ -39,6 +39,12 @@ Route::post('/forgot-password', [PasswordResetController::class, 'requestCode'])
 Route::post('/reset-password', [PasswordResetController::class, 'resetPassword'])
     ->middleware('throttle:5,1');
 
+// Appeals (public for account; listing appeals require auth below). The account
+// appeal checks email+password and is heavily throttled to stop someone fishing
+// for which deactivated emails exist or guessing passwords against a known email.
+Route::post('/appeals/account', [\App\Http\Controllers\Api\AppealController::class, 'storeAccount'])
+    ->middleware('throttle:5,1');
+
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
 // Public, like the listing detail it sits on: reviews are shown on a public
@@ -49,7 +55,7 @@ Route::get('/insights', [InsightsController::class, 'show']);
 Route::get('/farms/public', [FarmController::class, 'mapPins']);
 Route::get('/farms/{farmId}/profile', [FarmController::class, 'profile']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/seller/activate', [SellerController::class, 'activate']);
     Route::post('/seller/deactivate', [SellerController::class, 'deactivate']);
@@ -68,6 +74,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/listings/{id}/photos', [ListingPhotoController::class, 'store']);
     Route::patch('/listings/{id}/photos/{photoId}/primary', [ListingPhotoController::class, 'setPrimary']);
     Route::delete('/listings/{id}/photos/{photoId}', [ListingPhotoController::class, 'destroy']);
+    Route::post('/listings/{listing}/appeal', [\App\Http\Controllers\Api\AppealController::class, 'storeListing']);
     Route::delete('/listings/{id}', [FarmerListingController::class, 'destroy']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
@@ -120,7 +127,7 @@ Route::post('/reports', [ReportController::class, 'store'])->middleware('throttl
     Route::get('/user/stats', [UserStatsController::class, 'show']);
 });
 
-Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'active', 'admin'])->prefix('admin')->group(function () {
     Route::get('/seller-requests', [SellerRequestController::class, 'index']);
     Route::post('/seller-requests/{farmId}/approve', [SellerRequestController::class, 'approve']);
     Route::post('/seller-requests/{farmId}/reject', [SellerRequestController::class, 'reject']);

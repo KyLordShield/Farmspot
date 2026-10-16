@@ -55,13 +55,22 @@ class UserDeactivationTest extends TestCase
     /** The payload the admin edit form posts back. */
     private function formFor(User $user, array $overrides = []): array
     {
-        return array_merge([
+        $payload = array_merge([
             'USR_NAME' => $user->USR_NAME,
             'USR_EMAIL' => $user->USR_EMAIL,
             'USR_MOBILE_NUMBER' => $user->USR_MOBILE_NUMBER,
             'USR_ROLE' => $user->USR_ROLE,
             'USR_STATUS' => $user->USR_STATUS,
         ], $overrides);
+
+        // A deactivation is now a takedown with a reason (that is what makes it
+        // appealable), so the shared payload supplies one unless a test is
+        // specifically checking the refusal.
+        if (($payload['USR_STATUS'] ?? null) === 'DEACTIVATED' && ! array_key_exists('USR_TAKEDOWN_REASON', $payload)) {
+            $payload['USR_TAKEDOWN_REASON'] = 'Repeated harassment';
+        }
+
+        return $payload;
     }
 
     /**
@@ -108,7 +117,7 @@ class UserDeactivationTest extends TestCase
         $this->assertDatabaseCount('personal_access_tokens', 2);
 
         $this->actingAs($admin)
-            ->delete("/users/{$target->USR_ID}")
+            ->delete("/users/{$target->USR_ID}", ['USR_TAKEDOWN_REASON' => 'Repeated harassment'])
             ->assertRedirect(route('users'));
 
         $this->assertSame('DEACTIVATED', $target->fresh()->USR_STATUS);
@@ -191,6 +200,49 @@ $this->assertDatabaseCount('personal_access_tokens', 0);
             ->assertForbidden();
 
         $this->assertSame('ACTIVE', $target->fresh()->USR_STATUS);
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+    }
+
+    public function test_a_deactivation_records_the_reason_and_makes_the_account_appealable()
+    {
+        // The reason is not decoration: it is what the app shows at the refused
+        // login and what makes the account eligible for a re-evaluation. Without
+        // it the deactivation is a dead end the owner cannot contest.
+        $admin = $this->makeUser('ADMIN');
+        $target = $this->makeUser();
+
+        $this->actingAs($admin)
+            ->put("/users/{$target->USR_ID}", $this->formFor($target, [
+                'USR_STATUS' => 'DEACTIVATED',
+                'USR_TAKEDOWN_REASON' => 'Abusive messages to buyers',
+            ]))
+            ->assertRedirect(route('users'));
+
+        $fresh = $target->fresh();
+        $this->assertSame('Abusive messages to buyers', $fresh->USR_TAKEDOWN_REASON);
+        $this->assertNotNull($fresh->USR_TAKEDOWN_AT);
+        $this->assertTrue($fresh->isTakenDown());
+    }
+
+    public function test_a_deactivation_without_a_reason_is_refused()
+    {
+        // A reasonless deactivation cannot be appealed — there is no decision to
+        // point at — so the panel will not accept one. The account must be left
+        // exactly as it was.
+        $admin = $this->makeUser('ADMIN');
+        $target = $this->makeUser();
+
+        $target->createToken('their phone');
+
+        $this->actingAs($admin)
+            ->put("/users/{$target->USR_ID}", $this->formFor($target, [
+                'USR_STATUS' => 'DEACTIVATED',
+                'USR_TAKEDOWN_REASON' => '',
+            ]))
+            ->assertSessionHasErrors('USR_TAKEDOWN_REASON');
+
+        $this->assertSame('ACTIVE', $target->fresh()->USR_STATUS);
+        $this->assertTrue($target->fresh()->isTakenDown() === false);
         $this->assertDatabaseCount('personal_access_tokens', 1);
     }
 }

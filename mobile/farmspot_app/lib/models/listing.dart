@@ -64,6 +64,23 @@ class Listing {
   /// so buyer endpoints, which never send the field, are unchanged.
   final bool hasOpenReport;
 
+  /// The admin's reason for taking this listing down, or null.
+  ///
+  /// Sent only to the owner. A takedown is REMOVED plus a reason; a listing the
+  /// farmer deleted themselves is REMOVED with no reason and is not appealable.
+  final String? takedownReason;
+
+  /// When the takedown happened, used to tell a fresh takedown from the one a
+  /// denied appeal already covered. Null when the listing is not taken down.
+  final String? takedownAt;
+
+  /// True when an admin took this listing down (REMOVED with a reason).
+  final bool isTakenDown;
+
+  /// True when a re-evaluation request for this listing is awaiting a decision.
+  /// The row shows "re-evaluation in review" and hides the request button.
+  final bool hasPendingAppeal;
+
   Listing({
     required this.id,
     this.cropIcon,
@@ -85,6 +102,10 @@ class Listing {
     this.farmerId,
     this.ratings = const RatingSummary.none(),
     this.hasOpenReport = false,
+    this.takedownReason,
+    this.takedownAt,
+    this.isTakenDown = false,
+    this.hasPendingAppeal = false,
   });
 
   factory Listing.fromJson(Map<String, dynamic> json) {
@@ -112,6 +133,10 @@ class Listing {
       farmerId: (json['farmer'] as Map?)?['id'] as String?,
       ratings: RatingSummary.fromListingJson(json),
       hasOpenReport: json['has_open_report'] as bool? ?? false,
+      takedownReason: json['takedown_reason'] as String?,
+      takedownAt: json['takedown_at'] as String?,
+      isTakenDown: json['is_taken_down'] as bool? ?? false,
+      hasPendingAppeal: json['has_pending_appeal'] as bool? ?? false,
     );
   }
 

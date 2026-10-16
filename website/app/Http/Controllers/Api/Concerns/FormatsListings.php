@@ -83,6 +83,24 @@ trait FormatsListings
             $data['has_open_report'] = (bool) $listing->has_open_report;
         }
 
+        // Takedown reason when an admin removed the listing. This is what
+        // separates an appealable takedown from a farmer-deleted listing (no
+        // reason). is_taken_down matches the backend definition (REMOVED plus a
+        // reason); the timestamp lets a client compare against the last appeal
+        // decision if it ever needs to.
+        if ($listing->LST_TAKEDOWN_REASON !== null) {
+            $data['takedown_reason'] = $listing->LST_TAKEDOWN_REASON;
+            $data['takedown_at'] = $listing->LST_TAKEDOWN_AT;
+            $data['is_taken_down'] = (bool) $listing->isTakenDown();
+        }
+
+        // has_pending_appeal, present only when the query supplied it (My Farm
+        // does, so the row can show "re-evaluation in review" and hide the
+        // button). Null from the subquery means no pending appeal.
+        if (isset($listing->has_pending_appeal)) {
+            $data['has_pending_appeal'] = (bool) $listing->has_pending_appeal;
+        }
+
         return $data;
     }
 

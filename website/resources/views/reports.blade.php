@@ -18,39 +18,39 @@
     </div>
 @endif
 
+{{-- The mass-report signal is now the clickable "Mass reported" card in the
+     overview below, so this no longer needs a banner of its own at the top.
+     Clicking the card opens the same grouped alert list the banner linked to. --}}
+
 <div class="stat-grid">
 
-    <div class="stat-card">
-        <div class="stat-icon tint-red">
+    {{-- Each card doubles as the filter its number describes, so the overview
+         is also the queue's quick filter. Total is the unfiltered view, which
+         is what the queue shows by default. --}}
+    <a href="{{ route('reports') }}" class="stat-card" title="Show every report">
+        <div class="stat-icon tint-slate">
             <i class="bi bi-flag"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $reports->total() }}</div>
+            <div class="stat-value">{{ $totalReports }}</div>
             <div class="stat-label">Total reports</div>
         </div>
-    </div>
+    </a>
 
-    <div class="stat-card">
+    {{-- Always rendered, so the grid keeps the same four cards no matter the
+         state of the queue. Zero simply means no target has reached the
+         threshold yet. --}}
+    <a href="{{ route('reports.flagged') }}" class="stat-card" title="Review mass-report alerts">
         <div class="stat-icon tint-amber">
-            <i class="bi bi-bell"></i>
+            <i class="bi bi-exclamation-triangle-fill"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $counts['New'] ?? 0 }}</div>
-            <div class="stat-label">New</div>
+            <div class="stat-value">{{ $flaggedTargetCount ?? 0 }}</div>
+            <div class="stat-label">Mass reported</div>
         </div>
-    </div>
+    </a>
 
-    <div class="stat-card">
-        <div class="stat-icon tint-slate">
-            <i class="bi bi-search"></i>
-        </div>
-        <div>
-            <div class="stat-value">{{ $counts['Reviewing'] ?? 0 }}</div>
-            <div class="stat-label">Reviewing</div>
-        </div>
-    </div>
-
-    <div class="stat-card">
+    <a href="{{ route('reports', ['status' => 'Resolved']) }}" class="stat-card" title="Show resolved reports">
         <div class="stat-icon tint-green">
             <i class="bi bi-check-circle"></i>
         </div>
@@ -58,44 +58,17 @@
             <div class="stat-value">{{ $counts['Resolved'] ?? 0 }}</div>
             <div class="stat-label">Resolved</div>
         </div>
-    </div>
+    </a>
 
-</div>
-
-{{-- What is being reported, not just how much. A queue full of spam messages
-     calls for a different response than one full of fake listings, and the
-     status cards above cannot tell them apart. --}}
-<div class="stat-grid">
-
-    <div class="stat-card">
-        <div class="stat-icon tint-green">
-            <i class="bi bi-basket"></i>
+    <a href="{{ route('reports', ['status' => 'New']) }}" class="stat-card" title="Show new reports">
+        <div class="stat-icon tint-red">
+            <i class="bi bi-bell"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $typeCounts['LISTING'] ?? 0 }}</div>
-            <div class="stat-label">Crop listings</div>
+            <div class="stat-value">{{ $counts['New'] ?? 0 }}</div>
+            <div class="stat-label">New</div>
         </div>
-    </div>
-
-    <div class="stat-card">
-        <div class="stat-icon tint-amber">
-            <i class="bi bi-chat-dots"></i>
-        </div>
-        <div>
-            <div class="stat-value">{{ $typeCounts['MESSAGE'] ?? 0 }}</div>
-            <div class="stat-label">Messages</div>
-        </div>
-    </div>
-
-    <div class="stat-card">
-        <div class="stat-icon tint-slate">
-            <i class="bi bi-person-badge"></i>
-        </div>
-        <div>
-            <div class="stat-value">{{ ($typeCounts['FARMER'] ?? 0) + ($typeCounts['USER'] ?? 0) }}</div>
-            <div class="stat-label">Farmers &amp; users</div>
-        </div>
-    </div>
+    </a>
 
 </div>
 
@@ -191,6 +164,13 @@
                             <span class="badge badge-soft-success">Resolved</span>
                         @else
                             <span class="badge badge-soft-neutral">Dismissed</span>
+                        @endif
+                        {{-- Only while the report is still open. Once it is
+                             Resolved or Dismissed the flag has done its job. --}}
+                        @if($report->RPT_FLAGGED_AT && in_array($report->RPT_STATUS, ['New', 'Reviewing'], true))
+                            <span class="badge badge-soft-danger" title="Mass-report threshold reached">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Flagged
+                            </span>
                         @endif
                     </td>
                     <td class="cell-faint">{{ \Carbon\Carbon::parse($report->RPT_CREATED_AT)->format('M d, Y h:i A') }}</td>

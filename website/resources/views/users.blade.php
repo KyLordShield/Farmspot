@@ -157,6 +157,8 @@
                                   class="d-inline"
                                   data-confirm-title="Deactivate user?"
                                   data-confirm-text="Are you sure you want to deactivate {{ $user->USR_NAME }}? This removes their access until an admin re-activates it."
+                                  data-confirm-input="USR_TAKEDOWN_REASON"
+                                  data-confirm-input-label="Reason for deactivation"
                                   data-confirm-tone="danger">
                                 @csrf
                                 @method('DELETE')

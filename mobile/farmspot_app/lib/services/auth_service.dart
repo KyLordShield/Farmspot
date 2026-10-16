@@ -12,18 +12,34 @@ import 'session_state.dart';
 
 /// Structured login outcome so screens can distinguish network failures from
 /// auth failures (401/403) and show the right friendly message.
+///
+/// [code] and [reason] carry the backend's machine-readable refusal. A taken
+/// down account answers with `code == 'ACCOUNT_TAKEN_DOWN'` and the admin's
+/// reason, which the login screen needs to offer the re-evaluation form;
+/// plain deactivation (`ACCOUNT_DEACTIVATED`) has no reason and no appeal.
 class AuthLoginResult {
   final bool success;
   final int? statusCode;
   final String? message;
   final bool isNetworkError;
+  final String? code;
+  final String? reason;
 
   const AuthLoginResult({
     required this.success,
     this.statusCode,
     this.message,
     this.isNetworkError = false,
+    this.code,
+    this.reason,
   });
+
+  /// True when the account was taken down by an admin and may be appealed.
+  bool get isTakenDown => code == 'ACCOUNT_TAKEN_DOWN';
+
+  /// True when the account is deactivated without a takedown reason: no appeal
+  /// path, only "contact the Association".
+  bool get isPlainlyDeactivated => code == 'ACCOUNT_DEACTIVATED';
 }
 
 /// Structured registration outcome: same shape as [AuthLoginResult], plus the
@@ -159,6 +175,8 @@ class AuthService {
         success: false,
         statusCode: response.statusCode,
         message: data['message'] as String?,
+        code: data['code'] as String?,
+        reason: data['reason'] as String?,
       );
     } on TimeoutException {
       debugPrint('AuthService.attemptLogin: request timed out.');
@@ -180,6 +198,62 @@ class AuthService {
       );
     } catch (e) {
       debugPrint('AuthService.attemptLogin: unexpected error: $e');
+      return AuthLoginResult(success: false);
+    }
+  }
+
+  /// Submits a re-evaluation request for a taken-down account.
+  ///
+  /// Login was refused, so there is no token: the account is proven by the
+  /// same email + password the user just tried. The backend throttles this hard
+  /// (per IP + email) and only accepts an account that is actually taken down
+  /// with a reason. Returns a [AuthLoginResult] so callers reuse the same
+  /// network/`message` handling as login; [code] carries `appeal_id` on success.
+  static Future<AuthLoginResult> submitAccountAppeal({
+    required String email,
+    required String password,
+    required String reason,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/appeals/account'),
+            headers: {'Accept': 'application/json'},
+            body: {
+              'email': email.trim(),
+              'password': password,
+              'reason': reason.trim(),
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        return AuthLoginResult(
+          success: true,
+          message: data['message'] as String?,
+          code: data['appeal_id'] as String?,
+        );
+      }
+
+      return AuthLoginResult(
+        success: false,
+        statusCode: response.statusCode,
+        message: data['message'] as String?,
+        code: data['code'] as String?,
+      );
+    } on TimeoutException {
+      debugPrint('AuthService.submitAccountAppeal: request timed out.');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } on SocketException {
+      debugPrint('AuthService.submitAccountAppeal: socket error.');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } on http.ClientException {
+      debugPrint('AuthService.submitAccountAppeal: client error.');
+      return const AuthLoginResult(success: false, isNetworkError: true);
+    } catch (e) {
+      debugPrint('AuthService.submitAccountAppeal: unexpected error: $e');
       return AuthLoginResult(success: false);
     }
   }
@@ -444,6 +518,13 @@ class AuthService {
           'Authorization': 'Bearer $token',
         },
       );
+      // A revoked token must sign the user out, not just fail silently. This is
+      // the most-called authenticated read, so most screens that refresh on
+      // open hit it — making it the natural place to notice a dead session.
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await expireSession();
+        return null;
+      }
       if (response.statusCode != 200) return null;
 
       final data = jsonDecode(response.body);
@@ -562,6 +643,15 @@ class AuthService {
       }
     }
 
+    await clearLocalSession();
+  }
+
+  /// Drops everything that makes this device look signed in, without touching
+  /// the network. The one place the token, the cached user, the shared session
+  /// state and the AI transcript are cleared together, so [logout] (a
+  /// deliberate sign-out) and [expireSession] (the server invalidated us) can
+  /// never drift into clearing slightly different things.
+  static Future<void> clearLocalSession() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove(SessionState.userPrefsKey);
@@ -570,6 +660,72 @@ class AuthService {
     // screen. Without this, whoever signs in next would be continuing the
     // previous user's conversation.
     AiChatSession.instance.clear();
+  }
+
+  /// The server has stopped recognising our token (it was revoked by an
+  /// admin deactivation, a password reset, or an outright expiry). Clear the
+  /// local session and tell the app to return to the login screen.
+  ///
+  /// Guarded so a burst of parallel requests all coming back 401 only signs the
+  /// user out once.
+  static bool _expiring = false;
+
+  static Future<void> expireSession() async {
+    if (_expiring) return;
+    _expiring = true;
+    try {
+      await clearLocalSession();
+      SessionState.instance.notifySessionExpired();
+    } finally {
+      _expiring = false;
+    }
+  }
+
+  /// Confirms the stored token is still accepted by the server.
+  ///
+  /// Returns true when the session is good — including when the check simply
+  /// could not be made, because a flaky connection must never sign someone out.
+  /// Returns false only on an unambiguous rejection (401 token dead, 403
+  /// account locked), after clearing the local session.
+  ///
+  /// [notify] decides whether a rejection also drives the app back to the login
+  /// screen. During startup the splash/AuthGate already routes to login, so it
+  /// passes false; the resume and idle checks leave it on.
+  static Future<bool> validateSession({bool notify = true}) async {
+    final token = await getToken();
+    if (token == null) return false;
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/user'),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic>) {
+          await _cacheUser(data);
+        }
+        return true;
+      }
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await clearLocalSession();
+        if (notify) SessionState.instance.notifySessionExpired();
+        return false;
+      }
+
+      // 5xx and anything else is the server's problem, not a sign-out.
+      return true;
+    } catch (_) {
+      // Offline / timeout: keep the session rather than punish a bad network.
+      return true;
+    }
   }
 
   /// Extracts the first field error from a Laravel 422 body

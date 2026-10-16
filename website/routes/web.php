@@ -42,6 +42,15 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::put('/categories/{id}', [CropCategoryController::class, 'update'])->name('categories.update');
     Route::delete('/categories/{id}', [CropCategoryController::class, 'destroy'])->name('categories.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+    // The mass-report drill-down has to be declared before the {id} wildcard,
+    // or "flagged" is just another report id and these pages become unreachable.
+    // The list groups flagged targets; the target page lists the distinct
+    // reporters behind one of them.
+    Route::get('/reports/flagged', [ReportController::class, 'flagged'])->name('reports.flagged');
+    Route::get('/reports/flagged/{type}/{id}', [ReportController::class, 'flaggedTarget'])->name('reports.flaggedTarget');
+    // Acts on the whole target from the alert page: one enforcement step that
+    // resolves every open report behind the alert.
+    Route::post('/reports/flagged/{type}/{id}/action/{action}', [ReportController::class, 'flaggedTargetAction'])->name('reports.flaggedTarget.action');
     Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
     Route::patch('/reports/{id}/status', [ReportController::class, 'updateStatus'])->name('reports.updateStatus');
     // The part that makes the queue worth having: a moderator who agrees a
@@ -77,6 +86,11 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/seller-requests/{id}', [SellerRequestController::class, 'show'])->name('seller-requests.show');
     Route::post('/seller-requests/{id}/approve', [SellerRequestController::class, 'approve'])->name('seller-requests.approve');
     Route::post('/seller-requests/{id}/reject', [SellerRequestController::class, 'reject'])->name('seller-requests.reject');
+
+    Route::get('/appeals', [\App\Http\Controllers\AppealController::class, 'index'])->name('appeals');
+    Route::get('/appeals/{id}', [\App\Http\Controllers\AppealController::class, 'show'])->name('appeals.show');
+    Route::post('/appeals/{id}/approve', [\App\Http\Controllers\AppealController::class, 'approve'])->name('appeals.approve');
+    Route::post('/appeals/{id}/deny', [\App\Http\Controllers\AppealController::class, 'deny'])->name('appeals.deny');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

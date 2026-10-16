@@ -83,6 +83,8 @@ class ReportAction extends Model
      *
      * Shape depends on the action: a flat ['field' => 'value'] for a single
      * column, or ['listings' => [...]] when a step touched a whole catalogue.
+     * Every record also carries ['closed_reports' => [RPT_ID => prior status]],
+     * the reports the action finished, so undo reopens exactly those rows.
      */
     public function previous(): array
     {

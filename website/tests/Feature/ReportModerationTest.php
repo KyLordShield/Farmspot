@@ -417,9 +417,9 @@ class ReportModerationTest extends TestCase
         $this->assertNull($action->RAC_REVERTED_AT);
         $this->assertTrue($action->isLive());
 
-        // Acting is work in progress, so a report still sitting unread as New
-        // moves along.
-        $this->assertSame('Reviewing', $report->fresh()->RPT_STATUS);
+        // Actioning a report is a decision, so a report still sitting unread as
+        // New is closed out as Resolved rather than left mid-flight.
+        $this->assertSame('Resolved', $report->fresh()->RPT_STATUS);
     }
 
     public function test_undoing_a_takedown_puts_the_listing_back()
@@ -430,7 +430,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->actingAs($admin)
             // The literal undo path, which the {action} wildcard would otherwise
@@ -448,7 +448,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
         $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/undo");
 
         // Nothing is ever deleted, so "who did what, and did it stick" stays
@@ -469,7 +469,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
         $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/undo");
 
         $this->assertSame('NOT_AVAILABLE', $listing['listing']->fresh()->LST_AVAILABILITY);
@@ -481,7 +481,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/SELLER_DEACTIVATED");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/SELLER_DEACTIVATED", ['note' => 'Test reason']);
 
         $this->assertSame('DEACTIVATED', $listing['user']->fresh()->USR_STATUS);
         // The listing itself is a separate decision, so it stays on sale.
@@ -504,7 +504,7 @@ class ReportModerationTest extends TestCase
         $theirToken = $listing['user']->createToken('their phone')->accessToken;
         $this->assertDatabaseCount('personal_access_tokens', 1);
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/ACCOUNT_DEACTIVATED");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/ACCOUNT_DEACTIVATED", ['note' => 'Test reason']);
 
         $this->assertSame('DEACTIVATED', $listing['user']->fresh()->USR_STATUS);
         $this->assertDatabaseCount('personal_access_tokens', 0);
@@ -516,15 +516,19 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('USER', $listing['user']->USR_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/ACCOUNT_DEACTIVATED");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/ACCOUNT_DEACTIVATED", ['note' => 'Test reason']);
 
         // The token is gone, so the next thing they can do is try to log in
         // again — and that has to fail too, not just fail to be pre-authorised.
+        // The admin gave a reason, so the app can offer the re-evaluation flow
+        // and the login response carries that reason back.
         $this->postJson('/api/login', [
             'email' => strtolower($listing['user']->USR_ID).'@test.local',
             'password' => 'password123',
         ])->assertStatus(403)
-            ->assertJsonPath('message', 'This account has been deactivated.');
+            ->assertJsonPath('message', 'This account has been taken down.')
+            ->assertJsonPath('code', 'ACCOUNT_TAKEN_DOWN')
+            ->assertJsonPath('reason', 'Test reason');
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
@@ -543,7 +547,7 @@ class ReportModerationTest extends TestCase
         $response->assertSee('Deactivate this farmer');
         $response->assertSee('Take down all their listings');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/FARMER_ACCOUNT_DEACTIVATED");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/FARMER_ACCOUNT_DEACTIVATED", ['note' => 'Test reason']);
 
         $this->assertSame('DEACTIVATED', $listing['user']->fresh()->USR_STATUS);
         // Proportionate: only the account step was taken, so they keep trading.
@@ -559,7 +563,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('FARMER', $listing['farmer']->FMR_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/FARMER_LISTINGS_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/FARMER_LISTINGS_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->assertSame('REMOVED', $listing['listing']->fresh()->LST_AVAILABILITY);
         $this->assertSame('ACTIVE', $listing['user']->fresh()->USR_STATUS);
@@ -574,8 +578,8 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/SELLER_DEACTIVATED");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/SELLER_DEACTIVATED", ['note' => 'Test reason']);
 
         $this->assertSame('REMOVED', $listing['listing']->fresh()->LST_AVAILABILITY);
         $this->assertSame('DEACTIVATED', $listing['user']->fresh()->USR_STATUS);
@@ -645,7 +649,7 @@ class ReportModerationTest extends TestCase
         $admin = $this->makeUser('ADMIN', 'Admin');
 
         $this->actingAs($admin)
-            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN")
+            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason'])
             ->assertSessionHas('error');
 
         $this->assertCount(0, $report->fresh()->actions);
@@ -657,9 +661,9 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
         $this->actingAs($admin)
-            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN")
+            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason'])
             ->assertSessionHas('error');
 
         $this->assertCount(1, $report->fresh()->actions);
@@ -687,7 +691,7 @@ class ReportModerationTest extends TestCase
         $admin = $this->makeUser('ADMIN', 'Admin');
 
         $this->actingAs($admin)
-            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN")
+            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason'])
             ->assertSessionHas('error');
 
         $this->assertSame('ACTIVE', $listing['listing']->fresh()->LST_AVAILABILITY);
@@ -718,7 +722,7 @@ class ReportModerationTest extends TestCase
         $nosy = $this->makeUser('GENERAL_USER', 'Nosy');
 
         $this->actingAs($nosy)
-            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN")
+            ->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason'])
             ->assertForbidden();
 
         $this->assertSame('ACTIVE', $listing['listing']->fresh()->LST_AVAILABILITY);
@@ -744,8 +748,14 @@ class ReportModerationTest extends TestCase
         $this->assertSame('Seller confirmed the price was a typo', $action->RAC_NOTE);
         $this->assertNotNull($action->RAC_APPLIED_AT);
 
-        // The previous value is what makes undo exact rather than a guess.
-        $this->assertSame(['listings' => [$listing['listing']->LST_ID => 'ACTIVE']], $action->previous());
+        // The previous value is what makes undo exact rather than a guess. It
+        // carries the subject's prior state AND the id/status of every report
+        // the action closed, so undo can put both back rather than guessing
+        // which complaints the takedown answered.
+        $this->assertSame([
+            'listings' => [$listing['listing']->LST_ID => 'ACTIVE'],
+            'closed_reports' => [$report->RPT_ID => 'New'],
+        ], $action->previous());
         $this->assertSame('Listing taken off sale', $action->label());
     }
 
@@ -759,7 +769,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         Notification::assertSentTo(
             $report->user,
@@ -778,7 +788,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
         $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/undo");
 
         Notification::assertSentTo(
@@ -797,7 +807,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->actingAs($admin)
             ->get("/reports/{$report->RPT_ID}")
@@ -814,7 +824,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->actingAs($admin)
             ->get("/reports/{$report->RPT_ID}")
@@ -831,7 +841,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
 
         $this->actingAs($admin)
             ->get('/reports')
@@ -845,7 +855,7 @@ class ReportModerationTest extends TestCase
         $report = $this->makeReport('LISTING', $listing['listing']->LST_ID);
         $admin = $this->makeUser('ADMIN', 'Admin');
 
-        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN");
+        $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/LISTING_TAKEN_DOWN", ['note' => 'Test reason']);
         $this->actingAs($admin)->post("/reports/{$report->RPT_ID}/action/undo");
 
         // The history is still on the report page; the queue just stops claiming
