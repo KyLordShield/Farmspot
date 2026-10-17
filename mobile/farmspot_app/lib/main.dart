@@ -176,10 +176,10 @@ class _AuthGateState extends State<AuthGate> {
     unawaited(_checkSession());
 
     // Safety net: if the splash animation somehow never fires its completion,
-    // release the splash a few seconds in so the app is never stranded on a
-    // permanent white screen. Normally `_splashDone` gets set first and this
-    // becomes a no-op.
-    Future<void>.delayed(const Duration(seconds: 4), () {
+    // release the splash once the intro has had more than its full length to
+    // play so the app is never stranded on a permanent white screen. Normally
+    // `_splashDone` gets set first and this becomes a no-op.
+    Future<void>.delayed(const Duration(seconds: 9), () {
       if (!mounted || _ready) return;
       _splashDone = true;
       _maybeReady();
@@ -197,7 +197,8 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  /// The splash fires this the moment its fade-out ends.
+  /// The splash fires this the moment its intro animation finishes (and holds
+  /// its final frame until the gate is otherwise ready).
   void _onSplashFinished() {
     if (!mounted) return;
     _splashDone = true;
@@ -211,7 +212,7 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    // Cross-fade between states so the splash's logo fade-out melts into the
+    // Cross-fade between states so the splash's final frame melts into the
     // first frame of the next screen instead of snapping.
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 400),

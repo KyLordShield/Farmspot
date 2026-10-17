@@ -46,6 +46,10 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/animations/
+  fonts:
+    - family: Cooper
+      fonts:
+        - asset: assets/fonts/CooperBlack.ttf
 
 flutter_native_splash:
   color: "#FFFFFF"

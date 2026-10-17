@@ -496,18 +496,43 @@ sort: _filters.sort,
                     // Column: the Column lays out and builds every card the
                     // moment the feed arrives, which is the cost paging exists
                     // to remove. Slivers build what is on screen.
-                    child: CustomScrollView(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                          sliver: SliverToBoxAdapter(
-                            child: _buildSectionTitle(),
-                          ),
+                    child: ScrollbarTheme(
+                      // A slim, always-on rail so the user can gauge how deep
+                      // into the feed they are without having to scroll first.
+                      // Tinted from the brand green rather than the default
+                      // grey, which vanished against the card shadows.
+                      data: ScrollbarThemeData(
+                        thumbColor: WidgetStatePropertyAll<Color?>(
+                          AppColors.primaryGreen.withValues(alpha: 0.45),
                         ),
-                        ..._buildFeedSlivers(),
-                      ],
+                        trackColor: WidgetStatePropertyAll<Color?>(
+                          AppColors.primaryGreen.withValues(alpha: 0.08),
+                        ),
+                        trackVisibility: const WidgetStatePropertyAll<bool?>(
+                          true,
+                        ),
+                        thickness: const WidgetStatePropertyAll<double?>(4),
+                        radius: const Radius.circular(4),
+                        crossAxisMargin: 2,
+                      ),
+                      child: Scrollbar(
+                        controller: _scrollController,
+                        thumbVisibility: true,
+                        scrollbarOrientation: ScrollbarOrientation.right,
+                        child: CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                              sliver: SliverToBoxAdapter(
+                                child: _buildSectionTitle(),
+                              ),
+                            ),
+                            ..._buildFeedSlivers(),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
