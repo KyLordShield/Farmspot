@@ -10,8 +10,8 @@ enum MyFarmStatusFilter {
   all('all', 'All'),
   active('active', 'Active'),
   expired('expired', 'Expired'),
-  hidden('hidden', 'Hidden by admin'),
-  underReview('under_review', 'Under review');
+  underReview('under_review', 'Under review'),
+  hidden('hidden', 'Hidden by admin');
 
   /// The value sent as `?status=`.
   final String wire;

@@ -621,7 +621,7 @@ class MyFarmListingRow extends StatelessWidget {
   }
 }
 
-/// The All / Active / Expired / Hidden / Under review filter row.
+/// The All / Active / Expired / Under review / Hidden filter row.
 ///
 /// A horizontal ListView because five chips with counts do not fit a 360px
 /// screen, and a Wrap would push the list down every time a count grew a digit.

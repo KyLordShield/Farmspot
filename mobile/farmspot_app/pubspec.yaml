@@ -45,6 +45,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/images/Mountian Bg Myfarm.png
     - assets/animations/
   fonts:
     - family: Cooper
