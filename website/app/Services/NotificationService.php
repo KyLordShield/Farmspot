@@ -343,6 +343,12 @@ class NotificationService
                     'contents' => [
                         'en' => $body,
                     ],
+                    // Pin the Android notification icons to the drawables the
+                    // app ships with. Left to itself OneSignal uses its own
+                    // app-level defaults for the large icon, which render the
+                    // wrong mark even though the small icon is correct.
+                    'small_icon' => config('services.onesignal.small_icon'),
+                    'large_icon' => config('services.onesignal.large_icon'),
                 ]);
 
             if (! $response->successful()) {

@@ -73,6 +73,14 @@ return [
         'app_id' => env('ONESIGNAL_APP_ID'),
         'rest_api_key' => env('ONESIGNAL_REST_API_KEY'),
         'base_url' => env('ONESIGNAL_BASE_URL', 'https://api.onesignal.com'),
+        // Android drawable names bundled with the app. The small icon is the
+        // monochrome silhouette Android paints in the status bar; the large one
+        // is the coloured mark shown beside the message. Both must match files
+        // under mobile/farmspot_app/android/app/src/main/res/. Without them
+        // OneSignal falls back to its app-level defaults, which are not the
+        // FarmSpot mark.
+        'small_icon' => env('ONESIGNAL_SMALL_ICON', 'ic_stat_onesignal_default'),
+        'large_icon' => env('ONESIGNAL_LARGE_ICON', 'ic_onesignal_large_icon_default'),
     ],
 
 ];

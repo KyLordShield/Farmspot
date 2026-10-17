@@ -767,6 +767,25 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     }
   }
 
+  /// Opens the read-only takedown panel. If the farmer taps Request appeal in
+  /// it, the sheet closes and the explanation dialog opens, so the two steps
+  /// never stack on top of each other.
+  Future<void> _openTakedownDetails(Listing listing) async {
+    final wantsAppeal = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TakedownDetailsSheet(
+        listing: listing,
+        state: _ownerState(listing),
+      ),
+    );
+
+    if (wantsAppeal == true && mounted) {
+      await _requestReEvaluation(listing);
+    }
+  }
+
   /// Files a re-evaluation request for a listing an admin took down.
   ///
   /// The reason is mandatory here even though the server allows an empty one:
@@ -774,53 +793,11 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
   /// blank request gives them nothing to act on. The admin's own takedown reason
   /// is shown first so the farmer answers the actual accusation.
   Future<void> _requestReEvaluation(Listing listing) async {
-    final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Request re-evaluation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if ((listing.takedownReason ?? '').trim().isNotEmpty) ...[
-              const Text(
-                'Reason given for the takedown:',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                listing.takedownReason!,
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
-              ),
-              const SizedBox(height: 14),
-            ],
-            const Text('Tell the Association why this listing should be restored.'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              maxLines: 4,
-              maxLength: 2000,
-              decoration: const InputDecoration(
-                hintText: 'Your explanation',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Send request'),
-          ),
-        ],
-      ),
+      builder: (_) =>
+          ReEvaluationDialog(takedownReason: listing.takedownReason),
     );
-    controller.dispose();
 
     if (reason == null || !mounted) return; // cancelled
     if (reason.trim().isEmpty) {
@@ -1057,7 +1034,7 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       onReviewsTap: () => _openReviews(listing),
       onEditTap: () => _openEditCrop(listing),
       onDeleteTap: () => _deleteListing(listing),
-      onAppealTap: () => _requestReEvaluation(listing),
+      onViewTakedownTap: () => _openTakedownDetails(listing),
     );
   }
 

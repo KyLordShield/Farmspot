@@ -315,7 +315,11 @@ class MyFarmListingRow extends StatelessWidget {
   final VoidCallback? onReviewsTap;
   final VoidCallback? onEditTap;
   final VoidCallback? onDeleteTap;
-  final VoidCallback? onAppealTap;
+
+  /// Opens the read-only panel describing the takedown — reason, date and farm —
+  /// with the appeal action at the bottom. A taken-down row offers nothing else,
+  /// so this replaces every other action rather than sitting alongside them.
+  final VoidCallback? onViewTakedownTap;
 
   const MyFarmListingRow({
     super.key,
@@ -328,13 +332,19 @@ class MyFarmListingRow extends StatelessWidget {
     this.onReviewsTap,
     this.onEditTap,
     this.onDeleteTap,
-    this.onAppealTap,
+    this.onViewTakedownTap,
   });
 
   String get _label => listing.cropIcon ?? listing.categoryName ?? 'Crop';
 
   @override
   Widget build(BuildContext context) {
+    // A taken-down row is a different card, not the normal card with pieces
+    // missing. Buyers cannot see it, the farmer cannot change or renew it, and
+    // the only thing left to do is read why and ask for it back — so every other
+    // action, and the more menu, is dropped rather than shown dead.
+    final takenDown = state.isTakenDown;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
@@ -345,7 +355,7 @@ class MyFarmListingRow extends StatelessWidget {
           // A moderated row is outlined rather than greyed out: the farmer still
           // has to be able to read it, and dimming the whole card makes it look
           // disabled when the real problem is that buyers cannot see it.
-          color: state.hiddenByAdmin
+          color: (takenDown || state.hiddenByAdmin)
               ? AppColors.errorTerracotta.withValues(alpha: 0.35)
               : Colors.grey.shade200,
         ),
@@ -373,19 +383,105 @@ class MyFarmListingRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  OwnerRatingLabel(listing: listing, onTap: onReviewsTap),
+                  // The rating is not tappable on a taken-down row: its entry
+                  // point is the Reviews action, and that action is gone.
+                  OwnerRatingLabel(
+                    listing: listing,
+                    onTap: takenDown ? null : onReviewsTap,
+                  ),
                   const SizedBox(height: 8),
-                  ListingOwnerChips(state: state),
-                  const SizedBox(height: 8),
-                  _buildActions(),
+                  if (takenDown)
+                    _buildTakedownWarning()
+                  else ...[
+                    ListingOwnerChips(state: state),
+                    const SizedBox(height: 8),
+                    _buildActions(),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            _buildMenu(),
+            if (!takenDown) ...[
+              const SizedBox(width: 4),
+              _buildMenu(),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// The only body a taken-down row shows: the warning and a way to open the
+  /// details panel. The reason itself lives in that panel, not here, so the card
+  /// stays a card rather than a paragraph.
+  Widget _buildTakedownWarning() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.errorSoft,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.gpp_bad_outlined,
+                size: 16,
+                color: AppColors.errorTerracotta,
+              ),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'This listing was taken down by an admin.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.3,
+                    color: AppColors.errorTerracotta,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (onViewTakedownTap != null)
+          GestureDetector(
+            onTap: onViewTakedownTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.errorTerracotta.withValues(alpha: 0.5),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.visibility_outlined,
+                    size: 13,
+                    color: AppColors.errorTerracotta,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'View details',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.errorTerracotta,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -409,35 +505,6 @@ class MyFarmListingRow extends StatelessWidget {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // A taken-down listing gets one primary action: ask for it back. Shown
-        // only when it is appealable and nothing is pending, so it cannot be
-        // tapped twice or offered for a listing the farmer deleted themselves.
-        if (state.canRequestReEvaluation && onAppealTap != null)
-          GestureDetector(
-            onTap: onAppealTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.errorTerracotta,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.undo, size: 12, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'Request re-evaluation',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         if (onStatusTap != null)
           GestureDetector(
             onTap: onStatusTap,
@@ -736,4 +803,276 @@ class MyFarmSummaryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Read-only panel for a taken-down listing: what was said, when, and where,
+/// with the one action that remains — ask for it back.
+///
+/// The reason lives here rather than in the row so the card can stay a card.
+/// Pops `true` when the farmer taps Request appeal; the caller then opens the
+/// explanation dialog. Popping `false`/null means they just closed it.
+class TakedownDetailsSheet extends StatelessWidget {
+  final Listing listing;
+  final ListingOwnerState state;
+
+  const TakedownDetailsSheet({
+    super.key,
+    required this.listing,
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = (state.takedownReason ?? '').trim();
+    final crop = (listing.cropIcon ?? '').trim();
+    final title = crop.isNotEmpty
+        ? crop
+        : (listing.categoryName ?? 'This listing');
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.gpp_bad_outlined,
+                      color: AppColors.errorTerracotta,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Listing taken down',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 16),
+                _section(
+                  'Reason from the Association',
+                  reason.isEmpty ? 'No reason was recorded.' : reason,
+                  highlight: true,
+                ),
+                const SizedBox(height: 14),
+                _section('Taken down on', _formatTakedownDate(listing.takedownAt)),
+                const SizedBox(height: 14),
+                _section(
+                  'Farm',
+                  (listing.farmName ?? '').trim().isEmpty
+                      ? '—'
+                      : listing.farmName!.trim(),
+                ),
+                if (state.hasPendingAppeal) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.hourglass_top,
+                          size: 16,
+                          color: AppColors.infoSage,
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your re-evaluation request is with the Association. '
+                            'You will be told the outcome.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.3,
+                              color: AppColors.infoSage,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                if (state.canRequestReEvaluation)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.undo, size: 18),
+                      label: const Text('Request appeal'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.errorTerracotta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (!state.hasPendingAppeal)
+                  const Text(
+                    'This listing can no longer be appealed.',
+                    style: TextStyle(fontSize: 12, color: Colors.black45),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _section(String label, String value, {bool highlight = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.mutedGreen,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.35,
+            color: highlight ? AppColors.errorTerracotta : Colors.black87,
+            fontWeight: highlight ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The explanation a farmer files with a re-evaluation request.
+///
+/// A StatefulWidget so the TextEditingController is owned by the dialog and
+/// disposed when the dialog's element finally unmounts. Creating the controller
+/// in the caller and disposing it as soon as showDialog's future completes
+/// tears it down while the route is still animating out, which the TextField is
+/// still reading — the cause of the "_dependents.isEmpty" assertion crash.
+///
+/// Pops the typed reason, or null when cancelled.
+class ReEvaluationDialog extends StatefulWidget {
+  final String? takedownReason;
+
+  const ReEvaluationDialog({super.key, this.takedownReason});
+
+  @override
+  State<ReEvaluationDialog> createState() => _ReEvaluationDialogState();
+}
+
+class _ReEvaluationDialogState extends State<ReEvaluationDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = (widget.takedownReason ?? '').trim();
+
+    return AlertDialog(
+      title: const Text('Request re-evaluation'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (reason.isNotEmpty) ...[
+            const Text(
+              'Reason given for the takedown:',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              reason,
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+            ),
+            const SizedBox(height: 14),
+          ],
+          const Text('Tell the Association why this listing should be restored.'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            maxLines: 4,
+            maxLength: 2000,
+            decoration: const InputDecoration(
+              hintText: 'Your explanation',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('Send request'),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Oct 17, 2026 at 3:42 PM", or "Unknown" when the timestamp is missing or
+/// unparseable. No intl package, so the month is looked up by hand.
+String _formatTakedownDate(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return 'Unknown';
+  final dt = DateTime.tryParse(raw);
+  if (dt == null) return raw;
+
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  final hour24 = dt.hour;
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  final minute = dt.minute.toString().padLeft(2, '0');
+  final period = hour24 < 12 ? 'AM' : 'PM';
+
+  return '${months[dt.month - 1]} ${dt.day}, ${dt.year} at $hour12:$minute $period';
 }
