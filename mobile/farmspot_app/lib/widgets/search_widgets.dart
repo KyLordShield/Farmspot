@@ -4,6 +4,10 @@ import '../theme.dart';
 import 'home_widgets.dart' show cropStatusData;
 import 'rating_stars.dart';
 
+/// How many farm/seller rows a search preview shows before "See all". Shared by
+/// the typeahead and the results screen so both cap at the same number.
+const int searchPreviewCap = 4;
+
 /// A single search result card payload. Used both by the image-search mockup
 /// (placeholder-only entries) and — for the live Search screen — built from a
 /// real [CropListing] with an optional [imageUrl] and the [listingId]/[farmId]
@@ -520,6 +524,302 @@ class _GradientFill extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [Color(0xFFE3EEDD), Color(0xFFC9DFC9)],
         ),
+      ),
+    );
+  }
+}
+
+/// Heading for one search preview group ("Farms", "Sellers") with an optional
+/// "See all" affordance. When [onSeeAll] is null the row is just a label, so
+/// the same widget serves a capped preview and a full "See all" list.
+class SearchPreviewHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback? onSeeAll;
+
+  const SearchPreviewHeader({super.key, required this.title, this.onSeeAll});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        if (onSeeAll != null)
+          GestureDetector(
+            onTap: onSeeAll,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'See all',
+                    style: TextStyle(
+                      color: AppColors.primaryGreen,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: AppColors.primaryGreen,
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One farm row in a search preview or a "See all farms" list: cover photo,
+/// name, and a "N listings · barangay" subtitle. Dumb on purpose — it takes
+/// primitives so it does not need to know about the FarmPin model.
+class FarmSearchRow extends StatelessWidget {
+  final String name;
+  final String? barangay;
+  final int activeListingsCount;
+  final String? photoUrl;
+  final VoidCallback onTap;
+
+  const FarmSearchRow({
+    super.key,
+    required this.name,
+    required this.onTap,
+    this.barangay,
+    this.activeListingsCount = 0,
+    this.photoUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+          child: Row(
+            children: [
+              _Thumb(photoUrl: photoUrl),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.mutedGreen,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: Colors.black38),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _subtitle {
+    final listings = activeListingsCount == 1
+        ? '1 listing'
+        : '$activeListingsCount listings';
+    final place = barangay?.trim();
+    if (place == null || place.isEmpty) return listings;
+    return '$listings · $place';
+  }
+}
+
+/// One seller row: avatar, name, and a "N farms · M listings" subtitle. Takes
+/// primitives for the same reason as [FarmSearchRow].
+class SellerSearchRow extends StatelessWidget {
+  final String name;
+  final int farmCount;
+  final int activeListingsCount;
+
+  /// Real profile photo of the seller, or null to fall back to initials.
+  final String? photoUrl;
+
+  final VoidCallback onTap;
+
+  const SellerSearchRow({
+    super.key,
+    required this.name,
+    required this.onTap,
+    this.farmCount = 0,
+    this.activeListingsCount = 0,
+    this.photoUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+          child: Row(
+            children: [
+              _InitialAvatar(initial: _initials(name), photoUrl: photoUrl),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.mutedGreen,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: Colors.black38),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _subtitle {
+    final farms = farmCount == 1 ? '1 farm' : '$farmCount farms';
+    final listings = activeListingsCount == 1
+        ? '1 listing'
+        : '$activeListingsCount listings';
+    return '$farms · $listings';
+  }
+
+  /// First letters of up to two words ("Rejean Libando" -> "RL"). Falls back
+  /// to the first character, and to a neutral glyph for a blank name.
+  static String _initials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+}
+
+/// Circular avatar for a person row: the real profile photo when there is one,
+/// an initials disc otherwise (and while the photo loads or if it fails).
+class _InitialAvatar extends StatelessWidget {
+  final String initial;
+  final String? photoUrl;
+
+  const _InitialAvatar({required this.initial, this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photoUrl?.trim();
+    if (url == null || url.isEmpty) return _initials();
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: ClipOval(
+        child: Image.network(
+          url,
+          fit: BoxFit.cover,
+          cacheWidth: 200,
+          errorBuilder: (_, _, _) => _initials(),
+          loadingBuilder: (context, child, progress) =>
+              progress == null ? child : _initials(),
+        ),
+      ),
+    );
+  }
+
+  Widget _initials() {
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.12),
+      child: Text(
+        initial,
+        style: const TextStyle(
+          color: AppColors.primaryGreen,
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+      ),
+    );
+  }
+}
+
+/// Rounded 44px thumbnail for a farm row, with the eco placeholder when the
+/// farm has no photo (or the photo fails to load).
+class _Thumb extends StatelessWidget {
+  final String? photoUrl;
+
+  const _Thumb({this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photoUrl?.trim();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: url == null || url.isEmpty
+            ? const _GradientFill()
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                cacheWidth: 200,
+                errorBuilder: (context, error, stackTrace) =>
+                    const _GradientFill(),
+              ),
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../widgets/farmspot_loader.dart';
 import '../widgets/report_sheet.dart';
 import 'farm_directions_screen.dart';
 import 'product_detail_screen.dart';
+import 'user_profile_screen.dart';
 
 /// Buyer-facing Farm Profile: farm banner + quick stats, then a sticky tab bar
 /// (All / Available Now / Soon to Harvest / Not Available) filtering the farm's
@@ -150,6 +151,17 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
           farmPosition: LatLng(lat, lng),
         ),
       ),
+    );
+  }
+
+  /// Opens the profile of the person who runs this farm. No-op when the farm is
+  /// not linked to an account (legacy rows), rather than navigating with an
+  /// empty id.
+  void _openSeller(FarmProfileData profile) {
+    final userId = (profile.ownerUserId ?? '').trim();
+    if (userId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)),
     );
   }
 
@@ -330,6 +342,45 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
                     height: 1.2,
                   ),
                 ),
+                if (profile.ownerName != null &&
+                    profile.ownerName!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: () => _openSeller(profile),
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.person_outline,
+                          color: Colors.white,
+                          size: 15,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            profile.ownerName!.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                              decorationColor: Colors.white70,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: Colors.white70,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (profile.barangay != null) ...[
                   const SizedBox(height: 6),
                   GestureDetector(

@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\ListingCreateController;
 use App\Http\Controllers\Api\ListingPhotoController;
 use App\Http\Controllers\Api\FarmerListingController;
 use App\Http\Controllers\Api\SellerController;
+use App\Http\Controllers\Api\SellerDirectoryController;
+use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\UserStatsController;
 use App\Http\Controllers\Api\UserController;
@@ -54,6 +57,19 @@ Route::get('/crop-categories', [ListingController::class, 'cropCategories']);
 Route::get('/insights', [InsightsController::class, 'show']);
 Route::get('/farms/public', [FarmController::class, 'mapPins']);
 Route::get('/farms/{farmId}/profile', [FarmController::class, 'profile']);
+
+// Combined buyer search: crops + farms + sellers in one call. Side-effect free
+// (never writes search_log) because the search screen hits it on every debounced
+// keystroke; the crop grid and the logging still come from GET /listings.
+Route::get('/search', [SearchController::class, 'index']);
+// Seller directory + public seller profile. A seller is a farmer record, the
+// same identity a buyer can report against.
+Route::get('/sellers', [SellerDirectoryController::class, 'index']);
+Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
+
+// Public user profile: the person behind a farm, a chat, or a search seller
+// row. Keyed on the account so a pure buyer (no farmer row) can be shown too.
+Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);

@@ -6,15 +6,20 @@ import '../models/farm_pin.dart';
 import '../models/listing.dart';
 import '../models/listing_review.dart';
 import '../models/search_crop_group.dart';
+import '../models/search_suggestions.dart';
 import '../services/farm_service.dart';
 import '../services/listing_service.dart';
 import '../services/location_service.dart';
+import '../services/search_service.dart';
 import '../theme.dart';
 import '../utils/crop_icons.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/search_widgets.dart';
 import '../widgets/lottie_loader.dart';
+import 'farm_profile_screen.dart';
 import 'product_detail_screen.dart';
+import 'search_all_screen.dart';
+import 'user_profile_screen.dart';
 
 /// Radius boundary for the "Nearest" view, in kilometers. Results from farms
 /// within this distance show under "Near you"; everything farther is grouped
@@ -90,6 +95,10 @@ class SearchResultsScreen extends StatefulWidget {
 
   final Future<List<FarmPin>> Function() loadFarms;
 
+  /// Farm + seller matches for the submitted term, shown as previews above the
+  /// crop grid. Injectable for tests; real hits GET /api/search.
+  final Future<SearchSuggestions> Function(String term) loadPreviews;
+
   /// Real GPS fix, or null when location permission was denied or the fix
   /// failed. Every distance on this screen is measured from it, for text search
   /// as well as image search.
@@ -107,6 +116,7 @@ class SearchResultsScreen extends StatefulWidget {
     this.detectionConfidences = const [],
     this.loadResults = _defaultLoadResults,
     this.loadFarms = FarmService.fetchPublicFarms,
+    this.loadPreviews = _defaultLoadPreviews,
     this.loadBuyerPosition = LocationService.tryBuyerPosition,
   });
 
@@ -118,6 +128,12 @@ class SearchResultsScreen extends StatefulWidget {
 /// opt-out, so a real submitted search logs into search_log exactly as before.
 Future<List<Listing>> _defaultLoadResults(String term) {
   return ListingService.fetchListings(search: term);
+}
+
+/// Default farm/seller previews for the submitted term. Capped at the same
+/// number the typeahead uses so the preview and "See all" agree.
+Future<SearchSuggestions> _defaultLoadPreviews(String term) {
+  return SearchService.fetchSearch(term, limit: searchPreviewCap);
 }
 
 class _ResultRow {
@@ -182,6 +198,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// the number of detected crops that matched it.
   List<_ImageResult> _imageResults = const [];
 
+  /// Farm + seller matches for the submitted text term. Empty for image search.
+  SearchSuggestions _previews = SearchSuggestions.empty;
+
   /// True when the buyer's position is a real GPS fix. False means
   /// permission was denied or GPS failed, so distances are omitted and the
   /// list falls back to detection confidence.
@@ -240,6 +259,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       // the results themselves so a slow/failed term lookup fails fast.
       var rows = const <_ResultRow>[];
       var imageResults = const <_ImageResult>[];
+      var previews = SearchSuggestions.empty;
 
       // Detection confidence per group title. The detector returns crops
       // already sorted strongest-first, so the first occurrence wins.
@@ -279,6 +299,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         }
         imageResults = bestByListingId.values.toList();
       } else {
+        // Farms/sellers for the preview run in parallel with the crop fetch.
+        // Failure-tolerant: a search that cannot resolve previews still shows
+        // its crop results.
+        final previewsFuture = widget.loadPreviews(widget.query);
         final listings = await widget.loadResults(widget.query);
         // Only the listing is kept. The card payload is built at render time by
         // [_itemFor], because the distance on it is not knowable until the farms
@@ -287,6 +311,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         rows = listings
             .map((listing) => _ResultRow(listing: listing.toCropListing()))
             .toList();
+        try {
+          previews = await previewsFuture;
+        } catch (_) {
+          previews = SearchSuggestions.empty;
+        }
       }
 
       // Both lists ask for a REAL fix, so neither measures from the Cebu
@@ -309,6 +338,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         if (_multi) {
           _imageResults = imageResults;
         }
+        _previews = previews;
         _categories = categories;
         if (_activeCategoryId != null &&
             !_categories.any((c) => c.id == _activeCategoryId)) {
@@ -570,6 +600,80 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     });
   }
 
+  /// Farm + seller preview rows for the submitted term, or an empty list when
+  /// neither matched. Image search never populates [_previews], so this stays
+  /// empty there.
+  List<Widget> _buildPreviews() {
+    final farms = _previews.farms;
+    final sellers = _previews.sellers;
+    if (farms.isEmpty && sellers.isEmpty) return const [];
+
+    return [
+      if (farms.isNotEmpty) ...[
+        SearchPreviewHeader(
+          title: 'Farms',
+          onSeeAll: farms.length >= searchPreviewCap
+              ? () => _openSeeAll(SearchAllType.farms)
+              : null,
+        ),
+        const SizedBox(height: 2),
+        ...farms.map(
+          (farm) => FarmSearchRow(
+            name: farm.name,
+            barangay: farm.barangay,
+            activeListingsCount: farm.activeListingsCount,
+            photoUrl: farm.photoUrl,
+            onTap: () => _openFarm(farm.id),
+          ),
+        ),
+        const SizedBox(height: 18),
+      ],
+      if (sellers.isNotEmpty) ...[
+        SearchPreviewHeader(
+          title: 'Sellers',
+          onSeeAll: sellers.length >= searchPreviewCap
+              ? () => _openSeeAll(SearchAllType.sellers)
+              : null,
+        ),
+        const SizedBox(height: 2),
+        ...sellers.map(
+          (seller) => SellerSearchRow(
+            name: seller.name,
+            farmCount: seller.farmCount,
+            activeListingsCount: seller.activeListingsCount,
+            photoUrl: seller.photoUrl,
+            onTap: () => _openSeller(seller.userId),
+          ),
+        ),
+        const SizedBox(height: 18),
+      ],
+    ];
+  }
+
+  void _openFarm(String farmId) {
+    if (farmId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => FarmProfileScreen(farmId: farmId)),
+    );
+  }
+
+  void _openSeller(String userId) {
+    if (userId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)),
+    );
+  }
+
+  void _openSeeAll(SearchAllType type) {
+    final term = widget.query.trim();
+    if (term.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchAllScreen(query: term, type: type),
+      ),
+    );
+  }
+
   /// Opens the category picker; a chosen category narrows the results
   /// client-side (no extra backend call). Empty selection means "All".
   Future<void> _openCategoryFilters() async {
@@ -702,6 +806,15 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       ),
       const SizedBox(height: 14),
     ];
+
+    // Farm and seller matches sit above the crop grid: the buyer may have typed
+    // a place or a person, and those results should not be buried under crop
+    // cards that merely share letters.
+    final previewWidgets = _buildPreviews();
+    if (previewWidgets.isNotEmpty) {
+      children.addAll(previewWidgets);
+      children.add(const SizedBox(height: 18));
+    }
 
     if (rows.isEmpty) {
       children.add(_buildCountLine(rows.length));

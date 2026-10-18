@@ -98,7 +98,15 @@ class ListingController extends Controller
                             $fq->where('FRM_NAME', 'LIKE', "%{$search}%");
                         })->orWhereHas('category', function ($cq) use ($search) {
                             $cq->where('CAT_NAME', 'LIKE', "%{$search}%");
-                        })->orWhere('LST_DESCRIPTION', 'LIKE', "%{$search}%");
+                        })->orWhere('LST_DESCRIPTION', 'LIKE', "%{$search}%")
+                        // Seller name: a search for a person ("Aling Nena") should
+                        // surface the crops they sell, the same way a farm-name
+                        // search already does. Reached through the same
+                        // farmer.buyer.user chain the feed eager-loads, so this
+                        // adds no query of its own beyond the whereExists.
+                        ->orWhereHas('farmer.buyer.user', function ($uq) use ($search) {
+                            $uq->where('USR_NAME', 'LIKE', "%{$search}%");
+                        });
                 });
             })
             ->when($category, fn ($q) => $q->where('CAT_ID', $category))

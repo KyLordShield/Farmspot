@@ -156,7 +156,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('RECENT SEARCHES'), findsNothing);
-      expect(find.text('SUGGESTIONS'), findsOneWidget);
+      expect(find.text('CROPS'), findsOneWidget);
 
       // Debounce hasn't elapsed yet — no suggestion request sent.
       await tester.pump(const Duration(milliseconds: 200));

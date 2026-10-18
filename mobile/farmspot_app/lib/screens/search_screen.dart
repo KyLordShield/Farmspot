@@ -3,11 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/crop_suggestion.dart';
+import '../models/search_suggestions.dart';
 import '../services/listing_service.dart';
 import '../services/recent_searches.dart';
+import '../services/search_service.dart';
 import '../theme.dart';
+import '../widgets/search_widgets.dart';
+import 'farm_profile_screen.dart';
 import 'image_search_screen.dart';
+import 'search_all_screen.dart';
 import 'search_results_screen.dart';
+import 'user_profile_screen.dart';
 
 /// Screen 1 of the search flow: a full-screen search entry experience, now
 /// wired to live data.
@@ -30,12 +36,21 @@ class SearchScreen extends StatefulWidget {
   final Future<List<String>> Function() loadRecents;
   final Future<void> Function(String term) saveRecent;
 
+  /// Farm + seller matches for the typeahead, from GET /api/search. Kept
+  /// separate from [loadSuggestions] so the crop suggestion path (and its
+  /// tests) is untouched; the two run in parallel per debounced keystroke.
+  final Future<SearchSuggestions> Function(String term) loadPreviews;
+
   const SearchScreen({
     super.key,
     this.loadSuggestions = ListingService.fetchSuggestions,
     this.loadRecents = RecentSearches.load,
     this.saveRecent = RecentSearches.add,
+    this.loadPreviews = _defaultLoadPreviews,
   });
+
+  static Future<SearchSuggestions> _defaultLoadPreviews(String term) =>
+      SearchService.fetchSearch(term, limit: searchPreviewCap);
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -47,6 +62,9 @@ class _SearchScreenState extends State<SearchScreen> {
   List<String> _recents = const [];
   List<CropSuggestion> _suggestions = const [];
   bool _suggestionsLoading = false;
+
+  /// Farm + seller matches for the current term.
+  SearchSuggestions _previews = SearchSuggestions.empty;
   Timer? _debounce;
 
   @override
@@ -77,6 +95,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _showSuggestions = false;
         _suggestions = const [];
         _suggestionsLoading = false;
+        _previews = SearchSuggestions.empty;
       });
       return;
     }
@@ -90,14 +109,29 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _fetchSuggestions(String term) async {
     setState(() => _suggestionsLoading = true);
+
+    // Crops keep their own (tested) loader; farms/sellers come from the
+    // combined search endpoint. Both are already debounced, so the two requests
+    // fire together on a pause and neither depends on the other's result.
+    final cropsFuture = widget.loadSuggestions(term);
+    final previewsFuture = widget.loadPreviews(term);
+
     List<CropSuggestion> results;
     try {
-      results = await widget.loadSuggestions(term);
+      results = await cropsFuture;
     } catch (_) {
       // Suggestions are best-effort; a failure just yields an empty list
       // (the buyer can still submit and get real results).
       results = const [];
     }
+
+    SearchSuggestions previews;
+    try {
+      previews = await previewsFuture;
+    } catch (_) {
+      previews = SearchSuggestions.empty;
+    }
+
     if (!mounted) return;
     if (_controller.text.trim().toLowerCase() != term.toLowerCase()) {
       return; // stale response for a term the buyer already changed.
@@ -105,6 +139,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _suggestions = results;
       _suggestionsLoading = false;
+      _previews = previews;
     });
   }
 
@@ -249,10 +284,54 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSuggestions() {
+    final farms = _previews.farms;
+    final sellers = _previews.sellers;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionLabel('SUGGESTIONS'),
+        // Farms and sellers first: a buyer who typed a place or a person should
+        // see that match before a list of crops whose names merely contain the
+        // same letters.
+        if (farms.isNotEmpty) ...[
+          SearchPreviewHeader(
+            title: 'Farms',
+            onSeeAll: farms.length >= searchPreviewCap
+                ? () => _openSeeAll(SearchAllType.farms)
+                : null,
+          ),
+          const SizedBox(height: 2),
+          ...farms.map(
+            (farm) => FarmSearchRow(
+              name: farm.name,
+              barangay: farm.barangay,
+              activeListingsCount: farm.activeListingsCount,
+              photoUrl: farm.photoUrl,
+              onTap: () => _openFarm(farm.id),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (sellers.isNotEmpty) ...[
+          SearchPreviewHeader(
+            title: 'Sellers',
+            onSeeAll: sellers.length >= searchPreviewCap
+                ? () => _openSeeAll(SearchAllType.sellers)
+                : null,
+          ),
+          const SizedBox(height: 2),
+          ...sellers.map(
+            (seller) => SellerSearchRow(
+              name: seller.name,
+              farmCount: seller.farmCount,
+              activeListingsCount: seller.activeListingsCount,
+              photoUrl: seller.photoUrl,
+              onTap: () => _openSeller(seller.userId),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+        const _SectionLabel('CROPS'),
         const SizedBox(height: 8),
         if (_suggestionsLoading)
           const _StatusRow(
@@ -275,6 +354,28 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  void _openFarm(String farmId) {
+    if (farmId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => FarmProfileScreen(farmId: farmId)),
+    );
+  }
+
+  void _openSeller(String userId) {
+    if (userId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)),
+    );
+  }
+
+  void _openSeeAll(SearchAllType type) {
+    final term = _controller.text.trim();
+    if (term.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SearchAllScreen(query: term, type: type)),
     );
   }
 

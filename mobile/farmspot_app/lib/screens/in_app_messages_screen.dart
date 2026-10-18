@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/report_sheet.dart';
 import 'product_detail_screen.dart' show FullScreenPhotoViewer;
+import 'user_profile_screen.dart';
 
 /// In-app buyer <-> seller chat.
 ///
@@ -179,6 +180,17 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
       subjectName: 'this message',
       initialReason: ReportReason.fraudOrScam,
       gateway: widget.reportsGateway,
+    );
+  }
+
+  /// Opens the other person's profile. Available whether the counterparty is a
+  /// seller or a buyer — the profile is keyed on the account, which both have.
+  /// No-op when the server sent no id for them.
+  void _openProfile() {
+    final userId = (widget.conversation.otherPartyId ?? '').trim();
+    if (userId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)),
     );
   }
 
@@ -382,32 +394,45 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                     color: Colors.black87,
                   ),
                   const SizedBox(width: 2),
-                  _HeaderAvatar(
-                    initial: initial,
-                    photo: thread.otherPartyPhoto,
-                  ),
-                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.black87,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600)),
-                        if (thread.farmName != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            thread.farmName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: muted, fontSize: 12),
+                    // Tapping the counterparty opens their profile: photo, name,
+                    // contact details and, for a seller, their farms.
+                    child: GestureDetector(
+                      onTap: _openProfile,
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        children: [
+                          _HeaderAvatar(
+                            initial: initial,
+                            photo: thread.otherPartyPhoto,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
+                                if (thread.farmName != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    thread.farmName!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        TextStyle(color: muted, fontSize: 12),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                    // Report the other person. Not every thread needs it, but
