@@ -12,16 +12,20 @@ use Illuminate\Support\Facades\Log;
  * Source is Open-Meteo, which needs neither an API key nor an account. That
  * matters here: the widget is decoration on a personal dashboard, and a
  * missing/expired key would mean an admin staring at a broken panel. A
- * keyless source can only fail by being offline, which is handled below.
+ * keyless source can only fail by being offline or throttled, both handled
+ * below.
  *
  * Everything is best-effort. current() returns null on any problem — disabled
  * in config, network failure, a slow response, a shape we did not expect — and
  * the caller renders a quiet fallback. A weather widget must never be the
  * reason an admin cannot open their dashboard.
  *
- * The raw response is cached, so the page can be reloaded freely without
- * calling Open-Meteo each time. Weather does not change faster than the cache
- * window, and the API is a free service worth being polite to.
+ * Open-Meteo throttles the free endpoint by IP, and a cloud host (Render)
+ * shares its egress IP with every other app on the box, so the API can hand us
+ * a 429 through no fault of our own. The fetch is therefore cached, collapsed
+ * to one call at a time, and backed off after a failure, and the last good
+ * forecast is kept as a fallback so a throttle shows slightly old numbers
+ * rather than an empty panel.
  */
 class WeatherService
 {
@@ -41,46 +45,95 @@ class WeatherService
         $latitude = (float) ($config['latitude'] ?? 0);
         $longitude = (float) ($config['longitude'] ?? 0);
         $days = max(1, min((int) ($config['days'] ?? 4), 7));
-        $cacheMinutes = max(5, (int) ($config['cache_minutes'] ?? 30));
+        $cacheMinutes = max(5, (int) ($config['cache_minutes'] ?? 60));
+        $backoffMinutes = max(1, (int) ($config['backoff_minutes'] ?? 10));
+        $staleDays = max(1, (int) ($config['stale_days'] ?? 7));
 
-        // The key carries the location so pointing the widget at a different
+        // The keys carry the location so pointing the widget at a different
         // area does not serve the previous area's cached forecast.
-        $key = sprintf('weather:%s:%s:%d', $latitude, $longitude, $days);
+        $suffix = sprintf('%s:%s:%d', $latitude, $longitude, $days);
+        $key = 'weather:'.$suffix;
+        $lastGoodKey = 'weather:lastgood:'.$suffix;
+        $backoffKey = 'weather:backoff:'.$suffix;
+
+        // A fresh forecast, if we already have one.
+        $cached = cache()->get($key);
+        if (is_array($cached)) {
+            $fresh = $this->format($cached, $config);
+            if ($fresh !== null) {
+                return $fresh;
+            }
+        }
+
+        // We failed recently: an API that just told us to slow down does not
+        // want another call yet. Show the last good forecast, or nothing.
+        if (cache()->has($backoffKey)) {
+            return $this->stale($lastGoodKey, $config);
+        }
+
+        // One fetch at a time. A burst of dashboard loads would otherwise all
+        // miss the cache together and multiply an already-throttled call.
+        $lock = cache()->lock('weather:fetch:'.$key, 15);
+        if (! $lock->get()) {
+            return $this->stale($lastGoodKey, $config);
+        }
 
         try {
-            $data = cache()->remember($key, now()->addMinutes($cacheMinutes), function () use ($config, $latitude, $longitude, $days) {
-                $response = Http::timeout(8)
-                    ->retry(2, 250)
-                    ->acceptJson()
-                    ->get($config['endpoint'], [
-                        'latitude' => $latitude,
-                        'longitude' => $longitude,
-                        'timezone' => $config['timezone'] ?? 'auto',
-                        // Current conditions plus a short daily outlook. Rain
-                        // probability is the figure a farmer actually reads.
-                        'current' => 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,is_day',
-                        'daily' => 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
-                        'forecast_days' => $days,
-                        'wind_speed_unit' => 'kmh',
-                    ]);
+            $response = Http::withUserAgent($config['user_agent'] ?? 'FarmSpot/1.0')
+                ->timeout(8)
+                ->acceptJson()
+                ->get($config['endpoint'], [
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                    'timezone' => $config['timezone'] ?? 'auto',
+                    // Current conditions plus a short daily outlook. Rain
+                    // probability is the figure a farmer actually reads.
+                    'current' => 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,is_day',
+                    'daily' => 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+                    'forecast_days' => $days,
+                    'wind_speed_unit' => 'kmh',
+                ]);
 
-                $response->throw();
+            $response->throw();
 
-                return $response->json();
-            });
+            $data = $response->json();
         } catch (\Throwable $e) {
-            // Logged at warning rather than error: an unreachable API is a
-            // cosmetic failure here, not something an admin needs to act on.
+            // Logged at warning rather than error: an unreachable or throttled
+            // API is a cosmetic failure here, not something an admin acts on.
+            // Setting the backoff also keeps this from logging on every reload.
             Log::warning('[weather] forecast fetch failed', ['message' => $e->getMessage()]);
 
-            return null;
+            cache()->put($backoffKey, true, now()->addMinutes($backoffMinutes));
+
+            return $this->stale($lastGoodKey, $config);
+        } finally {
+            $lock->release();
         }
 
         if (! is_array($data) || empty($data['current']) || empty($data['daily'])) {
-            return null;
+            cache()->put($backoffKey, true, now()->addMinutes($backoffMinutes));
+
+            return $this->stale($lastGoodKey, $config);
         }
 
+        cache()->put($key, $data, now()->addMinutes($cacheMinutes));
+        // Kept far longer than the fresh window: its only job is to be there
+        // when Open-Meteo is not.
+        cache()->put($lastGoodKey, $data, now()->addDays($staleDays));
+
         return $this->format($data, $config);
+    }
+
+    /**
+     * The last successful forecast, if any, for when Open-Meteo is unreachable.
+     * Returns null when there has never been a success, and the caller then
+     * draws its quiet fallback.
+     */
+    private function stale(string $lastGoodKey, array $config): ?array
+    {
+        $data = cache()->get($lastGoodKey);
+
+        return is_array($data) ? $this->format($data, $config) : null;
     }
 
     /**

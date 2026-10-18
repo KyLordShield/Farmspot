@@ -39,6 +39,12 @@ return [
     | the dashboard never calls the API on every page load, and a failure is
     | swallowed rather than allowed to break the page.
     |
+    | Open-Meteo throttles the free endpoint by IP, and a cloud host (Render)
+    | shares its egress IP with every other app on the box, so we can be handed
+    | a 429 through no fault of our own. The backoff and stale-cache knobs make
+    | that a non-event: after a failure we stop calling for a while and show
+    | the last good forecast instead of an empty panel.
+    |
     */
 
     'weather' => [
@@ -49,7 +55,22 @@ return [
         'timezone' => env('FARMSPOT_WEATHER_TZ', 'Asia/Manila'),
         'endpoint' => 'https://api.open-meteo.com/v1/forecast',
         'days' => (int) env('FARMSPOT_WEATHER_DAYS', 4),
-        'cache_minutes' => (int) env('FARMSPOT_WEATHER_CACHE_MINUTES', 30),
+        // Weather does not change faster than this, and a longer window means
+        // fewer chances to be throttled.
+        'cache_minutes' => (int) env('FARMSPOT_WEATHER_CACHE_MINUTES', 60),
+        // After a failed fetch, wait this long before trying Open-Meteo again.
+        // Without it every dashboard reload would re-hit an API that already
+        // told us to slow down, which only deepens the throttle.
+        'backoff_minutes' => (int) env('FARMSPOT_WEATHER_BACKOFF_MINUTES', 10),
+        // A successful forecast is kept this long as a last resort, so a 429
+        // shows yesterday's still-reasonable numbers instead of nothing.
+        'stale_days' => (int) env('FARMSPOT_WEATHER_STALE_DAYS', 7),
+        // Open-Meteo asks clients to identify themselves; an anonymous Guzzle
+        // user agent is the kind of traffic they throttle hardest.
+        'user_agent' => env(
+            'FARMSPOT_WEATHER_USER_AGENT',
+            'FarmSpot/1.0 (+https://farmspot-api.onrender.com)'
+        ),
     ],
 
 ];
