@@ -27,7 +27,7 @@ class AppealController extends Controller
      */
     public function index(Request $request)
     {
-        $appeals = ReviewRequest::with(['user', 'listing.farm', 'account'])
+        $appeals = ReviewRequest::with(['user', 'listing.farm', 'account', 'decidedBy'])
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('RRQ_STATUS', $request->status);
             })
@@ -48,7 +48,7 @@ class AppealController extends Controller
 
     public function show(string $id)
     {
-        $appeal = ReviewRequest::with(['user', 'listing.farm', 'account'])
+        $appeal = ReviewRequest::with(['user', 'listing.farm', 'listing.category', 'account', 'decidedBy'])
             ->where('RRQ_ID', $id)
             ->firstOrFail();
 

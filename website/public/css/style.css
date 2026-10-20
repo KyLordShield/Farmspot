@@ -591,6 +591,18 @@ a.stat-card:focus-visible {
     box-shadow: var(--shadow-md);
 }
 
+/* The card whose filter is currently applied, so the overview still tells the
+   truth about which slice of the queue is on screen. */
+a.stat-card.is-active {
+    border-color: var(--brand-700);
+    box-shadow: inset 0 0 0 1px var(--brand-700), var(--shadow-sm);
+}
+
+a.stat-card.is-active .stat-label {
+    color: var(--brand-700);
+    font-weight: 600;
+}
+
 /* Sidebar counts beside Reports. Red is the pile nobody has opened yet; orange
    is how many targets have been piled on hard enough to reach the threshold,
    and only shows at all when there is one. */
@@ -843,6 +855,107 @@ a.stat-card:focus-visible {
 .badge-soft-danger  { background: var(--red-bg);   color: var(--red); }
 .badge-soft-neutral { background: var(--slate-bg); color: var(--slate-text); }
 .badge-soft-info    { background: #e7f0f6;         color: #27598a; }
+
+/* ==========================================================================
+   Appeal review — the requester's words and the submission → decision rail
+   ========================================================================== */
+
+/* Long appeal reasons are kept on the detail page rather than in the queue,
+   where they used to widen the row and dominate the table. */
+.appeal-quote {
+    margin: 0;
+    padding: 14px 16px;
+    background: var(--brand-50);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--brand-700);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.appeal-quote.is-note {
+    background: #fafbfa;
+    border-left-color: var(--border-strong);
+}
+
+.appeal-thumb {
+    width: 132px;
+    height: 96px;
+    display: block;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.appeal-steps {
+    display: flex;
+    flex-direction: column;
+}
+
+.appeal-step {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    padding-bottom: 20px;
+}
+
+.appeal-step:last-child {
+    padding-bottom: 0;
+}
+
+.appeal-step:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 30px;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.appeal-step-dot {
+    position: relative;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--slate-bg);
+    color: var(--text-faint);
+    font-size: 13px;
+}
+
+.appeal-step.is-done .appeal-step-dot {
+    background: var(--green-bg);
+    border-color: var(--green-bd);
+    color: var(--green);
+}
+
+.appeal-step.is-current .appeal-step-dot {
+    background: var(--amber-bg);
+    border-color: var(--amber-bd);
+    color: var(--amber-text);
+}
+
+.appeal-step-title {
+    margin-top: 3px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.appeal-step-meta {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
 
 /* ==========================================================================
    Alerts (flash messages)
