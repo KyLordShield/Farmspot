@@ -16,32 +16,63 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
+        $search = trim((string) $request->input('search', ''));
+        $role = (string) $request->input('role', '');
+        $status = (string) $request->input('status', '');
+
         $users = User::query()
-            ->when($request->filled('search'), function ($query) use ($request) {
-                $query->where(function ($q) use ($request) {
-                    $q->where('USR_NAME', 'like', '%' . $request->search . '%')
-                      ->orWhere('USR_EMAIL', 'like', '%' . $request->search . '%')
-                      ->orWhere('USR_ID', 'like', '%' . $request->search . '%');
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%'.$search.'%';
+
+                $query->where(function ($q) use ($like) {
+                    $q->where('USR_NAME', 'like', $like)
+                      ->orWhere('USR_EMAIL', 'like', $like)
+                      ->orWhere('USR_MOBILE_NUMBER', 'like', $like)
+                      ->orWhere('USR_ID', 'like', $like);
                 });
             })
-            ->when($request->filled('role'), function ($query) use ($request) {
-                $query->where('USR_ROLE', $request->role);
+            // USR_ROLE only knows ADMIN and GENERAL_USER. "Farmer" is the
+            // USR_IS_SELLER flag, so filtering on the enum alone could never
+            // surface sellers, and "General User" quietly included them.
+            ->when($role === 'ADMIN' || $role === 'GENERAL_USER', function ($query) use ($role) {
+                $query->where('USR_ROLE', $role);
             })
-            ->when($request->filled('status'), function ($query) use ($request) {
-                $query->where('USR_STATUS', $request->status);
+            ->when($role === 'FARMER', function ($query) {
+                $query->where('USR_IS_SELLER', 1);
+            })
+            ->when($role === 'BUYER', function ($query) {
+                $query->where('USR_IS_SELLER', 0)
+                      ->where('USR_ROLE', 'GENERAL_USER');
+            })
+            ->when($status !== '', function ($query) use ($status) {
+                $query->where('USR_STATUS', $status);
             })
             ->orderBy('USR_CREATED_AT', 'desc')
             ->paginate(10)
             ->withQueryString();
 
-        return view('users', compact('users'));
+        // Counts are over the whole table, not the current page. The old card
+        // called $users->where(...)->count(), which only sees the ten rows on
+        // screen — so "Active users" capped out at 10 and was wrong on page 2.
+        $counts = [
+            'total' => User::count(),
+            'active' => User::where('USR_STATUS', 'ACTIVE')->count(),
+            'farmers' => User::where('USR_IS_SELLER', 1)->count(),
+            'deactivated' => User::where('USR_STATUS', 'DEACTIVATED')->count(),
+        ];
+
+        return view('users', compact('users', 'counts'));
     }
 
     public function show($id)
     {
-        $user = User::where('USR_ID', $id)->firstOrFail();
+        $user = User::with(['buyer.farmer.farms' => fn ($query) => $query->orderByDesc('FRM_CREATED_AT')])
+            ->where('USR_ID', $id)
+            ->firstOrFail();
 
-        return view('users.show', compact('user'));
+        $farmer = $user->buyer?->farmer;
+
+        return view('users.show', compact('user', 'farmer'));
     }
 
     public function create()

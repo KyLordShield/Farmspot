@@ -33,7 +33,7 @@
             <i class="bi bi-people"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $users->total() }}</div>
+            <div class="stat-value">{{ $counts['total'] }}</div>
             <div class="stat-label">Total registered users</div>
         </div>
     </div>
@@ -43,8 +43,18 @@
             <i class="bi bi-person-check"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $users->where('USR_STATUS','ACTIVE')->count() }}</div>
+            <div class="stat-value">{{ $counts['active'] }}</div>
             <div class="stat-label">Active users</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon tint-slate">
+            <i class="bi bi-shop"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ $counts['farmers'] }}</div>
+            <div class="stat-label">Farmers</div>
         </div>
     </div>
 
@@ -53,7 +63,7 @@
             <i class="bi bi-person-x"></i>
         </div>
         <div>
-            <div class="stat-value">{{ $users->where('USR_STATUS','DEACTIVATED')->count() }}</div>
+            <div class="stat-value">{{ $counts['deactivated'] }}</div>
             <div class="stat-label">Deactivated</div>
         </div>
     </div>
@@ -75,7 +85,7 @@
                     name="search"
                     value="{{ request('search') }}"
                     class="form-control"
-                    placeholder="Search by name, email or ID">
+                    placeholder="Search by name, email, mobile or ID">
                 <button class="btn btn-farm" type="submit">
                     Search
                 </button>
@@ -85,8 +95,9 @@
         <div class="filter-auto">
             <select name="role" class="form-select" onchange="this.form.submit()">
                 <option value="">All Roles</option>
+                <option value="FARMER" {{ request('role') == 'FARMER' ? 'selected' : '' }}>Farmer</option>
+                <option value="BUYER" {{ request('role') == 'BUYER' ? 'selected' : '' }}>Buyer</option>
                 <option value="ADMIN" {{ request('role') == 'ADMIN' ? 'selected' : '' }}>Admin</option>
-                <option value="GENERAL_USER" {{ request('role') == 'GENERAL_USER' ? 'selected' : '' }}>General User</option>
             </select>
         </div>
 
@@ -126,7 +137,7 @@
                     <td>
                         @if($user->USR_ROLE == 'ADMIN')
                             <span class="badge badge-soft-danger">Admin</span>
-                        @elseif($user->USR_ROLE == 'FARMER')
+                        @elseif($user->isFarmer())
                             <span class="badge badge-soft-success">Farmer</span>
                         @else
                             <span class="badge badge-soft-neutral">Buyer</span>

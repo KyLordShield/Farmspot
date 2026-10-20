@@ -123,4 +123,19 @@ class User extends Authenticatable
     {
         return $this->USR_STATUS === 'DEACTIVATED' && $this->USR_TAKEDOWN_REASON !== null;
     }
+
+    /**
+     * Whether this account is a farmer/seller.
+     *
+     * USR_ROLE is only GENERAL_USER or ADMIN — there is no FARMER value, so a
+     * screen that compares USR_ROLE against 'FARMER' can never match. The real
+     * marker is USR_IS_SELLER, which admin approval sets when a seller request
+     * goes through and SellerController clears when seller mode is switched
+     * off. Reading it here keeps every admin screen agreeing on who is a
+     * farmer.
+     */
+    public function isFarmer(): bool
+    {
+        return (int) $this->USR_IS_SELLER === 1;
+    }
 }

@@ -50,11 +50,16 @@
             </tr>
 
             <tr>
+                <th>Address</th>
+                <td>{{ $user->USR_ADDRESS ?: '—' }}</td>
+            </tr>
+
+            <tr>
                 <th>Role</th>
                 <td>
                     @if($user->USR_ROLE == 'ADMIN')
                         <span class="badge badge-soft-danger">Admin</span>
-                    @elseif($user->USR_ROLE == 'FARMER')
+                    @elseif($user->isFarmer())
                         <span class="badge badge-soft-success">Farmer</span>
                     @else
                         <span class="badge badge-soft-neutral">Buyer</span>
@@ -77,7 +82,7 @@
 
             <tr>
                 <th>Seller Mode</th>
-                <td>{{ $user->USR_IS_SELLER ? 'Yes' : 'No' }}</td>
+                <td>{{ $user->isFarmer() ? 'Yes' : 'No' }}</td>
             </tr>
 
             @if($user->USR_TAKEDOWN_REASON)
@@ -92,13 +97,118 @@
                 </tr>
             @endif
 
+            @if($user->USR_TAKEDOWN_AT)
+                <tr>
+                    <th>Deactivated At</th>
+                    <td class="cell-secondary">
+                        {{ \Carbon\Carbon::parse($user->USR_TAKEDOWN_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}
+                    </td>
+                </tr>
+            @endif
+
             <tr>
                 <th>Registered</th>
-                <td class="cell-secondary">{{ $user->USR_CREATED_AT }}</td>
+                <td class="cell-secondary">
+                    {{ \Carbon\Carbon::parse($user->USR_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}
+                </td>
             </tr>
 
         </table>
     </div>
 </div>
+
+@if($farmer)
+    <div class="panel mt-3">
+        <div class="panel-header">
+            <h5 class="panel-title">
+                <i class="bi bi-shop"></i>
+                Seller Profile
+            </h5>
+        </div>
+        <div class="panel-body p-0">
+            <table class="detail-table">
+
+                <tr>
+                    <th>Farmer ID</th>
+                    <td><span class="id-cell">{{ $farmer->FMR_ID }}</span></td>
+                </tr>
+
+                <tr>
+                    <th>Seller Mode</th>
+                    <td>
+                        @if($farmer->FMR_SELLER_MODE_ACTIVE)
+                            <span class="badge badge-soft-success">Active</span>
+                        @else
+                            <span class="badge badge-soft-neutral">Off</span>
+                        @endif
+                    </td>
+                </tr>
+
+                @if($farmer->FMR_VERIFIED_AT)
+                    <tr>
+                        <th>Verified At</th>
+                        <td class="cell-secondary">
+                            {{ \Carbon\Carbon::parse($farmer->FMR_VERIFIED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}
+                        </td>
+                    </tr>
+                @endif
+
+            </table>
+        </div>
+
+        @if($farmer->farms->isEmpty())
+            <div class="panel-body pt-0 pb-3">
+                <div class="empty-state">
+                    <i class="bi bi-geo-alt empty-icon"></i>
+                    <p>This seller has not submitted a farm yet.</p>
+                </div>
+            </div>
+        @else
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Farm</th>
+                            <th>Barangay</th>
+                            <th>Status</th>
+                            <th>Submitted At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($farmer->farms as $farm)
+                            <tr>
+                                <td>{{ $farm->FRM_NAME }}</td>
+                                <td class="cell-secondary">{{ $farm->FRM_BARANGAY }}</td>
+                                <td>
+                                    @if($farm->FRM_STATUS == 'APPROVED')
+                                        <span class="badge badge-soft-success">Approved</span>
+                                    @elseif($farm->FRM_STATUS == 'REJECTED')
+                                        <span class="badge badge-soft-danger">Rejected</span>
+                                    @elseif($farm->FRM_STATUS == 'ARCHIVED')
+                                        <span class="badge badge-soft-neutral">Archived</span>
+                                    @else
+                                        <span class="badge badge-soft-warning">Pending Review</span>
+                                    @endif
+                                </td>
+                                <td class="cell-faint">
+                                    {{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}
+                                </td>
+                                <td>
+                                    <div class="actions">
+                                        <a href="{{ route('seller-requests.show', $farm->FRM_ID) }}"
+                                           class="btn-icon" title="View farm">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </div>
+@endif
 
 @endsection
