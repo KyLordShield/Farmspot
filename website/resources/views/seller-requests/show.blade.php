@@ -75,7 +75,7 @@
 
             <tr>
                 <th>Submitted At</th>
-                <td class="cell-secondary">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->format('M d, Y h:i A') }}</td>
+                <td class="cell-secondary">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}</td>
             </tr>
 
         </table>

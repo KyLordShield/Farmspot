@@ -85,7 +85,7 @@
                     <td class="cell-secondary">{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
                     <td>{{ $farm->farmer?->buyer?->user?->USR_MOBILE_NUMBER ?? '-' }}</td>
                     <td class="cell-secondary">{{ $farm->FRM_BARANGAY }}</td>
-                    <td class="cell-faint">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->format('M d, Y h:i A') }}</td>
+                    <td class="cell-faint">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}</td>
                     <td>
                         <div class="actions">
                             <a href="{{ route('seller-requests.show', $farm->FRM_ID) }}"

@@ -25,6 +25,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Display timezone
+    |--------------------------------------------------------------------------
+    |
+    | Timestamps are stored in UTC (config/app.php), but the people reading the
+    | admin pages are in the association's own timezone. Convert every displayed
+    | date before formatting it, or a request submitted at 12:38 AM in Cebu
+    | reads as 4:38 PM the previous day.
+    |
+    */
+
+    'display_timezone' => env('FARMSPOT_DISPLAY_TIMEZONE', 'Asia/Manila'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Weather widget
     |--------------------------------------------------------------------------
     |
