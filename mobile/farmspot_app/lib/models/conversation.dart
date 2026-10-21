@@ -10,6 +10,7 @@ class Conversation {
   final String listingId;
 
   /// The farm being discussed, and where it is.
+  final String? farmId;
   final String? farmName;
   final String? barangay;
 
@@ -44,6 +45,7 @@ class Conversation {
   const Conversation({
     required this.id,
     required this.listingId,
+    this.farmId,
     this.farmName,
     this.barangay,
     this.otherPartyName,
@@ -113,6 +115,7 @@ class Conversation {
     return Conversation(
       id: json['id'] as String,
       listingId: (json['listing_id'] ?? listing?['id']) as String? ?? '',
+      farmId: (farm?['id'] ?? json['farm_id']) as String?,
       farmName: farm?['name'] as String?,
       barangay: farm?['barangay'] as String?,
       otherPartyName: other?['name'] as String?,
@@ -160,6 +163,17 @@ class ChatMessage {
   /// Cloudinary URL of the photo this message carries, null for text.
   final String? imageUrl;
 
+  /// The pin a seller shared, when this is a location message. Both are set
+  /// together or not at all, so [hasLocation] is the single check the UI needs.
+  final double? latitude;
+  final double? longitude;
+  final String? locationLabel;
+
+  /// The farm behind a shared location. When present the recipient opens the
+  /// same directions screen a listing's Directions button does; the label is
+  /// normally the farm's name.
+  final String? farmId;
+
   final bool isMine;
   final bool isRead;
   final DateTime createdAt;
@@ -167,12 +181,19 @@ class ChatMessage {
   /// True when this is a photo message (with or without a caption).
   bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
 
+  /// True when this message carries a tappable map pin.
+  bool get hasLocation => latitude != null && longitude != null;
+
   const ChatMessage({
     required this.id,
     required this.conversationId,
     required this.senderId,
     required this.content,
     this.imageUrl,
+    this.latitude,
+    this.longitude,
+    this.locationLabel,
+    this.farmId,
     required this.isMine,
     required this.isRead,
     required this.createdAt,
@@ -185,6 +206,10 @@ class ChatMessage {
       senderId: json['sender_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
       imageUrl: json['image_url'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      locationLabel: json['location_label'] as String?,
+      farmId: json['farm_id'] as String?,
       isMine: json['is_mine'] as bool? ?? false,
       isRead: json['is_read'] as bool? ?? false,
       createdAt:

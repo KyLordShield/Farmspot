@@ -61,6 +61,14 @@ class _RecordingGateway implements MessagesGateway {
   Future<ChatMessage> sendMessage(String conversationId, String content,
       {XFile? image}) async =>
       throw UnimplementedError();
+
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async =>
+        throw UnimplementedError();
 }
 
 // Widget-level check of the detail-screen name/image fix. Combined with

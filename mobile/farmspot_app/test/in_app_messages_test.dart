@@ -56,6 +56,10 @@ ChatMessage message({
   required String content,
   required bool isMine,
   String? imageUrl,
+  double? latitude,
+  double? longitude,
+  String? locationLabel,
+  String? farmId,
   int minutesAgo = 1,
 }) {
   return ChatMessage(
@@ -64,10 +68,33 @@ ChatMessage message({
     senderId: isMine ? 'USR0001' : 'USR0002',
     content: content,
     imageUrl: imageUrl,
+    latitude: latitude,
+    longitude: longitude,
+    locationLabel: locationLabel,
+    farmId: farmId,
     isMine: isMine,
     isRead: isMine,
     createdAt: DateTime.now().subtract(Duration(minutes: minutesAgo)),
   );
+}
+
+/// A raw `GET /api/farms` row, matching what FarmService.getFarms returns.
+Map<String, dynamic> farmRow({
+  String id = 'FRM0001',
+  String name = 'React A Farm',
+  String barangay = 'Sudlon II',
+  String status = 'APPROVED',
+  double? latitude = 10.3157,
+  double? longitude = 123.8854,
+}) {
+  return {
+    'FRM_ID': id,
+    'FRM_NAME': name,
+    'FRM_BARANGAY': barangay,
+    'FRM_STATUS': status,
+    'FRM_LATITUDE': latitude,
+    'FRM_LONGITUDE': longitude,
+  };
 }
 
 /// In-memory stand-in for the backend, so the chat's polling, sending and
@@ -123,6 +150,32 @@ class FakeGateway implements MessagesGateway {
     stored = [...stored, saved];
     return saved;
   }
+
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async {
+    sends++;
+    if (sendError != null) throw Exception(sendError!);
+    if (sendGate != null) await sendGate!.future;
+    final saved = ChatMessage(
+      id: 'MSGNEW$sends',
+      conversationId: conversationId,
+      senderId: 'USR0001',
+      content: '',
+      latitude: 10.3157,
+      longitude: 123.8854,
+      locationLabel: label,
+      farmId: farmId,
+      isMine: true,
+      isRead: false,
+      createdAt: DateTime.now(),
+    );
+    stored = [...stored, saved];
+    return saved;
+  }
 }
 
 Conversation thread({String role = 'BUYER', String otherName = 'React A'}) =>
@@ -132,6 +185,7 @@ Future<void> _pumpChat(
   WidgetTester tester,
   FakeGateway api, {
   Conversation? conversation,
+  Future<List<Map<String, dynamic>>> Function()? loadMyFarms,
 }) async {
   SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
   await tester.pumpWidget(
@@ -139,6 +193,7 @@ Future<void> _pumpChat(
       home: InAppMessagesScreen(
         conversation: conversation ?? thread(),
         gateway: api,
+        loadMyFarms: loadMyFarms,
       ),
     ),
   );
@@ -152,7 +207,7 @@ void main() {
 
     expect(c.id, 'CNV0001');
     expect(c.listingId, 'LST0001');
-    expect(c.otherPartyName, 'React A');
+    expect(c.farmId, 'FRM0001');
     expect(c.farmName, 'React A Farm');
     expect(c.barangay, 'Sudlon II');
     expect(c.cropName, 'carrot',
@@ -173,6 +228,53 @@ void main() {
         conversationJson(otherName: '', role: 'SELLER'));
 
     expect(c.isSellerSide, isTrue);
+  });
+
+  test('a legacy farm pin resolves through the conversation farm id', () {
+    final conversation = thread();
+
+    final legacy = message(
+      id: 'MSG0001',
+      content: '',
+      isMine: true,
+      latitude: 10.3000,
+      longitude: 123.9000,
+      locationLabel: 'react a farm',
+    );
+    expect(
+      InAppMessagesScreen.sharedFarmIdFor(legacy, conversation),
+      'FRM0001',
+      reason: 'an old pin labelled with the farm name is still that farm',
+    );
+
+    final customLabel = message(
+      id: 'MSG0002',
+      content: '',
+      isMine: true,
+      latitude: 10.3000,
+      longitude: 123.9000,
+      locationLabel: 'Farm gate',
+    );
+    expect(
+      InAppMessagesScreen.sharedFarmIdFor(customLabel, conversation),
+      '',
+      reason: 'a custom meeting-point label must stay a coordinate-only pin',
+    );
+
+    final modern = message(
+      id: 'MSG0003',
+      content: '',
+      isMine: true,
+      latitude: 10.3000,
+      longitude: 123.9000,
+      locationLabel: 'Other Farm',
+      farmId: 'FRM0002',
+    );
+    expect(
+      InAppMessagesScreen.sharedFarmIdFor(modern, conversation),
+      'FRM0002',
+      reason: 'a stored farm id always wins',
+    );
   });
 
   testWidgets('chat renders the real history from the backend', (tester) async {
@@ -487,6 +589,122 @@ void main() {
 
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('a seller shares one of their farms and the buyer can navigate',
+      (tester) async {
+    final api = FakeGateway();
+    await _pumpChat(
+      tester,
+      api,
+      conversation: thread(role: 'SELLER'),
+      loadMyFarms: () async => [farmRow()],
+    );
+
+    expect(find.byKey(InAppMessagesScreen.attachLocationKey), findsOneWidget);
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachLocationKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share farm location'), findsOneWidget);
+    expect(find.byKey(InAppMessagesScreen.shareFarmKey('FRM0001')),
+        findsOneWidget);
+
+    await tester.tap(find.text('Send location'));
+    await tester.pumpAndSettle();
+
+    expect(api.stored.last.farmId, 'FRM0001');
+    expect(api.stored.last.locationLabel, 'React A Farm');
+    expect(api.stored.last.latitude, closeTo(10.3157, 0.0000001));
+    // The header already names the farm, so the card is the second occurrence.
+    expect(find.text('React A Farm'), findsWidgets);
+    expect(find.text('Tap to open directions'), findsOneWidget);
+  });
+
+  testWidgets('a seller with several farms chooses which one to share',
+      (tester) async {
+    final api = FakeGateway();
+    await _pumpChat(
+      tester,
+      api,
+      conversation: thread(role: 'SELLER'),
+      loadMyFarms: () async => [
+        farmRow(),
+        farmRow(
+          id: 'FRM0002',
+          name: 'Uphill Farm',
+          barangay: 'Busay',
+        ),
+      ],
+    );
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachLocationKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('React A Farm'), findsWidgets);
+    expect(find.text('Uphill Farm'), findsOneWidget);
+
+    await tester.tap(find.byKey(InAppMessagesScreen.shareFarmKey('FRM0002')));
+    await tester.pump();
+    await tester.tap(find.text('Send location'));
+    await tester.pumpAndSettle();
+
+    expect(api.stored.last.farmId, 'FRM0002');
+    expect(api.stored.last.locationLabel, 'Uphill Farm');
+  });
+
+  testWidgets('the buyer side has no share-location button', (tester) async {
+    await _pumpChat(tester, FakeGateway());
+
+    expect(find.byKey(InAppMessagesScreen.attachLocationKey), findsNothing);
+  });
+
+  testWidgets('a shared farm from the other side renders as a tappable card',
+      (tester) async {
+    final api = FakeGateway()
+      ..stored = [
+        message(
+          id: 'MSG0001',
+          content: '',
+          isMine: false,
+          latitude: 10.3157,
+          longitude: 123.8854,
+          locationLabel: 'React A Farm',
+          farmId: 'FRM0001',
+        ),
+      ];
+    await _pumpChat(tester, api);
+
+    expect(find.text('React A Farm'), findsWidgets);
+    expect(find.text('Tap to open directions'), findsOneWidget);
+    expect(find.byIcon(Icons.navigation_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.agriculture_outlined), findsOneWidget);
+  });
+
+  testWidgets('a farm without a map pin cannot be shared', (tester) async {
+    final api = FakeGateway();
+    await _pumpChat(
+      tester,
+      api,
+      conversation: thread(role: 'SELLER'),
+      loadMyFarms: () async => [
+        farmRow(latitude: null, longitude: null),
+      ],
+    );
+
+    await tester.tap(find.byKey(InAppMessagesScreen.attachLocationKey));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('None of your farms has a map location'),
+      findsOneWidget,
+    );
+    final button = tester.widget<ElevatedButton>(
+      find.widgetWithText(ElevatedButton, 'Send location'),
+    );
+    expect(button.onPressed, isNull);
+    expect(api.stored, isEmpty);
+    expect(api.sends, 0);
   });
 
   testWidgets('an open thread polls and shows a new reply without a refresh',

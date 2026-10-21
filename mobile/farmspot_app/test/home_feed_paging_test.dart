@@ -91,6 +91,13 @@ class _NoMessages implements MessagesGateway {
     String content, {
     XFile? image,
   }) async => throw UnimplementedError();
+
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async => throw UnimplementedError();
 }
 
 Listing _row(String id) => Listing(

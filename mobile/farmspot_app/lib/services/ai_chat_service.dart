@@ -30,12 +30,79 @@ class AiException implements Exception {
   String toString() => message;
 }
 
+/// One navigation button the server attached to a reply.
+///
+/// The server decides which screen ids exist; [screen] is never a route or a
+/// URL, just a stable name the app maps to a known page. Unknown names are
+/// dropped by the screen, so an old or over-eager server cannot push a blank
+/// route into the navigator.
+class AiAction {
+  const AiAction({
+    required this.id,
+    required this.label,
+    required this.screen,
+    this.params = const {},
+  });
+
+  final String id;
+  final String label;
+  final String screen;
+  final Map<String, dynamic> params;
+
+  /// The search term for a `search_crop` action, if one was sent.
+  String? get query {
+    final value = params['query'];
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// Returns null for anything the UI cannot render, so one malformed entry
+  /// cannot take the whole reply down with it.
+  static AiAction? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+
+    final rawId = raw['id'];
+    final rawLabel = raw['label'];
+    final rawScreen = raw['screen'];
+    final id = rawId is String ? rawId.trim() : '';
+    final label = rawLabel is String ? rawLabel.trim() : '';
+    final screen = rawScreen is String ? rawScreen.trim() : '';
+    if (id.isEmpty || label.isEmpty || screen.isEmpty) return null;
+
+    final params = <String, dynamic>{};
+    final rawParams = raw['params'];
+    if (rawParams is Map) {
+      rawParams.forEach((key, value) {
+        if (key is String) params[key] = value;
+      });
+    }
+
+    return AiAction(id: id, label: label, screen: screen, params: params);
+  }
+}
+
+/// A reply and the buttons that belong under it.
+class AiReply {
+  const AiReply({required this.text, this.actions = const []});
+
+  final String text;
+  final List<AiAction> actions;
+}
+
 /// What the chat screen needs from the assistant. Declared as an interface so
 /// widget tests can hand the screen a fake instead of calling Groq — the same
 /// reason the messaging screen talks to a MessagesGateway.
 abstract class AiGateway {
   /// Sends the conversation and returns the assistant's reply.
   Future<String> replyTo(List<AiTurn> history);
+
+  /// Like [replyTo], but also carries the server's navigation buttons.
+  ///
+  /// The default keeps older fakes working: a gateway that only knows how to
+  /// return text simply has no actions.
+  Future<AiReply> replyWithActions(List<AiTurn> history) async =>
+      AiReply(text: await replyTo(history));
 }
 
 /// Removes markdown markers from an assistant reply.
@@ -125,7 +192,11 @@ class AiChatService implements AiGateway {
   static const Duration _timeout = Duration(seconds: 35);
 
   @override
-  Future<String> replyTo(List<AiTurn> history) async {
+  Future<String> replyTo(List<AiTurn> history) async =>
+      (await replyWithActions(history)).text;
+
+  @override
+  Future<AiReply> replyWithActions(List<AiTurn> history) async {
     final window = history.length <= historyWindow
         ? history
         : history.sublist(history.length - historyWindow);
@@ -162,7 +233,7 @@ class AiChatService implements AiGateway {
   /// Surfaces the server's own message. It already distinguishes a throttled
   /// provider from a missing key, so the user sees something specific instead
   /// of a generic failure.
-  String _reply(http.Response response) {
+  AiReply _reply(http.Response response) {
     final Map<String, dynamic> body;
     try {
       body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -178,7 +249,20 @@ class AiChatService implements AiGateway {
       // Stripped here rather than in the bubble so a caller that reads the
       // reply for anything else sees the same clean text the user does.
       final clean = stripMarkdown(reply);
-      return clean.isEmpty ? reply.trim() : clean;
+
+      final actions = <AiAction>[];
+      final rawActions = body['actions'];
+      if (rawActions is List) {
+        for (final raw in rawActions) {
+          final action = AiAction.fromJson(raw);
+          if (action != null) actions.add(action);
+        }
+      }
+
+      return AiReply(
+        text: clean.isEmpty ? reply.trim() : clean,
+        actions: List.unmodifiable(actions),
+      );
     }
 
     throw AiException((body['message'] as String?) ??

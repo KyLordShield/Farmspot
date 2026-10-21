@@ -32,6 +32,13 @@ class _HomeGateway implements MessagesGateway {
     String content, {
     XFile? image,
   }) async => throw UnimplementedError();
+
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async => throw UnimplementedError();
 }
 
 /// The controls that were removed from the home feed once the Filter button

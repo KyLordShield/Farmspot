@@ -15,6 +15,7 @@ class _FakeGateway implements AiGateway {
   final List<List<AiTurn>> calls = [];
 
   String reply = 'Ang kamatis, puno na.';
+  List<AiAction> actions = const [];
   Object? error;
 
   /// When set, the call parks here instead of resolving, so a test can observe
@@ -29,6 +30,10 @@ class _FakeGateway implements AiGateway {
     if (error != null) throw error!;
     return reply;
   }
+
+  @override
+  Future<AiReply> replyWithActions(List<AiTurn> history) async =>
+      AiReply(text: await replyTo(history), actions: actions);
 }
 
 void main() {
@@ -131,6 +136,54 @@ expect(find.text('Kumusta ang kamatis?'), findsOneWidget);
     expect(find.text('Ang kamatis, puno na.'), findsOneWidget);
     // The indicator makes way for the reply rather than sitting under it.
     expect(find.byKey(AiChatScreen.typingDotsKey), findsNothing);
+  });
+
+  testWidgets('shows the action buttons the server attached to a reply',
+      (tester) async {
+    gateway.actions = const [
+      AiAction(
+        id: 'start_farm_setup',
+        label: 'Start farm setup',
+        screen: 'profile',
+      ),
+      AiAction(
+        id: 'search_crop',
+        label: 'View pechay listings',
+        screen: 'search_crop',
+        params: {'query': 'pechay'},
+      ),
+    ];
+    await pumpChat(tester);
+
+    await ask(tester, 'How do I start selling?');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(AiChatScreen.actionKey('start_farm_setup')),
+      findsOneWidget,
+    );
+    expect(find.text('Start farm setup'), findsOneWidget);
+    expect(find.text('View pechay listings'), findsOneWidget);
+  });
+
+  test('actions parse defensively and keep the crop query', () {
+    final action = AiAction.fromJson({
+      'id': 'search_crop',
+      'label': 'View pechay listings',
+      'screen': 'search_crop',
+      'params': {'query': '  pechay '},
+    });
+
+    expect(action, isNotNull);
+    expect(action!.query, 'pechay');
+    // A malformed entry is dropped rather than rendered as a blank button.
+    expect(AiAction.fromJson({'id': 'x'}), isNull);
+    expect(AiAction.fromJson('nope'), isNull);
+    // Wrong JSON types are dropped instead of throwing a cast error.
+    expect(
+      AiAction.fromJson({'id': 1, 'label': 'Home', 'screen': 'home'}),
+      isNull,
+    );
   });
 
   testWidgets('the pending dots actually move while the assistant works',

@@ -156,6 +156,14 @@ class _FakeMessagesGateway implements MessagesGateway {
   Future<ChatMessage> sendMessage(String conversationId, String content,
           {XFile? image}) async =>
       throw UnimplementedError();
+
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async =>
+        throw UnimplementedError();
 }
 
 Conversation _conversation(String listingId) => Conversation.fromJson({
@@ -197,12 +205,14 @@ Future<void> _pump(
   Future<LatLng> Function()? loadPosition,
   bool ferry = false,
   bool simulate = false,
+  String? farmId = 'F1',
+  String farmName = 'Sitio Maraag Farm',
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: FarmDirectionsScreen(
-        farmId: 'F1',
-        farmName: 'Sitio Maraag Farm',
+        farmId: farmId,
+        farmName: farmName,
         farmPosition: passFarmPosition ? (farmPosition ?? _farm) : null,
         listingId: listingId,
         loadPosition: loadPosition ?? () async => _start,
@@ -679,4 +689,31 @@ void main() {
       );
     },
   );
+
+  testWidgets('a coordinate-only pin still asks before starting navigation', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>();
+    var profileCalls = 0;
+
+    await _pump(
+      tester,
+      stream: stream,
+      farmId: null,
+      farmPosition: _farm,
+      farmName: 'Shared location',
+      loadFarmProfile: (_) async {
+        profileCalls++;
+        return _profile();
+      },
+    );
+
+    expect(profileCalls, 0, reason: 'a pin has no farm record to fetch');
+    expect(find.text('Start Navigation'), findsOneWidget,
+        reason: 'opening directions must not auto-start the journey');
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    expect(find.text('Walking'), findsOneWidget);
+    expect(find.text('Mark as Arrived'), findsOneWidget);
+  });
 }

@@ -64,7 +64,10 @@ Future<void> _defaultContactAction({
 /// geolocator, the Farmspot backend and the public OSRM routers. Every failure
 /// degrades to a friendly message or the Cebu City fallback — never a crash.
 class FarmDirectionsScreen extends StatefulWidget {
-  final String farmId;
+  /// The farm to navigate to. Null when the destination is an ad-hoc pin — a
+  /// location a seller shared in chat — in which case [farmPosition] is the
+  /// only source of the destination and no farm profile is fetched.
+  final String? farmId;
 
   /// Real coordinate/name overrides the caller already holds (e.g. the map's
   /// [FarmPin]); the screen falls back to fetching the farm profile itself.
@@ -100,7 +103,7 @@ class FarmDirectionsScreen extends StatefulWidget {
 
   const FarmDirectionsScreen({
     super.key,
-    required this.farmId,
+    this.farmId,
     this.farmPosition,
     this.farmName,
     this.listingId,
@@ -274,17 +277,23 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     var farmPos = widget.farmPosition;
     var farmName = widget.farmName ?? '';
 
-    try {
-      final profile = await widget.loadFarmProfile(widget.farmId);
-      if (!mounted) return;
-      _profile = profile;
-      if (farmName.isEmpty) farmName = profile.name;
-      if (farmPos == null &&
-          profile.latitude != null &&
-          profile.longitude != null) {
-        farmPos = LatLng(profile.latitude!, profile.longitude!);
-      }
-    } catch (_) {}
+    // A shared pin has no farm record behind it, so there is nothing to fetch.
+    // Skipping the call also keeps a stale/unknown id from turning a perfectly
+    // good coordinate into an error.
+    final farmId = widget.farmId;
+    if (farmId != null && farmId.isNotEmpty) {
+      try {
+        final profile = await widget.loadFarmProfile(farmId);
+        if (!mounted) return;
+        _profile = profile;
+        if (farmName.isEmpty) farmName = profile.name;
+        if (farmPos == null &&
+            profile.latitude != null &&
+            profile.longitude != null) {
+          farmPos = LatLng(profile.latitude!, profile.longitude!);
+        }
+      } catch (_) {}
+    }
 
     final listingId = widget.listingId;
     if (listingId != null && listingId.isNotEmpty) {
@@ -305,7 +314,9 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       return;
     }
     _farmPos = farmPos;
-    _farmName = farmName.isEmpty ? 'Farm' : farmName;
+    _farmName = farmName.isEmpty
+        ? (farmId == null ? 'Shared location' : 'Farm')
+        : farmName;
 
     final results = await Future.wait([
       _routing.getRoute(from: _current, to: farmPos, profile: 'foot'),
@@ -332,6 +343,36 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       _carPlan = car;
       _loading = false;
     });
+
+    // The map starts at the traveller's position. Without this the destination
+    // can sit far outside the viewport, which reads as "the farm is here" even
+    // though the route is correct. Fit both ends once the route is known.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fitRouteBounds();
+    });
+  }
+
+  void _fitRouteBounds() {
+    final destination = _farmPos;
+    if (destination == null) return;
+
+    final points = <LatLng>[
+      _current,
+      destination,
+      ...?_plan?.geometry,
+    ];
+    if (points.length < 2) return;
+
+    try {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(points),
+          padding: const EdgeInsets.fromLTRB(36, 36, 36, 36),
+        ),
+      );
+    } catch (_) {
+      // The map may not be mounted yet; the initial centre is still usable.
+    }
   }
 
   void _startJourney() {

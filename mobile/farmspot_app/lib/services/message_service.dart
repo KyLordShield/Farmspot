@@ -27,6 +27,16 @@ abstract class MessagesGateway {
   /// local guess. Pass [image] to send a photo — with or without caption text.
   Future<ChatMessage> sendMessage(String conversationId, String content,
       {XFile? image});
+
+  /// Shares one of the seller's farms as a map pin. [farmId] is the farm the
+  /// recipient will navigate to; the server resolves its coordinates, so the
+  /// pin cannot drift from the farm it is labelled with. [label] is optional
+  /// and defaults to the farm's name on the server.
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  });
 }
 
 /// In-app buyer <-> seller messaging over the app's own Laravel backend.
@@ -79,6 +89,26 @@ class MessageService implements MessagesGateway {
     final http.Response response = image == null
         ? await _post('/conversations/$conversationId/messages', {'content': content})
         : await _postPhoto('/conversations/$conversationId/messages', content, image);
+    return ChatMessage.fromJson(
+        _data(response)['message'] as Map<String, dynamic>);
+  }
+
+  /// Shares a farm. The server stores the farm's own coordinates and the id,
+  /// so the recipient can open the same directions screen a listing uses.
+  @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async {
+    final trimmed = label?.trim();
+    final response = await _post(
+      '/conversations/$conversationId/messages',
+      {
+        'farm_id': farmId,
+        if (trimmed != null && trimmed.isNotEmpty) 'location_label': trimmed,
+      },
+    );
     return ChatMessage.fromJson(
         _data(response)['message'] as Map<String, dynamic>);
   }

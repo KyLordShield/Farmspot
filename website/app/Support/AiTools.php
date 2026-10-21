@@ -99,6 +99,23 @@ class AiTools
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'search_farms',
+                    'description' => 'Search public farms by farm name, barangay, or the seller\'s name. Returns the farm, barangay, seller and up to five crops it currently lists. Use for "where is <farm>", "find <seller>", "farms in <barangay>". For a crop, use search_marketplace instead.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'query' => [
+                                'type' => 'string',
+                                'description' => 'Farm name, seller name, or barangay to search for.',
+                            ],
+                        ],
+                        'required' => ['query'],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'search_marketplace',
                     'description' => 'Search live produce listings on FarmSpot by crop name, returning the farm, barangay and availability. Use for "who is selling pechay", "where can I buy tomatoes". Never returns contact details.',
                     'parameters' => [
@@ -130,6 +147,7 @@ class AiTools
             'get_my_farms' => $this->farms(),
             'get_my_listings' => $this->listings(),
             'get_my_activity' => $this->activity(),
+            'search_farms' => $this->searchFarms($arguments),
             'search_marketplace' => $this->searchMarketplace($arguments),
             default => ['error' => "Unknown tool '$name'."],
         };
@@ -321,6 +339,68 @@ class AiTools
             'buyers_who_contacted_me' => $buyersWhoContactedMe,
             'sellers_i_contacted' => ContactLog::where('USR_ID', $userId)->count(),
             'own_listing_count' => $ownListingIds->count(),
+        ];
+    }
+
+    /**
+     * Public farms by farm name, barangay, or seller name.
+     *
+     * Only APPROVED + pin-active farms are searchable: a pending or archived
+     * farm is not on the map, so the assistant must not surface it as a place
+     * a buyer can visit. Crops are summarised rather than listed in full, which
+     * keeps the tool result small enough to send back through the model.
+     */
+    private function searchFarms(array $arguments): array
+    {
+        $query = trim((string) ($arguments['query'] ?? ''));
+        if ($query === '') {
+            return ['error' => 'A farm or seller name is required.'];
+        }
+
+        $like = '%'.$query.'%';
+
+        $farms = Farm::query()
+            ->with('farmer.buyer.user')
+            ->where('FRM_STATUS', 'APPROVED')
+            ->where('FRM_PIN_ACTIVE', 1)
+            ->where(function ($builder) use ($like) {
+                $builder->where('FRM_NAME', 'like', $like)
+                    ->orWhere('FRM_BARANGAY', 'like', $like)
+                    ->orWhereHas(
+                        'farmer.buyer.user',
+                        fn ($user) => $user->where('USR_NAME', 'like', $like)
+                    );
+            })
+            ->orderBy('FRM_NAME')
+            ->limit(10)
+            ->get();
+
+        $crops = $farms->isEmpty()
+            ? collect()
+            : Listing::query()
+                ->select('listing.FRM_ID', 'crop_category.CAT_NAME')
+                ->join('crop_category', 'listing.CAT_ID', '=', 'crop_category.CAT_ID')
+                ->whereIn('listing.FRM_ID', $farms->pluck('FRM_ID'))
+                ->where('listing.LST_AVAILABILITY', 'ACTIVE')
+                ->orderBy('crop_category.CAT_NAME')
+                ->get()
+                ->groupBy('FRM_ID')
+                ->map(fn ($rows) => $rows
+                    ->pluck('CAT_NAME')
+                    ->unique()
+                    ->take(5)
+                    ->values()
+                    ->all());
+
+        return [
+            'query' => $query,
+            'result_count' => $farms->count(),
+            'farms' => $farms->map(fn (Farm $farm) => [
+                'farm_name' => $farm->FRM_NAME,
+                'barangay' => $farm->FRM_BARANGAY,
+                'seller_name' => $farm->farmer?->buyer?->user?->USR_NAME,
+                'crops' => $crops->get($farm->FRM_ID, []),
+            ])->all(),
         ];
     }
 

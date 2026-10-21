@@ -70,6 +70,27 @@ class _Messages implements MessagesGateway {
   }
 
   @override
+  Future<ChatMessage> sendFarmLocation(
+    String conversationId,
+    String farmId, {
+    String? label,
+  }) async {
+    final saved = ChatMessage(
+      id: 'MSGSENT',
+      conversationId: conversationId,
+      senderId: 'USR0001',
+      content: '',
+      farmId: farmId,
+      locationLabel: label,
+      isMine: true,
+      isRead: false,
+      createdAt: DateTime.now(),
+    );
+    stored.add(saved);
+    return saved;
+  }
+
+  @override
   Future<Conversation> startConversation(String listingId) async =>
       throw UnimplementedError();
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Buyer;
 use App\Models\Conversation;
+use App\Models\Farm;
 use App\Models\Farmer;
 use App\Models\Listing;
 use App\Models\Message;
@@ -247,14 +248,65 @@ class ConversationController extends Controller
         $validated = $request->validate([
             'content' => ['nullable', 'string', 'max:1000'],
             'photo' => ['nullable', 'image', 'max:5120'],
+            // A location is a pair: one coordinate without the other cannot be
+            // plotted, so each is required when its partner is present.
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'location_label' => ['nullable', 'string', 'max:255'],
+            // Sellers share a farm, not a device fix. The server looks the
+            // coordinates up itself so the pin always matches the farm the
+            // recipient is navigating to, even if the phone's GPS drifts.
+            'farm_id' => ['nullable', 'string', 'size:6'],
         ]);
 
         $content = trim($validated['content'] ?? '');
         $photo = $request->file('photo');
 
-        // A message needs something to say: either text or a photo. 'nullable'
-        // alone would admit a request with neither.
-        if ($content === '' && ! $photo) {
+        $farmId = $validated['farm_id'] ?? null;
+        $latitude = isset($validated['latitude'])
+            ? (float) $validated['latitude']
+            : null;
+        $longitude = isset($validated['longitude'])
+            ? (float) $validated['longitude']
+            : null;
+        $hasLocation = $latitude !== null && $longitude !== null;
+        $locationLabel = trim((string) ($validated['location_label'] ?? ''));
+        $locationLabel = $locationLabel === ''
+            ? null
+            : mb_substr($locationLabel, 0, 255);
+
+        if ($farmId !== null) {
+            $farm = Farm::find($farmId);
+            $farmerId = $request->user()->buyer?->farmer?->FMR_ID;
+
+            // A seller may only share one of their own farms. Without this a
+            // crafted request could pin somebody else's land onto a message.
+            if (! $farm || ! $farmerId || $farm->FMR_ID !== $farmerId) {
+                return response()->json([
+                    'message' => 'You can only share one of your own farms.',
+                    'errors' => ['farm_id' => ['You can only share one of your own farms.']],
+                ], 422);
+            }
+
+            if ($farm->FRM_LATITUDE === null || $farm->FRM_LONGITUDE === null) {
+                return response()->json([
+                    'message' => 'This farm has no map location yet.',
+                    'errors' => ['farm_id' => ['This farm has no map location yet.']],
+                ], 422);
+            }
+
+            $latitude = (float) $farm->FRM_LATITUDE;
+            $longitude = (float) $farm->FRM_LONGITUDE;
+            $hasLocation = true;
+
+            // The farm's own name is the useful label; a caller can still
+            // override it with something like "Farm gate".
+            $locationLabel ??= mb_substr((string) $farm->FRM_NAME, 0, 255);
+        }
+
+        // A message needs something to say: text, a photo, or a pin. 'nullable'
+        // alone would admit a request with none of them.
+        if ($content === '' && ! $photo && ! $hasLocation) {
             return response()->json([
                 'message' => 'Message cannot be empty.',
                 'errors' => ['content' => ['Message cannot be empty.']],
@@ -274,7 +326,7 @@ class ConversationController extends Controller
             $imageUrl = Storage::disk('cloudinary')->url($path);
         }
 
-        $message = DB::transaction(function () use ($conversation, $content, $imageUrl, $user) {
+        $message = DB::transaction(function () use ($conversation, $content, $imageUrl, $user, $hasLocation, $latitude, $longitude, $locationLabel, $farmId) {
             do {
                 $messageId = strtoupper(Str::random(6));
             } while (Message::where('MSG_ID', $messageId)->exists());
@@ -285,9 +337,14 @@ class ConversationController extends Controller
                 'USR_ID' => $user->USR_ID,
                 // An image-only message keeps its text column as the empty
                 // string the old validation would have rejected, but the photo
-                // URL is what makes it a real message.
+                // URL is what makes it a real message. A pin-only message is
+                // the same shape, with the coordinates instead of the URL.
                 'MSG_CONTENT' => $content,
                 'MSG_IMAGE_PATH' => $imageUrl,
+                'MSG_LATITUDE' => $hasLocation ? $latitude : null,
+                'MSG_LONGITUDE' => $hasLocation ? $longitude : null,
+                'MSG_LOCATION_LABEL' => $locationLabel,
+                'MSG_FARM_ID' => $farmId,
                 // A message row has exactly one recipient, so MSG_IS_READ means
                 // "the other side has read it" — it must start at 0. The sender
                 // never counts their own messages toward their badge anyway
@@ -299,7 +356,12 @@ class ConversationController extends Controller
 
             // Keep the denormalized inbox preview in step with the thread.
             Conversation::where('CONV_ID', $conversation->CONV_ID)->update([
-                'CNV_LAST_MESSAGE' => $this->previewFor($imageUrl, $content),
+                'CNV_LAST_MESSAGE' => $this->previewFor(
+                    $imageUrl,
+                    $content,
+                    $hasLocation,
+                    $locationLabel
+                ),
                 'CNV_LAST_MESSAGE_AT' => $message->MSG_CREATED_AT,
             ]);
 
@@ -435,6 +497,13 @@ class ConversationController extends Controller
      */
     private function formatMessage(Message $message, $viewerId): array
     {
+        $latitude = $message->MSG_LATITUDE === null
+            ? null
+            : (float) $message->MSG_LATITUDE;
+        $longitude = $message->MSG_LONGITUDE === null
+            ? null
+            : (float) $message->MSG_LONGITUDE;
+
         return [
             'id' => $message->MSG_ID,
             'conversation_id' => $message->CONV_ID,
@@ -442,6 +511,15 @@ class ConversationController extends Controller
             'is_mine' => $message->USR_ID === $viewerId,
             'content' => $message->MSG_CONTENT,
             'image_url' => $message->MSG_IMAGE_PATH,
+            // A pin is one more kind of payload alongside text and a photo. The
+            // two coordinates are sent together or not at all, so the app can
+            // treat "latitude present" as the whole signal.
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'location_label' => $message->MSG_LOCATION_LABEL,
+            // The farm a shared location belongs to, so the app can open the
+            // same directions screen a listing's Directions button uses.
+            'farm_id' => $message->MSG_FARM_ID,
             'is_read' => (bool) $message->MSG_IS_READ,
             'created_at' => $this->utc($message->MSG_CREATED_AT),
         ];
@@ -498,11 +576,27 @@ class ConversationController extends Controller
      * Plain text is truncated to the width CNV_LAST_MESSAGE stores, so a
      * preview is the same length whether it came from the row or from the query
      * below. A photo-only message has no readable text, so it becomes "Photo".
+     * A shared pin has no text of its own either, so it previews as
+     * "Shared location" (with its label when there is one).
      */
-    private function previewFor(?string $imageUrl, string $content): string
-    {
-        if ($content !== '') {
+    private function previewFor(
+        ?string $imageUrl,
+        string $content,
+        bool $hasLocation = false,
+        ?string $locationLabel = null
+    ): string {
+        if (trim($content) !== '') {
             return mb_substr($content, 0, 500);
+        }
+
+        if ($hasLocation) {
+            $label = trim((string) $locationLabel);
+
+            return mb_substr(
+                $label === '' ? 'Shared location' : "Shared location: {$label}",
+                0,
+                500
+            );
         }
 
         return $imageUrl ? 'Photo' : '';
@@ -522,12 +616,13 @@ class ConversationController extends Controller
      * message history is: two messages in one thread can share a timestamp, and
      * the sequence is monotonic.
      *
-     * Reads MSG_IMAGE_PATH too so the photo-only case previews as "Photo",
-     * matching the stored copy. Null when every message in the thread is
-     * hidden. There is deliberately no fallback to CNV_LAST_MESSAGE: the stored
-     * copy is the text of whichever message came last, hidden or not, so
-     * falling back to it would put the reported text straight back into the
-     * list — the one thing the hidden button exists to prevent.
+     * Reads MSG_IMAGE_PATH and the location columns too, so a photo-only or
+     * pin-only message previews the same way the stored copy did. Null when
+     * every message in the thread is hidden. There is deliberately no fallback
+     * to CNV_LAST_MESSAGE: the stored copy is the text of whichever message
+     * came last, hidden or not, so falling back to it would put the reported
+     * text straight back into the list — the one thing the hidden button exists
+     * to prevent.
      *
      * @return string|null
      */
@@ -536,14 +631,23 @@ class ConversationController extends Controller
         $message = Message::where('CONV_ID', $conversationId)
             ->visible()
             ->orderByDesc('MSG_SEQ')
-            ->first(['MSG_CONTENT', 'MSG_IMAGE_PATH']);
+            ->first([
+                'MSG_CONTENT',
+                'MSG_IMAGE_PATH',
+                'MSG_LATITUDE',
+                'MSG_LONGITUDE',
+                'MSG_LOCATION_LABEL',
+            ]);
 
         if (! $message) {
             return null;
         }
 
-        return $message->MSG_IMAGE_PATH && trim($message->MSG_CONTENT) === ''
-            ? 'Photo'
-            : mb_substr($message->MSG_CONTENT, 0, 500);
+        return $this->previewFor(
+            $message->MSG_IMAGE_PATH,
+            (string) $message->MSG_CONTENT,
+            $message->MSG_LATITUDE !== null && $message->MSG_LONGITUDE !== null,
+            $message->MSG_LOCATION_LABEL
+        );
     }
 }

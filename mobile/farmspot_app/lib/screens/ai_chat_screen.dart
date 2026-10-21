@@ -3,6 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/ai_chat_service.dart';
 import '../theme.dart';
+import 'map_screen.dart';
+import 'messages_inbox_screen.dart';
+import 'notifications_screen.dart';
+import 'profile_screen.dart';
+import 'search_results_screen.dart';
+import 'seller/my_farm_screen.dart';
 
 /// FarmSpot AI chat assistant.
 ///
@@ -42,6 +48,10 @@ class AiChatScreen extends StatefulWidget {
   /// Containers, so there is no text to search for.
   static const Key typingDotsKey = Key('ai-typing-dots');
 
+  /// Key of a server-suggested action button, so a test can tap one without
+  /// matching its label text.
+  static Key actionKey(String id) => Key('ai-action-$id');
+
   @override
   State<AiChatScreen> createState() => _AiChatScreenState();
 }
@@ -54,12 +64,16 @@ class _Msg {
     this.isAssistant = false,
     this.isError = false,
     this.retryText,
+    this.actions = const [],
   });
 
   final String text;
   final bool isAssistant;
   final bool isError;
   final String? retryText;
+
+  /// Navigation buttons the server attached to this assistant turn.
+  final List<AiAction> actions;
 }
 
 class _AiChatScreenState extends State<AiChatScreen> {
@@ -128,11 +142,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scrollToEnd();
 
     try {
-      final reply = await _gateway.replyTo(_session.history);
-      _session.history.add(AiTurn('assistant', reply));
+      final reply = await _gateway.replyWithActions(_session.history);
+      _session.history.add(AiTurn('assistant', reply.text));
       if (!mounted) return;
       setState(() {
-        _messages.add(_Msg(reply, isAssistant: true));
+        _messages.add(_Msg(
+          reply.text,
+          isAssistant: true,
+          actions: reply.actions,
+        ));
         _typing = false;
       });
     } catch (error) {
@@ -150,6 +168,44 @@ class _AiChatScreenState extends State<AiChatScreen> {
       });
     }
     _scrollToEnd();
+  }
+
+  /// Opens the screen a server action names.
+  ///
+  /// The allowlist is the point: the server may only choose from these names,
+  /// and anything else is ignored rather than pushed. That keeps the assistant
+  /// from turning into an arbitrary deep-link surface just because a model
+  /// produced a plausible-looking screen id.
+  void _openAction(AiAction action) {
+    if (action.screen == 'home') {
+      // The chat is opened from Home, so popping back to the root tab is the
+      // honest equivalent of "go to Home" and avoids stacking a second copy.
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
+    final Widget? page = switch (action.screen) {
+      'profile' => const ProfileScreen(),
+      'my_farm' => const MyFarmScreen(),
+      'messages' => const MessagesInboxScreen(),
+      'map' => const MapScreen(),
+      'notifications' => const NotificationsScreen(),
+      'search_crop' => action.query == null
+          ? null
+          : SearchResultsScreen(query: action.query!),
+      // A farm/seller search uses the combined results screen (crops + farms
+      // + sellers), so the same query field applies.
+      'search' => action.query == null
+          ? null
+          : SearchResultsScreen(query: action.query!),
+      _ => null,
+    };
+
+    if (page == null) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => page),
+    );
   }
 
   void _scrollToEnd() {
@@ -362,6 +418,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     text: message.text,
                     isAssistant: message.isAssistant,
                     isError: message.isError,
+                    actions: message.actions,
+                    onAction: message.actions.isEmpty ? null : _openAction,
                     onTap: message.isError && !_typing
                         ? () => _retry(message)
                         : null,
@@ -511,6 +569,8 @@ class _Bubble extends StatelessWidget {
     this.dots = false,
     this.isError = false,
     this.onTap,
+    this.actions = const [],
+    this.onAction,
   });
   final String? text;
   final bool isAssistant;
@@ -518,68 +578,151 @@ class _Bubble extends StatelessWidget {
   final bool isError;
   final VoidCallback? onTap;
 
+  /// Buttons rendered under the bubble for the server's suggested screens.
+  final List<AiAction> actions;
+  final void Function(AiAction action)? onAction;
+
   @override
   Widget build(BuildContext context) {
     final green = AppColors.primaryGreen;
     return Align(
       alignment: isAssistant ? Alignment.centerLeft : Alignment.centerRight,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.78),
-            decoration: BoxDecoration(
-              color: isError ? const Color(0xFFFDEDEC) : (isAssistant ? Colors.white : green),
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isAssistant ? 4 : 16),
-                bottomRight: Radius.circular(isAssistant ? 16 : 4),
-              ),
-              border: isError ? Border.all(color: const Color(0xFFF0B7B1)) : null,
-            ),
-            child: dots
-                ? const _TypingDots()
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        text!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.35,
-                          color: isError
-                              ? const Color(0xFF9C2A20)
-                              : (isAssistant ? Colors.black87 : Colors.white),
-                        ),
-                      ),
-                      if (onTap != null) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.refresh_rounded,
-                                size: 13, color: Color(0xFF9C2A20)),
-                            const SizedBox(width: 4),
-                            Text('Tap to retry',
-                                style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF9C2A20))),
-                          ],
-                        ),
-                      ],
-                    ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            isAssistant ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.78),
+                decoration: BoxDecoration(
+                  color: isError
+                      ? const Color(0xFFFDEDEC)
+                      : (isAssistant ? Colors.white : green),
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(isAssistant ? 4 : 16),
+                    bottomRight: Radius.circular(isAssistant ? 16 : 4),
                   ),
+                  border: isError
+                      ? Border.all(color: const Color(0xFFF0B7B1))
+                      : null,
+                ),
+                child: dots
+                    ? const _TypingDots()
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            text!,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.35,
+                              color: isError
+                                  ? const Color(0xFF9C2A20)
+                                  : (isAssistant
+                                      ? Colors.black87
+                                      : Colors.white),
+                            ),
+                          ),
+                          if (onTap != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.refresh_rounded,
+                                    size: 13, color: Color(0xFF9C2A20)),
+                                const SizedBox(width: 4),
+                                Text('Tap to retry',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF9C2A20))),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+            ),
+          ),
+          if (actions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 6),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.78),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final action in actions) _actionChip(action, green),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// A small outlined button, deliberately lighter than the send button: it is
+  /// an offer, not the point of the reply. The icon is chosen from the screen
+  /// name, so the label alone does not have to carry the meaning.
+  Widget _actionChip(AiAction action, Color green) {
+    return Material(
+      color: Colors.white,
+      shape: StadiumBorder(
+        side: BorderSide(color: green.withValues(alpha: 0.35)),
+      ),
+      child: InkWell(
+        key: AiChatScreen.actionKey(action.id),
+        customBorder: const StadiumBorder(),
+        onTap: onAction == null ? null : () => onAction!(action),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(_actionIcon(action.screen), size: 15, color: green),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  action.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: green,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  IconData _actionIcon(String screen) => switch (screen) {
+        'profile' => Icons.person_outline,
+        'my_farm' => Icons.agriculture_outlined,
+        'messages' => Icons.chat_bubble_outline,
+        'map' => Icons.map_outlined,
+        'notifications' => Icons.notifications_none,
+        'search_crop' => Icons.search,
+        'search' => Icons.search,
+        _ => Icons.arrow_forward,
+      };
 }

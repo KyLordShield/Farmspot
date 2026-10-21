@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../models/conversation.dart';
 import '../models/report.dart';
+import '../services/farm_service.dart';
 import '../services/message_service.dart';
 import '../services/report_service.dart';
 import '../theme.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/report_sheet.dart';
+import 'farm_directions_screen.dart';
 import 'product_detail_screen.dart' show FullScreenPhotoViewer;
 import 'user_profile_screen.dart';
 
@@ -35,12 +38,17 @@ class InAppMessagesScreen extends StatefulWidget {
   /// Tests hand the screen a stub instead of launching the photo dialog.
   final Future<XFile?> Function(ImageSource source)? pickImage;
 
+  /// Injectable farm list for tests; defaults to the seller's own farms from
+  /// the backend, the same call the My Farm switcher uses.
+  final Future<List<Map<String, dynamic>>> Function()? loadMyFarms;
+
   const InAppMessagesScreen({
     super.key,
     required this.conversation,
     this.gateway,
     this.reportsGateway,
     this.pickImage,
+    this.loadMyFarms,
   });
 
   @override
@@ -52,8 +60,42 @@ class InAppMessagesScreen extends StatefulWidget {
   /// The composer button that opens the gallery, for tests.
   static const Key attachPhotoKey = Key('chat-attach-photo');
 
+  /// The composer button that shares one of the seller's farms, for tests.
+  static const Key attachLocationKey = Key('chat-attach-location');
+
+  /// One farm row inside the share sheet, for tests.
+  static Key shareFarmKey(String farmId) => Key('chat-share-farm-$farmId');
+
   /// Key of a message bubble, so tests can long-press a specific message.
   static Key bubbleKey(String messageId) => Key('chat-bubble-$messageId');
+
+  /// The farm a shared-location message should navigate to.
+  ///
+  /// New messages carry a farm id. Messages shared before that was stored only
+  /// carry the seller's GPS fix; when their label names the conversation's farm,
+  /// treat it as a legacy farm share and use the farm id instead of the stale
+  /// point. Anything else stays a coordinate-only pin.
+  static String sharedFarmIdFor(
+    ChatMessage message,
+    Conversation conversation,
+  ) {
+    final messageFarmId = (message.farmId ?? '').trim();
+    if (messageFarmId.isNotEmpty) return messageFarmId;
+
+    final label = (message.locationLabel ?? '').trim().toLowerCase();
+    final conversationFarmId = (conversation.farmId ?? '').trim();
+    final conversationFarmName =
+        (conversation.farmName ?? '').trim().toLowerCase();
+
+    if (label.isNotEmpty &&
+        conversationFarmId.isNotEmpty &&
+        conversationFarmName.isNotEmpty &&
+        label == conversationFarmName) {
+      return conversationFarmId;
+    }
+
+    return '';
+  }
 }
 
 class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
@@ -74,6 +116,12 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
   /// lands on the server, and rides another round-trip to Cloudinary before the
   /// row exists.
   bool _sendingPhoto = false;
+
+  /// True while the seller's farm list is loading for the share sheet.
+  bool _loadingFarms = false;
+
+  /// True while a selected farm is being posted to the thread.
+  bool _sendingLocation = false;
 
   String? _error;
   bool _atBottom = true;
@@ -353,6 +401,117 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
     }
   }
 
+  /// Shares one of the seller's farms so the buyer can tap it and navigate.
+  ///
+  /// The list is read fresh on every tap: a seller may have just added a farm,
+  /// and this picker is the only place the choice is made. Farms without a map
+  /// pin are shown but cannot be sent - the recipient would have nowhere to go.
+  Future<void> _shareLocation() async {
+    if (_sending || _sendingLocation || _loadingFarms) return;
+
+    if (widget.conversation.otherPartyStatus != null &&
+        widget.conversation.otherPartyStatus != 'ACTIVE') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.conversation.otherPartyStatus == 'DEACTIVATED'
+              ? 'This user has been deactivated and can no longer receive messages.'
+              : 'This user is no longer active and can no longer receive messages.'),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _loadingFarms = true);
+    List<_ShareableFarm> farms;
+    try {
+      final rows = await (widget.loadMyFarms ?? FarmService.getFarms)();
+      farms = rows
+          .map(_ShareableFarm.fromJson)
+          .whereType<_ShareableFarm>()
+          .toList();
+    } catch (_) {
+      farms = const [];
+    }
+    if (!mounted) return;
+    setState(() => _loadingFarms = false);
+
+    if (farms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You have no farm to share yet. Set up a farm in My Farm first.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final target = await showModalBottomSheet<_ShareableFarm>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _ShareFarmSheet(
+        farms: farms,
+        selectedFarmId: widget.conversation.farmId,
+      ),
+    );
+    if (!mounted || target == null) return;
+
+    setState(() => _sendingLocation = true);
+    try {
+      final saved = await _api.sendFarmLocation(
+        widget.conversation.id,
+        target.id,
+        label: target.name,
+      );
+      if (!mounted) return;
+      _addMessages([saved]);
+      setState(() => _sendingLocation = false);
+      _scrollToEnd();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingLocation = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.errorTerracotta,
+        ),
+      );
+    }
+  }
+
+  /// Opens the same directions screen a listing's Directions button uses, so a
+  /// shared farm behaves exactly like a farm reached from the marketplace.
+  void _openSharedLocation(ChatMessage message) {
+    final farmId = InAppMessagesScreen.sharedFarmIdFor(
+      message,
+      widget.conversation,
+    );
+    final latitude = message.latitude;
+    final longitude = message.longitude;
+    final label = (message.locationLabel ?? '').trim();
+
+    if (farmId.isEmpty && (latitude == null || longitude == null)) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FarmDirectionsScreen(
+          farmId: farmId.isEmpty ? null : farmId,
+          // A farm id is enough: the screen fetches the farm's pin itself. A
+          // legacy message with no resolvable farm may only carry coordinates.
+          farmPosition: farmId.isEmpty && latitude != null && longitude != null
+              ? LatLng(latitude, longitude)
+              : null,
+          farmName: label.isEmpty ? 'Farm location' : label,
+        ),
+      ),
+    );
+  }
+
   void _scrollToEnd({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -582,6 +741,13 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
               child: _MessageBubble(
                 text: message.content,
                 imageUrl: message.imageUrl,
+                latitude: message.latitude,
+                longitude: message.longitude,
+                locationLabel: message.locationLabel,
+                farmId: message.farmId,
+                onLocationTap: message.hasLocation
+                    ? () => _openSharedLocation(message)
+                    : null,
                 isMine: message.isMine,
                 time: _timeLabel(message.createdAt),
               ),
@@ -610,6 +776,32 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
               12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
           child: Row(
             children: [
+              // A seller can share one of their farms; the buyer taps it to
+              // open directions. Hidden on the buyer side: the farm is already
+              // on the listing, so there is nothing of theirs to share.
+              if (widget.conversation.isSellerSide)
+                IconButton(
+                  key: InAppMessagesScreen.attachLocationKey,
+                  onPressed: (_sending ||
+                          _sendingLocation ||
+                          _loadingFarms ||
+                          (widget.conversation.otherPartyStatus != null &&
+                              widget.conversation.otherPartyStatus != 'ACTIVE'))
+                      ? null
+                      : _shareLocation,
+                  icon: (_sendingLocation || _loadingFarms)
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryGreen,
+                          ),
+                        )
+                      : const Icon(Icons.location_on_outlined),
+                  color: green,
+                  tooltip: 'Share farm location',
+                ),
               // Attach a photo. The gallery picker returns a compressed image
               // that rides a multipart upload, so no server config changes hands.
               IconButton(
@@ -786,12 +978,22 @@ class _HeaderAvatar extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final String text;
   final String? imageUrl;
+  final double? latitude;
+  final double? longitude;
+  final String? locationLabel;
+  final String? farmId;
+  final VoidCallback? onLocationTap;
   final bool isMine;
   final String time;
 
   const _MessageBubble({
     required this.text,
     this.imageUrl,
+    this.latitude,
+    this.longitude,
+    this.locationLabel,
+    this.farmId,
+    this.onLocationTap,
     required this.isMine,
     required this.time,
   });
@@ -801,6 +1003,7 @@ class _MessageBubble extends StatelessWidget {
     final green = AppColors.primaryGreen;
     final url = imageUrl?.trim();
     final hasImage = url != null && url.isNotEmpty;
+    final hasLocation = latitude != null && longitude != null;
     final imageWidth = MediaQuery.of(context).size.width * 0.6;
     const imageHeight = 180.0;
 
@@ -833,39 +1036,14 @@ class _MessageBubble extends StatelessWidget {
                       ),
                     ],
             ),
-            child: hasImage
+            child: hasLocation
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: isMine
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => FullScreenPhotoViewer(
-                              urls: [url],
-                              initialIndex: 0,
-                            ),
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            url,
-                            width: imageWidth,
-                            height: imageHeight,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return _photoPlaceholder(imageWidth, imageHeight,
-                                  isMine, spinner: true);
-                            },
-                            errorBuilder: (_, _, _) => _photoPlaceholder(
-                                imageWidth, imageHeight, isMine),
-                          ),
-                        ),
-                      ),
+                      _locationCard(),
                       if (text.trim().isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
@@ -879,14 +1057,61 @@ class _MessageBubble extends StatelessWidget {
                       ],
                     ],
                   )
-                : Text(
-                    text,
-                    style: TextStyle(
-                      color: isMine ? Colors.white : Colors.black87,
-                      fontSize: 14,
-                      height: 1.35,
-                    ),
-                  ),
+                : hasImage
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: isMine
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FullScreenPhotoViewer(
+                                  urls: [url],
+                                  initialIndex: 0,
+                                ),
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                url,
+                                width: imageWidth,
+                                height: imageHeight,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return _photoPlaceholder(
+                                      imageWidth, imageHeight, isMine,
+                                      spinner: true);
+                                },
+                                errorBuilder: (_, _, _) => _photoPlaceholder(
+                                    imageWidth, imageHeight, isMine),
+                              ),
+                            ),
+                          ),
+                          if (text.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              text,
+                              style: TextStyle(
+                                color: isMine ? Colors.white : Colors.black87,
+                                fontSize: 14,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ],
+                      )
+                    : Text(
+                        text,
+                        style: TextStyle(
+                          color: isMine ? Colors.white : Colors.black87,
+                          fontSize: 14,
+                          height: 1.35,
+                        ),
+                      ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -894,6 +1119,76 @@ class _MessageBubble extends StatelessWidget {
                 style: const TextStyle(color: Colors.black38, fontSize: 11)),
           ),
         ],
+      ),
+    );
+  }
+
+  /// A shared pin, drawn as a card rather than a bare coordinate. The whole
+  /// card is the tap target, because "tap the numbers" is not discoverable.
+  Widget _locationCard() {
+    final label = (locationLabel ?? '').trim();
+    final isFarm = (farmId ?? '').trim().isNotEmpty;
+    final fg = isMine ? Colors.white : Colors.black87;
+    final sub = isMine ? Colors.white70 : Colors.black54;
+    final accent = isMine ? Colors.white : AppColors.primaryGreen;
+
+    return Material(
+      color: isMine
+          ? Colors.white.withValues(alpha: 0.15)
+          : const Color(0xFFF2F6F0),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onLocationTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: isMine
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : AppColors.primaryGreen.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isFarm ? Icons.agriculture_outlined : Icons.location_on,
+                  size: 19,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label.isEmpty ? 'Shared location' : label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap to open directions',
+                      style: TextStyle(color: sub, fontSize: 11.5),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.navigation_outlined, size: 18, color: sub),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -921,6 +1216,251 @@ class _MessageBubble extends StatelessWidget {
             )
           : const Icon(Icons.broken_image_outlined,
               color: AppColors.mutedGreen, size: 32),
+    );
+  }
+}
+
+/// One of the seller's farms, as offered by the share sheet.
+///
+/// Built from the same raw `GET /api/farms` rows the My Farm switcher uses.
+/// The server stores the farm's coordinates, but the app needs them here to
+/// tell which farms can actually be sent: a farm without a pin has nowhere for
+/// the recipient to navigate to.
+class _ShareableFarm {
+  const _ShareableFarm({
+    required this.id,
+    required this.name,
+    required this.barangay,
+    required this.status,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String id;
+  final String name;
+  final String? barangay;
+  final String status;
+  final double? latitude;
+  final double? longitude;
+
+  bool get canNavigate => latitude != null && longitude != null;
+
+  String get statusLabel => switch (status) {
+        'APPROVED' => 'Approved',
+        'PENDING_REVIEW' => 'Pending review',
+        'REJECTED' => 'Rejected',
+        _ => status,
+      };
+
+  static _ShareableFarm? fromJson(Map<String, dynamic> raw) {
+    final id = (raw['FRM_ID'] as String?)?.trim();
+    final name = (raw['FRM_NAME'] as String?)?.trim();
+    if (id == null || id.isEmpty || name == null || name.isEmpty) return null;
+
+    return _ShareableFarm(
+      id: id,
+      name: name,
+      barangay: (raw['FRM_BARANGAY'] as String?)?.trim(),
+      status: (raw['FRM_STATUS'] as String?)?.trim() ?? '',
+      latitude: _coord(raw['FRM_LATITUDE']),
+      longitude: _coord(raw['FRM_LONGITUDE']),
+    );
+  }
+
+  /// Laravel serialises decimal columns as strings, so accept both.
+  static double? _coord(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+}
+
+/// Bottom sheet that lets a seller choose which farm location to send.
+///
+/// A seller can own several farms, so the choice is explicit rather than
+/// silently picking the conversation's farm. That farm is pre-selected when it
+/// has a pin, but the rest of the seller's farms are one tap away.
+class _ShareFarmSheet extends StatefulWidget {
+  const _ShareFarmSheet({
+    required this.farms,
+    this.selectedFarmId,
+  });
+
+  final List<_ShareableFarm> farms;
+  final String? selectedFarmId;
+
+  @override
+  State<_ShareFarmSheet> createState() => _ShareFarmSheetState();
+}
+
+class _ShareFarmSheetState extends State<_ShareFarmSheet> {
+  String? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = _initialSelection(widget.farms, widget.selectedFarmId);
+  }
+
+  static String? _initialSelection(
+    List<_ShareableFarm> farms,
+    String? preferredId,
+  ) {
+    if (preferredId != null) {
+      for (final farm in farms) {
+        if (farm.id == preferredId && farm.canNavigate) return farm.id;
+      }
+    }
+    for (final farm in farms) {
+      if (farm.canNavigate) return farm.id;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final anyNavigable = widget.farms.any((farm) => farm.canNavigate);
+    final selected = _selected == null
+        ? null
+        : widget.farms.firstWhere((farm) => farm.id == _selected);
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.agriculture_outlined,
+                    color: AppColors.primaryGreen),
+                const SizedBox(width: 8),
+                const Text(
+                  'Share farm location',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'The buyer can tap the pin to open directions to the farm.',
+              style: TextStyle(color: Colors.black54, fontSize: 12.5),
+            ),
+            const SizedBox(height: 10),
+            if (!anyNavigable)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text(
+                  'None of your farms has a map location yet. Add a pin to a '
+                  'farm in My Farm first.',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.45,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final farm in widget.farms)
+                        InkWell(
+                          key: InAppMessagesScreen.shareFarmKey(farm.id),
+                          onTap: farm.canNavigate
+                              ? () => setState(() => _selected = farm.id)
+                              : null,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  farm.canNavigate
+                                      ? (_selected == farm.id
+                                          ? Icons.radio_button_checked
+                                          : Icons.radio_button_off)
+                                      : Icons.location_off_outlined,
+                                  color: farm.canNavigate
+                                      ? AppColors.primaryGreen
+                                      : Colors.black26,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        farm.name,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: farm.canNavigate
+                                              ? Colors.black87
+                                              : Colors.black38,
+                                        ),
+                                      ),
+                                      Text(
+                                        [
+                                          if ((farm.barangay ?? '')
+                                              .isNotEmpty)
+                                            farm.barangay!,
+                                          if (farm.status.isNotEmpty)
+                                            farm.statusLabel,
+                                          if (!farm.canNavigate)
+                                            'No map location yet',
+                                        ].join(' · '),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: selected == null
+                      ? null
+                      : () => Navigator.of(context).pop(selected),
+                  icon: const Icon(Icons.navigation_outlined, size: 18),
+                  label: const Text('Send location'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

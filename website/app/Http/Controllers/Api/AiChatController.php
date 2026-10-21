@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\AiActions;
 use App\Support\AiTools;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -145,9 +146,10 @@ before answering it.
 NEVER INVENT
 No prices, buyer contact details, farm locations, policies or approval
 outcomes unless a tool result or the user just told you. You have no live
-weather feed, so if asked for weather, say you cannot check it. For who has
-produce in stock, use search_marketplace. A farmer who acts on a made-up price
-loses money.
+weather feed, so if asked for weather, say you cannot
+check it. For who has produce in stock, use search_marketplace. For a farm or
+a seller by name, or farms in a barangay, use search_farms. A farmer who acts
+on a made-up price loses money.
 PROMPT;
 
     /**
@@ -182,6 +184,7 @@ PROMPT;
         );
 
         $used = [];
+        $calls = [];
         $reply = null;
 
         for ($round = 0; $round <= self::MAX_TOOL_ROUNDS; $round++) {
@@ -211,12 +214,26 @@ PROMPT;
                 $name = data_get($call, 'function.name');
                 $used[] = $name;
 
+                // Same defensive parse the tool runner used to do. Kept here
+                // because the actions resolver needs the arguments as well:
+                // the crop the model searched for becomes the query behind the
+                // "View listings" button.
+                $raw = data_get($call, 'function.arguments');
+                $arguments = is_array($raw) ? $raw : (json_decode((string) $raw, true) ?: []);
+                if (!is_array($arguments)) {
+                    $arguments = [];
+                }
+                $calls[] = [
+                    'name' => (string) $name,
+                    'arguments' => $arguments,
+                ];
+
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => data_get($call, 'id'),
                     // Json-encodable result, handed straight to the model.
                     'content' => json_encode(
-                        $this->runTool($tools, (string) $name, $call)
+                        $this->runTool($tools, (string) $name, $arguments)
                     ),
                 ];
             }
@@ -226,10 +243,16 @@ PROMPT;
             return $this->unavailable('The assistant did not return an answer. Please try again.');
         }
 
+        $latest = $this->latestUserMessage($validated['messages']);
+
         return response()->json([
             'reply' => trim((string) $reply),
             'model' => $model,
             'tools_used' => array_values(array_unique($used)),
+            // Server-authored navigation. The app never lets the model name a
+            // route, and only follows the screens it already knows, so a bad
+            // reply cannot send someone to a screen that does not exist.
+            'actions' => AiActions::forMessage($request->user(), $latest, $calls),
         ]);
     }
 
@@ -240,20 +263,34 @@ PROMPT;
      * tool we do not recognise, or one called with garbage, gets a note back
      * so the model can recover on the next turn instead of the request 500ing.
      */
-    private function runTool(AiTools $tools, string $name, array $call): array
+    private function runTool(AiTools $tools, string $name, array $arguments): array
     {
         if (!in_array($name, AiTools::names(), true)) {
             return ['error' => "Unknown tool '$name'."];
         }
 
-        $raw = data_get($call, 'function.arguments');
-        $arguments = is_array($raw) ? $raw : (json_decode((string) $raw, true) ?: []);
+        return $tools->run($name, $arguments);
+    }
 
-        if (!is_array($arguments)) {
-            $arguments = [];
+    /**
+     * The most recent thing the user actually said.
+     *
+     * The action resolver keys off this rather than the assistant's reply: the
+     * reply is prose and may paraphrase, while the question is what the person
+     * asked for. Falls back to the last message when the window somehow ends on
+     * an assistant turn.
+     */
+    private function latestUserMessage(array $messages): string
+    {
+        foreach (array_reverse($messages) as $message) {
+            if (($message['role'] ?? null) === 'user') {
+                return trim((string) ($message['content'] ?? ''));
+            }
         }
 
-        return $tools->run($name, $arguments);
+        $last = end($messages);
+
+        return trim((string) ($last['content'] ?? ''));
     }
 
     /**
