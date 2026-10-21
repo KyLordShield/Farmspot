@@ -100,6 +100,22 @@
                 <td class="cell-secondary">{{ $listing->LST_UPDATED_AT ?: '-' }}</td>
             </tr>
 
+            <tr>
+                <th>Last Renewed</th>
+                <td class="cell-secondary">{{ $listing->LST_LAST_RENEWED_AT ?: 'Never' }}</td>
+            </tr>
+
+            <tr>
+                <th>Renewals</th>
+                <td>
+                    @if((int) $listing->LST_RENEWAL_COUNT > 0)
+                        <span class="badge badge-soft-warning">{{ (int) $listing->LST_RENEWAL_COUNT }} time(s)</span>
+                    @else
+                        <span class="badge badge-soft-neutral">Never</span>
+                    @endif
+                </td>
+            </tr>
+
         </table>
     </div>
 </div>

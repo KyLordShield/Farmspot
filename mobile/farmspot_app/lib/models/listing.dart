@@ -31,6 +31,16 @@ class Listing {
   final String? availability;
   final String? harvestDate;
   final String? expiryDate;
+
+  /// When the seller last renewed this listing with a fresh photo. Null for a
+  /// listing that has never been renewed.
+  final String? lastRenewedAt;
+
+  /// How many times the listing has been renewed. Shown on the admin side; the
+  /// buyer-facing label uses [lastRenewedAt] so the count cannot be read as a
+  /// penalty.
+  final int renewalCount;
+
   final String? image;
   final String? description;
   final List<ListingPhoto> photos;
@@ -88,6 +98,8 @@ class Listing {
     this.availability,
     this.harvestDate,
     this.expiryDate,
+    this.lastRenewedAt,
+    this.renewalCount = 0,
     this.image,
     this.description,
     this.photos = const [],
@@ -117,6 +129,8 @@ class Listing {
       availability: json['availability'] as String?,
       harvestDate: json['harvest_date'] as String?,
       expiryDate: json['expiry_date'] as String?,
+      lastRenewedAt: json['last_renewed_at'] as String?,
+      renewalCount: (json['renewal_count'] as num?)?.toInt() ?? 0,
       image: json['image'] as String?,
       description: json['description'] as String?,
       photos: photosRaw
@@ -145,6 +159,14 @@ class Listing {
   /// NOTE: `distance` and `sitio` have no backend source yet (no geolocation
   /// implemented, and the pilot is single-sitio) — kept as sensible defaults.
   CropListing toCropListing() {
+    final renewedAt = DateTime.tryParse(lastRenewedAt ?? '');
+    final createdAtDate = DateTime.tryParse(createdAt ?? '');
+    final postedAt =
+        renewedAt != null &&
+            (createdAtDate == null || renewedAt.isAfter(createdAtDate))
+        ? renewedAt
+        : createdAtDate;
+
     return CropListing(
       // crop_icon holds the seller-typed crop name (e.g. "Screen-Test Crop");
       // fall back to the category label for older entries with no name.
@@ -168,8 +190,12 @@ class Listing {
       description: description,
       photoUrls: photos.map((p) => p.url).toList(growable: false),
       barangay: barangay ?? 'Brgy. Sudlon',
-      postedLabel: _relativeDate(createdAt),
+      postedLabel: _relativeDate(postedAt?.toIso8601String()),
       expiresLabel: _relativeExpiry(expiryDate),
+      expiresAt: DateTime.tryParse(expiryDate ?? ''),
+      harvestAt: DateTime.tryParse(harvestDate ?? ''),
+      renewedAt: renewedAt,
+      freshLabel: _relativeFreshness(lastRenewedAt),
       contactNumber: farmerMobileNumber ?? 'N/A',
       // Carried into the UI-facing shape so cards can show stars without
       // re-reading the raw Listing, and so the detail screen's rate sheet has a
@@ -193,9 +219,26 @@ class Listing {
     final date = DateTime.tryParse(dateStr);
     if (date == null) return 'unknown';
     final diff = date.difference(DateTime.now()).inDays;
-    if (diff < 0) return 'expired';
+    if (diff < 0) {
+      final past = -diff;
+      return past == 1 ? '1 day ago' : '$past days ago';
+    }
     if (diff == 0) return 'today';
     if (diff == 1) return '1 day';
     return '$diff days';
+  }
+
+  /// "today", "1 day ago", "4 days ago" for the last fresh-photo renewal.
+  /// Null when the listing has never been renewed, so the buyer detail simply
+  /// omits the line instead of claiming a freshness that was never recorded.
+  static String? _relativeFreshness(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return null;
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return null;
+
+    final diff = DateTime.now().difference(date);
+    if (diff.isNegative || diff.inHours < 24) return 'today';
+    if (diff.inDays == 1) return '1 day ago';
+    return '${diff.inDays} days ago';
   }
 }

@@ -24,6 +24,11 @@ trait FormatsListings
             'availability' => $listing->LST_AVAILABILITY,
             'harvest_date' => $listing->LST_HARVEST_DATE,
             'expiry_date' => $listing->LST_EXPIRY_DATE,
+            // Freshness is a renewal fact, not a generic edit timestamp. The
+            // buyer app uses last_renewed_at for "fresh photo X ago"; the count
+            // is for the seller/admin and stays out of the buyer-facing UI.
+            'last_renewed_at' => $listing->LST_LAST_RENEWED_AT,
+            'renewal_count' => (int) ($listing->LST_RENEWAL_COUNT ?? 0),
             'description' => $listing->LST_DESCRIPTION,
             'image' => $listing->LST_IMAGE,
             'created_at' => $listing->LST_CREATED_AT,

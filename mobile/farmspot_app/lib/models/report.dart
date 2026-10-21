@@ -39,7 +39,7 @@ class ReportReason {
   static const misleadingInfo = ReportReason(
     'MISLEADING_INFO',
     'Misleading or false information',
-    hint: 'The crop, price or photos do not match reality',
+    hint: 'The produce or photos do not match what was listed',
   );
   static const fakeListing = ReportReason(
     'FAKE_LISTING',

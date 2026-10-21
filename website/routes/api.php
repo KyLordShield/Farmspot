@@ -93,6 +93,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/listings/{listing}/appeal', [\App\Http\Controllers\Api\AppealController::class, 'storeListing']);
     Route::delete('/listings/{id}', [FarmerListingController::class, 'destroy']);
     Route::patch('/listings/{id}/status', [FarmerListingController::class, 'updateStatus']);
+    Route::post('/listings/{id}/renew', [FarmerListingController::class, 'renew']);
     Route::patch('/farms/{id}', [FarmController::class, 'update']);
 Route::delete('/farms/{farmId}', [FarmController::class, 'destroy']);
     Route::post('/farms/{id}/photos', [FarmController::class, 'addPhotos']);

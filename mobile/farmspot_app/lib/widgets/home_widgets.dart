@@ -16,6 +16,23 @@ class CropListing {
   final String sitio;
   final String postedLabel;
   final String expiresLabel;
+
+  /// Parsed expiry date, used to decide whether the listing is past its
+  /// freshness window. Null for legacy callers that only carried a label.
+  final DateTime? expiresAt;
+
+  /// The date a SOON_TO_HARVEST crop becomes available, when the seller set
+  /// one. Null means the exact date is unknown.
+  final DateTime? harvestAt;
+
+  /// Parsed time of the seller's last fresh-photo renewal. Null when the
+  /// listing has never been renewed.
+  final DateTime? renewedAt;
+
+  /// Relative age of the seller's last fresh-photo renewal, e.g. "today" or
+  /// "2 days ago". Null when the listing has never been renewed.
+  final String? freshLabel;
+
   final String contactNumber;
   final String? imageUrl;
   final String? description;
@@ -50,6 +67,10 @@ class CropListing {
     this.sitio = '',
     this.postedLabel = 'today',
     this.expiresLabel = '3 days',
+    this.expiresAt,
+    this.harvestAt,
+    this.renewedAt,
+    this.freshLabel,
     this.contactNumber = '0900-000-0000',
     this.imageUrl,
     this.description,
@@ -61,6 +82,62 @@ class CropListing {
     this.ratings = const RatingSummary.none(),
     this.placeholderIcon = Icons.eco,
   });
+
+  bool get wasRenewed => renewedAt != null;
+
+  bool get isExpired {
+    if (status == 'SOON_TO_HARVEST') return false;
+    final expiry = expiresAt;
+    if (expiry == null) return false;
+    return !expiry.isAfter(DateTime.now());
+  }
+
+  int get daysPastExpiry {
+    final expiry = expiresAt;
+    if (expiry == null) return 0;
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final startOfExpiry = DateTime(expiry.year, expiry.month, expiry.day);
+    final days = startOfToday.difference(startOfExpiry).inDays;
+    return days < 0 ? 0 : days;
+  }
+
+  String get expiryText {
+    final expiry = expiresAt;
+    if (expiry == null) return expiresLabel;
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final startOfExpiry = DateTime(expiry.year, expiry.month, expiry.day);
+    final days = startOfExpiry.difference(startOfToday).inDays;
+    if (days < 0) {
+      final past = -days;
+      return past == 1 ? '1 day ago' : '$past days ago';
+    }
+    if (days == 0) return 'today';
+    if (days == 1) return '1 day';
+    return '$days days';
+  }
+
+  String get harvestText {
+    final date = harvestAt;
+    if (date == null) return 'soon';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final year = date.year == DateTime.now().year ? '' : ', ${date.year}';
+    return '${months[date.month - 1]} ${date.day}$year';
+  }
 
   /// Copy with a new [ratings] summary, used when the product detail screen
   /// reports that a review was written or edited for this listing.
@@ -77,6 +154,10 @@ class CropListing {
     sitio: sitio,
     postedLabel: postedLabel,
     expiresLabel: expiresLabel,
+    expiresAt: expiresAt,
+    harvestAt: harvestAt,
+    renewedAt: renewedAt,
+    freshLabel: freshLabel,
     contactNumber: contactNumber,
     imageUrl: imageUrl,
     description: description,
@@ -105,6 +186,10 @@ class CropListing {
     sitio: sitio,
     postedLabel: postedLabel,
     expiresLabel: expiresLabel,
+    expiresAt: expiresAt,
+    harvestAt: harvestAt,
+    renewedAt: renewedAt,
+    freshLabel: freshLabel,
     contactNumber: contactNumber,
     imageUrl: imageUrl,
     description: description,

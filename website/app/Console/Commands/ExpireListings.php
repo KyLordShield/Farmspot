@@ -24,26 +24,33 @@ class ExpireListings extends Command
      *
      * @var string
      */
-    protected $description = 'Flip listings whose expiry date has passed to NOT_AVAILABLE';
+    protected $description = 'Notify sellers whose listing has passed its three-day freshness window';
 
     /**
      * Execute the console command.
      *
-     * Only listings that genuinely need updating are touched: expiries in the
-     * past whose status is not already NOT_AVAILABLE. LST_AVAILABILITY (the
-     * admin-moderation field) is deliberately left alone, and LST_EXPIRY_DATE
-     * is kept as-is to record when the listing actually expired.
+     * Expired listings stay visible on Home, in Search, and on the detail
+     * screen. The buyer-facing warning on the detail screen already tells
+     * shoppers the crop may not be as fresh, and the seller needs the listing
+     * to remain in the app so they can renew it with fresh photos. Flipping it
+     * to NOT_AVAILABLE here would silently remove it from every buyer surface.
+     * Only the owner notification is sent.
+     *
+     * On-sale rows (AVAILABLE_NOW) whose expiry is in the past are reported.
+     * LST_AVAILABILITY (the admin-moderation field) is deliberately left alone,
+     * and LST_EXPIRY_DATE is kept as-is to record when the listing expired.
+     *
+     * SOON_TO_HARVEST is deliberately excluded. It is not on sale yet, so its
+     * three-day window has not started; a crop harvested two weeks from now
+     * must not be reported as expired three days after it was posted.
+     * listings:harvest starts that window when the harvest date arrives.
      *
      * A listing a moderator has already taken down is skipped entirely. It is
-     * not on sale, the farmer cannot act on it, and flipping its LST_STATUS
-     * would quietly rewrite the record of why it disappeared — it now looks
-     * like it simply sold out or timed out rather than being removed by
-     * moderation.
+     * not on sale, the farmer cannot act on it, and rewriting its LST_STATUS
+     * would quietly erase the record of why it disappeared.
      *
      * The farm pin is never touched. Expiry is about one crop going stale, not
-     * about the farm closing for business, and hiding the pin would remove a
-     * farmer's other, perfectly good produce from the map because an unrelated
-     * listing timed out.
+     * about the farm closing for business.
      */
     public function handle()
     {
@@ -54,19 +61,15 @@ class ExpireListings extends Command
         // posted this" without knowing who that is.
         $expired = Listing::with('farmer.buyer.user')
             ->where('LST_EXPIRY_DATE', '<', now())
-            ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
+            ->where('LST_STATUS', 'AVAILABLE_NOW')
             ->where('LST_AVAILABILITY', 'ACTIVE')
             ->get();
 
         foreach ($expired as $listing) {
-            $listing->LST_STATUS = 'NOT_AVAILABLE';
-            $listing->LST_UPDATED_AT = now();
-            $listing->save();
-
             $this->notifyExpiredOwner($listing, $cropNames);
         }
 
-        $message = "[listings:expire] {$expired->count()} listing(s) expired to NOT_AVAILABLE";
+        $message = "[listings:expire] {$expired->count()} listing(s) reported expired (kept visible)";
 
         $this->info($message);
         Log::info($message);
@@ -118,7 +121,7 @@ class ExpireListings extends Command
             $ownerId,
             'LISTING_EXPIRED',
             'Listing expired',
-            "Your {$crop} listing is now marked Not Available. Update it to show it again.",
+            "Your {$crop} listing is past its three-day freshness window. Renew it with a fresh photo to show buyers it is still fresh.",
             $listing->LST_ID,
         );
     }

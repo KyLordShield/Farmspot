@@ -10,6 +10,7 @@ import '../../services/my_farm_listings_service.dart';
 import '../../theme.dart';
 import '../../widgets/farmspot_loader.dart';
 import '../../widgets/my_farm_widgets.dart';
+import '../../widgets/renew_listing_sheet.dart';
 import '../../widgets/seller_widgets.dart';
 import '../../widgets/stat_box.dart';
 import '../all_reviews_screen.dart';
@@ -642,11 +643,10 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
       }
       if (!mounted) return;
       setState(() => _updatingId = null);
-      // Refetch rather than patching the row in place. Every status update also
-      // moves the expiry date, which can move the listing between the Active
-      // and Expired buckets — and those counts come from the server, so a
-      // locally patched row would sit next to a summary that no longer matches
-      // it.
+      // Refetch rather than patching the row in place. A status change can move
+      // the listing between the Active and Expired buckets — and those counts
+      // come from the server, so a locally patched row would sit next to a
+      // summary that no longer matches it.
       await _loadListings(reset: true);
     } catch (e) {
       if (!mounted) return;
@@ -682,19 +682,19 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     }
   }
 
-  /// Renews an expired listing by re-sending the status it already has.
+  /// Renews an expired listing with a fresh camera photo.
   ///
-  /// The endpoint resets LST_EXPIRY_DATE on any status update, so this is the
-  /// whole of "renew". It deliberately does not force AVAILABLE_NOW: a seller
-  /// whose crop has not come back yet should keep SOON_TO_HARVEST and get the
-  /// extra three days, rather than be listed as buyable because they pressed a
-  /// button about the expiry.
+  /// Renewal is deliberately not a status update: the server refuses to extend
+  /// expiry from the status/edit endpoints, because that let a stale listing be
+  /// refreshed by tapping the same status again or saving an unrelated edit.
   Future<void> _renew(Listing listing) async {
-    await _changeStatus(listing, listing.status);
-    if (!mounted) return;
+    final renewed = await showRenewListingSheet(context, listing: listing);
+    if (renewed == null || !mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Listing renewed for another 3 days.')),
     );
+    await _loadListings(reset: true);
   }
 
   /// Opens the existing read-only reviews screen for this listing.

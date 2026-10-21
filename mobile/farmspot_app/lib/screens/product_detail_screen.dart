@@ -234,6 +234,59 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _buildExpiryWarning() {
+    final message = listing.daysPastExpiry >= 3
+        ? 'This listing is a few days past its freshness window. The crop may not be as fresh now. Message the seller to confirm before buying.'
+        : 'This listing is just past its freshness window. Ask the seller if the harvest is still fresh before buying.';
+
+    return Container(
+      key: const Key('product-detail-expiry-warning'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.warningAmber.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline,
+            size: 20,
+            color: AppColors.warningAmber,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Freshness heads-up',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.warningAmber,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Opens the farm's public profile. No-op when the listing carries no farm id
   /// (legacy rows) rather than navigating somewhere meaningless.
   void _openFarmProfile() {
@@ -277,6 +330,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final expired = listing.isExpired;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -338,16 +392,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                         ),
                         Flexible(
-                          child: GestureDetector(
+                          child: InkWell(
+                            key: const Key('product-detail-farm-link'),
                             onTap: _openFarmProfile,
-                            child: Text(
-                              listing.farmName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.primaryGreen,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    listing.farmName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.primaryGreen,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: AppColors.primaryGreen,
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  size: 18,
+                                  color: AppColors.primaryGreen,
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -356,9 +425,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const SizedBox(height: 14),
                     Row(
                       children: [
-                        const Text(
-                          'Posted ',
-                          style: TextStyle(color: Colors.black54),
+                        Text(
+                          listing.wasRenewed ? 'Renewed ' : 'Posted ',
+                          style: const TextStyle(color: Colors.black54),
                         ),
                         Flexible(
                           child: Text(
@@ -375,20 +444,83 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             style: TextStyle(color: Colors.black45),
                           ),
                         ),
-                        const Text(
-                          'expires in ',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        Flexible(
-                          child: Text(
-                            listing.expiresLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        if (expired) ...[
+                          const Text(
+                            'expired ',
+                            style: TextStyle(color: Colors.black54),
                           ),
-                        ),
+                          Flexible(
+                            child: Text(
+                              listing.expiryText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.warningAmber,
+                              ),
+                            ),
+                          ),
+                        ] else if (listing.status == 'SOON_TO_HARVEST')
+                          Flexible(
+                            child: Text(
+                              listing.harvestAt == null
+                                  ? 'available soon'
+                                  : 'available on ${listing.harvestText}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryGreen,
+                              ),
+                            ),
+                          )
+                        else ...[
+                          const Text(
+                            'expires in ',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                          Flexible(
+                            child: Text(
+                              listing.expiryText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
+                    if (expired) ...[
+                      const SizedBox(height: 16),
+                      _buildExpiryWarning(),
+                    ],
+                    if (listing.freshLabel != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.photo_camera_outlined,
+                            size: 15,
+                            color: AppColors.primaryGreen,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              'Fresh photo taken ${listing.freshLabel}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryGreen,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (listing.description != null &&
                         listing.description!.trim().isNotEmpty) ...[
                       const SizedBox(height: 14),

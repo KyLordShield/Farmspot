@@ -566,6 +566,45 @@ class MyFarmListingPageTest extends TestCase
             ->assertJsonMissingPath('listings.0.report_id');
     }
 
+    public function test_a_soon_listing_past_its_creation_expiry_is_still_active(): void
+    {
+        $seller = $this->makeSeller();
+
+        // The creation-time expiry is in the past, but the harvest is still
+        // ahead, so this crop's on-sale window has not started.
+        $soon = $this->makeListing(
+            $seller,
+            'SOON_TO_HARVEST',
+            'ACTIVE',
+            null,
+            now()->subDay()
+        );
+        $expired = $this->makeListing(
+            $seller,
+            'NOT_AVAILABLE',
+            'ACTIVE',
+            null,
+            now()->subDay()
+        );
+
+        $this->myListings($seller['user'], '?page=1&per_page=30')
+            ->assertOk()
+            ->assertJsonPath('summary.expired_count', 1)
+            ->assertJsonPath('summary.active_count', 1);
+
+        $ids = fn (array $rows) => collect($rows)->pluck('id')->sort()->values()->all();
+
+        $this->assertSame(
+            [$soon->LST_ID],
+            $ids($this->myListings($seller['user'], '?page=1&per_page=30&status=active')->json('listings')),
+        );
+
+        $this->assertSame(
+            [$expired->LST_ID],
+            $ids($this->myListings($seller['user'], '?page=1&per_page=30&status=expired')->json('listings')),
+        );
+    }
+
     // --------------------------------------------------------------- authority
 
     public function test_a_seller_without_a_farmer_account_is_refused_as_before(): void

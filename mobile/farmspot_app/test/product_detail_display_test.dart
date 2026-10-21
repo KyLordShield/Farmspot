@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cross_file/cross_file.dart';
 
 import 'package:farmspot_app/models/conversation.dart';
+import 'package:farmspot_app/models/listing.dart';
 import 'package:farmspot_app/screens/in_app_messages_screen.dart';
 import 'package:farmspot_app/screens/product_detail_screen.dart';
 import 'package:farmspot_app/services/message_service.dart';
@@ -40,11 +41,7 @@ class _RecordingGateway implements MessagesGateway {
         'crop_icon': 'Cabbage',
         'image': null,
         'category': {'id': 'CAT0001', 'name': 'Vegetables'},
-        'farm': {
-          'id': 'FRM0001',
-          'name': 'Test Farm',
-          'barangay': 'Sudlon II'
-        },
+        'farm': {'id': 'FRM0001', 'name': 'Test Farm', 'barangay': 'Sudlon II'},
       },
     });
   }
@@ -53,22 +50,24 @@ class _RecordingGateway implements MessagesGateway {
   Future<List<Conversation>> fetchConversations() async => [];
 
   @override
-  Future<List<ChatMessage>> fetchMessages(String conversationId,
-      {String? after}) async =>
-      [];
+  Future<List<ChatMessage>> fetchMessages(
+    String conversationId, {
+    String? after,
+  }) async => [];
 
   @override
-  Future<ChatMessage> sendMessage(String conversationId, String content,
-      {XFile? image}) async =>
-      throw UnimplementedError();
+  Future<ChatMessage> sendMessage(
+    String conversationId,
+    String content, {
+    XFile? image,
+  }) async => throw UnimplementedError();
 
   @override
   Future<ChatMessage> sendFarmLocation(
     String conversationId,
     String farmId, {
     String? label,
-  }) async =>
-        throw UnimplementedError();
+  }) async => throw UnimplementedError();
 }
 
 // Widget-level check of the detail-screen name/image fix. Combined with
@@ -76,19 +75,63 @@ class _RecordingGateway implements MessagesGateway {
 // CropListing shape via toCropListing), this verifies the full path:
 // real listing -> toggle -> detail renders name + photo; photo-less -> icon.
 void main() {
-  testWidgets('detail screen shows real crop name + photo, other fields intact',
-      (tester) async {
+  testWidgets(
+    'detail screen shows real crop name + photo, other fields intact',
+    (tester) async {
+      final listing = CropListing(
+        cropName: 'Cabbage',
+        farmName: 'Test Farm',
+        cropType: 'Vegetables',
+        status: 'AVAILABLE_NOW',
+        barangay: 'Sudlon II',
+        postedLabel: 'today',
+        expiresLabel: '3 days',
+        distance: '0.4 km away',
+        contactNumber: '09870000000',
+        imageUrl: 'https://example.invalid/photo.jpg',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: ProductDetailScreen(listing: listing)),
+      );
+      await tester.pump();
+
+      // Real crop name as the headline (old static "Crop name:" label gone).
+      expect(find.text('Cabbage'), findsOneWidget);
+      expect(find.text('Crop name:'), findsNothing);
+
+      // Already-working fields untouched.
+      expect(find.text('Test Farm'), findsOneWidget);
+      expect(find.text('Vegetables'), findsOneWidget);
+      expect(find.textContaining('Call Seller'), findsOneWidget);
+      expect(find.text('Message Seller'), findsOneWidget);
+      expect(find.text('Sudlon II'), findsOneWidget);
+      expect(find.text('Posted '), findsOneWidget);
+      expect(find.byKey(const Key('product-detail-farm-link')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('product-detail-farm-link')),
+          matching: find.byIcon(Icons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+
+      // Photo renders (Image.network; offline test env falls back gracefully).
+      expect(find.byType(Image), findsWidgets);
+    },
+  );
+
+  testWidgets('detail shows the age of the last fresh renewal photo', (
+    tester,
+  ) async {
     final listing = CropListing(
       cropName: 'Cabbage',
       farmName: 'Test Farm',
       cropType: 'Vegetables',
       status: 'AVAILABLE_NOW',
       barangay: 'Sudlon II',
-      postedLabel: 'today',
-      expiresLabel: '3 days',
-      distance: '0.4 km away',
       contactNumber: '09870000000',
-      imageUrl: 'https://example.invalid/photo.jpg',
+      freshLabel: '2 days ago',
     );
 
     await tester.pumpWidget(
@@ -96,24 +139,32 @@ void main() {
     );
     await tester.pump();
 
-    // Real crop name as the headline (old static "Crop name:" label gone).
-    expect(find.text('Cabbage'), findsOneWidget);
-    expect(find.text('Crop name:'), findsNothing);
-
-    // Already-working fields untouched.
-    expect(find.text('Test Farm'), findsOneWidget);
-    expect(find.text('Vegetables'), findsOneWidget);
-    expect(find.textContaining('Call Seller'), findsOneWidget);
-    expect(find.text('Message Seller'), findsOneWidget);
-    expect(find.text('Sudlon II'), findsOneWidget);
-    expect(find.text('Posted '), findsOneWidget);
-
-    // Photo renders (Image.network; offline test env falls back gracefully).
-    expect(find.byType(Image), findsWidgets);
+    expect(find.text('Fresh photo taken 2 days ago'), findsOneWidget);
   });
 
-  testWidgets('photo-less listing shows placeholder icon instead of breaking',
-      (tester) async {
+  testWidgets('never-renewed listing shows no fresh-photo claim', (
+    tester,
+  ) async {
+    final listing = CropListing(
+      cropName: 'Cabbage',
+      farmName: 'Test Farm',
+      cropType: 'Vegetables',
+      status: 'AVAILABLE_NOW',
+      barangay: 'Sudlon II',
+      contactNumber: '09870000000',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Fresh photo taken'), findsNothing);
+  });
+
+  testWidgets('photo-less listing shows placeholder icon instead of breaking', (
+    tester,
+  ) async {
     final listing = CropListing(
       cropName: 'Kangkong',
       farmName: 'Test Farm',
@@ -138,8 +189,9 @@ void main() {
     expect(find.text('Message Seller'), findsOneWidget);
   });
 
-  testWidgets('Message Seller opens the real thread for that listing',
-      (tester) async {
+  testWidgets('Message Seller opens the real thread for that listing', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
     final gateway = _RecordingGateway();
     final listing = CropListing(
@@ -151,48 +203,60 @@ void main() {
       listingId: 'LST0001',
     );
 
-    await tester.pumpWidget(MaterialApp(
-      home: ProductDetailScreen(listing: listing, gateway: gateway),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductDetailScreen(listing: listing, gateway: gateway),
+      ),
+    );
     await tester.pump();
 
     await tester.tap(find.text('Message Seller'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(gateway.starts, 1,
-        reason: 'the thread is created/fetched before navigating');
+    expect(
+      gateway.starts,
+      1,
+      reason: 'the thread is created/fetched before navigating',
+    );
     expect(gateway.lastListingId, 'LST0001');
     expect(find.byType(InAppMessagesScreen), findsOneWidget);
-    expect(find.text('React A'), findsOneWidget,
-        reason: 'the chat screen shows the other party from the server');
-  });
-
-  testWidgets('a failed thread creation explains itself instead of opening a chat',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
-    final gateway = _RecordingGateway()..startError = 'No network';
-    final listing = CropListing(
-      cropName: 'Cabbage',
-      farmName: 'Test Farm',
-      cropType: 'Vegetables',
-      status: 'AVAILABLE_NOW',
-      barangay: 'Sudlon II',
-      listingId: 'LST0001',
+    expect(
+      find.text('React A'),
+      findsOneWidget,
+      reason: 'the chat screen shows the other party from the server',
     );
-
-    await tester.pumpWidget(MaterialApp(
-      home: ProductDetailScreen(listing: listing, gateway: gateway),
-    ));
-    await tester.pump();
-
-    await tester.tap(find.text('Message Seller'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(find.text('No network'), findsOneWidget);
-    expect(find.byType(InAppMessagesScreen), findsNothing);
   });
+
+  testWidgets(
+    'a failed thread creation explains itself instead of opening a chat',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
+      final gateway = _RecordingGateway()..startError = 'No network';
+      final listing = CropListing(
+        cropName: 'Cabbage',
+        farmName: 'Test Farm',
+        cropType: 'Vegetables',
+        status: 'AVAILABLE_NOW',
+        barangay: 'Sudlon II',
+        listingId: 'LST0001',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProductDetailScreen(listing: listing, gateway: gateway),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Message Seller'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('No network'), findsOneWidget);
+      expect(find.byType(InAppMessagesScreen), findsNothing);
+    },
+  );
 
   testWidgets('a listing with no id cannot be messaged', (tester) async {
     final gateway = _RecordingGateway();
@@ -204,17 +268,127 @@ void main() {
       barangay: 'Sudlon II',
     );
 
-    await tester.pumpWidget(MaterialApp(
-      home: ProductDetailScreen(listing: listing, gateway: gateway),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductDetailScreen(listing: listing, gateway: gateway),
+      ),
+    );
     await tester.pump();
 
     await tester.tap(find.text('Message Seller'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(gateway.starts, 0,
-        reason: 'legacy rows without a listing id have no thread to open');
+    expect(
+      gateway.starts,
+      0,
+      reason: 'legacy rows without a listing id have no thread to open',
+    );
     expect(find.textContaining('cannot be messaged'), findsOneWidget);
+  });
+
+  test('a renewal resets the age shown beside the listing', () {
+    final now = DateTime.now();
+    final listing = Listing.fromJson({
+      'id': 'LST0001',
+      'status': 'AVAILABLE_NOW',
+      'created_at': now.subtract(const Duration(days: 10)).toIso8601String(),
+      'last_renewed_at': now
+          .subtract(const Duration(hours: 1))
+          .toIso8601String(),
+      'expiry_date': now.add(const Duration(days: 3)).toIso8601String(),
+    });
+
+    final crop = listing.toCropListing();
+
+    expect(crop.wasRenewed, isTrue);
+    expect(crop.postedLabel, 'today');
+    expect(crop.isExpired, isFalse);
+  });
+
+  testWidgets('an expired listing shows a calm freshness heads-up', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final listing = CropListing(
+      cropName: 'Cabbage',
+      farmName: 'Test Farm',
+      cropType: 'Vegetables',
+      status: 'AVAILABLE_NOW',
+      barangay: 'Sudlon II',
+      postedLabel: '8 days ago',
+      expiresAt: now.subtract(const Duration(days: 4)),
+      contactNumber: '09870000000',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('expires in expired'), findsNothing);
+    expect(find.text('expired '), findsOneWidget);
+    expect(
+      find.byKey(const Key('product-detail-expiry-warning')),
+      findsOneWidget,
+    );
+    expect(find.text('Freshness heads-up'), findsOneWidget);
+    expect(
+      find.textContaining('few days past its freshness window'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a renewed listing says Renewed instead of Posted', (
+    tester,
+  ) async {
+    final listing = CropListing(
+      cropName: 'Cabbage',
+      farmName: 'Test Farm',
+      cropType: 'Vegetables',
+      status: 'AVAILABLE_NOW',
+      barangay: 'Sudlon II',
+      postedLabel: 'today',
+      renewedAt: DateTime.now(),
+      expiresAt: DateTime.now().add(const Duration(days: 3)),
+      contactNumber: '09870000000',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
+    );
+    await tester.pump();
+
+    expect(find.text('Renewed '), findsOneWidget);
+    expect(find.text('Posted '), findsNothing);
+    expect(
+      find.byKey(const Key('product-detail-expiry-warning')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a soon-to-harvest listing shows the date it becomes available', (
+    tester,
+  ) async {
+    final listing = CropListing(
+      cropName: 'Cabbage',
+      farmName: 'Test Farm',
+      cropType: 'Vegetables',
+      status: 'SOON_TO_HARVEST',
+      barangay: 'Sudlon II',
+      harvestAt: DateTime(DateTime.now().year, 12, 15),
+      contactNumber: '09870000000',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProductDetailScreen(listing: listing)),
+    );
+    await tester.pump();
+
+    expect(find.text('available on Dec 15'), findsOneWidget);
+    expect(
+      find.byKey(const Key('product-detail-expiry-warning')),
+      findsNothing,
+    );
   });
 }

@@ -809,6 +809,34 @@ void main() {
     expect(inRow('Renew'), findsOneWidget);
   });
 
+  testWidgets('Renew survives listings:expire flipping the row off sale', (
+    tester,
+  ) async {
+    // listings:expire sets NOT_AVAILABLE but leaves the past expiry date.
+    // Renew must follow the date, not LST_STATUS, or the button vanishes
+    // exactly when the seller needs it most.
+    gateway.pages[1] = aPage(
+      listings: [
+        aListing(
+          'LST001',
+          'Tomato',
+          status: 'NOT_AVAILABLE',
+          expiryDate: DateTime.now()
+              .subtract(const Duration(days: 1))
+              .toIso8601String(),
+        ),
+      ],
+    );
+    await pumpScreen(tester);
+
+    await reveal(tester, find.text('Tomato'));
+    expect(inRow('Renew'), findsOneWidget);
+    // Expired replaces the underlying status: the row must not read
+    // "Not Available" and "Expired" at the same time.
+    expect(inRow('Expired'), findsOneWidget);
+    expect(inRow('Not Available'), findsNothing);
+  });
+
   testWidgets('a live listing counts down the days left', (tester) async {
     gateway.pages[1] = aPage(
       listings: [
@@ -859,6 +887,32 @@ void main() {
     await reveal(tester, find.text('Tomato'));
 
     expect(find.text('Expires in 2 days'), findsNothing);
+  });
+
+  testWidgets('a soon-to-harvest crop never shows Expired or Renew', (
+    tester,
+  ) async {
+    // The creation-time expiry is meaningless for a crop whose harvest is
+    // still ahead: its three-day window starts when it becomes available.
+    gateway.pages[1] = aPage(
+      listings: [
+        aListing(
+          'LST001',
+          'Tomato',
+          status: 'SOON_TO_HARVEST',
+          expiryDate: DateTime.now()
+              .subtract(const Duration(days: 1))
+              .toIso8601String(),
+        ),
+      ],
+    );
+    await pumpScreen(tester);
+
+    await reveal(tester, find.text('Tomato'));
+
+    expect(inRow('Soon to Harvest'), findsOneWidget);
+    expect(inRow('Expired'), findsNothing);
+    expect(inRow('Renew'), findsNothing);
   });
 
   testWidgets('each LST_STATUS keeps its own label and colour source', (

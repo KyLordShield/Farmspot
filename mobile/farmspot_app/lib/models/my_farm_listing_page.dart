@@ -188,13 +188,15 @@ class ListingOwnerState {
 
   /// LST_EXPIRY_DATE in the past, which is what `listings:expire` acts on.
   ///
-  /// Only a listing that is actually on sale (AVAILABLE_NOW) counts. A seller
-  /// who has set the crop to SOON_TO_HARVEST or NOT_AVAILABLE has moved it out
-  /// of the live state themselves, so a "3 days left" countdown — or a red
-  /// Expired chip and a Renew button — would describe a rule they are no longer
-  /// inside and just reads as the status change having failed.
+  /// Only a listing whose on-sale window has actually started can expire. A
+  /// SOON_TO_HARVEST crop is never expired: its three-day window begins when
+  /// `listings:harvest` flips it to AVAILABLE_NOW, so the expiry stamped at
+  /// creation is not a deadline that can run out while it is still upcoming.
+  /// A seller who set the crop to NOT_AVAILABLE manually, or a row the expiry
+  /// command already flipped, still counts once the date is past — that is the
+  /// stale window the seller has to renew.
   bool get isExpired {
-    if (listing.status != 'AVAILABLE_NOW') return false;
+    if (listing.status == 'SOON_TO_HARVEST') return false;
     final raw = listing.expiryDate;
     if (raw == null || raw.isEmpty) return false;
     final expiry = DateTime.tryParse(raw);
@@ -206,6 +208,18 @@ class ListingOwnerState {
       listing.status == 'AVAILABLE_NOW' &&
       !isExpired &&
       listing.expiryDate != null;
+
+  /// True when the listing's three-day window has ended and the seller can
+  /// renew it with fresh photos.
+  ///
+  /// Driven by [isExpired] rather than LST_STATUS: `listings:expire` moves an
+  /// expired row to NOT_AVAILABLE, and keying this off AVAILABLE_NOW made the
+  /// button vanish exactly when the seller needed it. A taken-down or
+  /// admin-hidden row is never renewable — moderation has to be resolved first.
+  bool get canRenew {
+    if (listing.isTakenDown || hiddenByAdmin) return false;
+    return isExpired;
+  }
 
   /// "Expires in 2 days", "Expires today", or null when the date is missing or
   /// already past — an expired listing shows the red Expired chip instead, and a

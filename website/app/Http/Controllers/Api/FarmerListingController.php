@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class FarmerListingController extends Controller
 {
@@ -68,6 +69,8 @@ class FarmerListingController extends Controller
         'LST_AVAILABILITY',
         'LST_HARVEST_DATE',
         'LST_EXPIRY_DATE',
+        'LST_LAST_RENEWED_AT',
+        'LST_RENEWAL_COUNT',
         'LST_DESCRIPTION',
         'LST_IMAGE',
         'LST_TAKEDOWN_REASON',
@@ -211,7 +214,7 @@ class FarmerListingController extends Controller
         $counts = $scope()
             ->selectRaw(
                 'COUNT(*) as total_count,
-                 SUM(CASE WHEN listing.LST_EXPIRY_DATE < NOW() THEN 1 ELSE 0 END) as expired_count,
+                 SUM(CASE WHEN listing.LST_STATUS != \'SOON_TO_HARVEST\' AND listing.LST_EXPIRY_DATE < NOW() THEN 1 ELSE 0 END) as expired_count,
                  SUM(CASE WHEN listing.LST_AVAILABILITY IN (?, ?) THEN 1 ELSE 0 END) as hidden_count,
                  SUM(CASE WHEN EXISTS('.$openReport->toSql().') THEN 1 ELSE 0 END) as under_review_count',
                 array_merge(self::ADMIN_HIDDEN, $openReport->getBindings())
@@ -265,11 +268,19 @@ class FarmerListingController extends Controller
             ->limit(1);
 
         match ($status) {
-            'expired' => $query->where('listing.LST_EXPIRY_DATE', '<', now()),
+            'expired' => $query
+                ->where('listing.LST_STATUS', '!=', 'SOON_TO_HARVEST')
+                ->where('listing.LST_EXPIRY_DATE', '<', now()),
             'hidden' => $query->whereIn('listing.LST_AVAILABILITY', self::ADMIN_HIDDEN),
             'under_review' => $query->whereExists($openReport),
             'active' => $query
-                ->where('listing.LST_EXPIRY_DATE', '>=', now())
+                ->where(function (Builder $q) {
+                    // Soon to harvest is active regardless of the creation-time
+                    // expiry: its three-day window starts at harvest, not when
+                    // the crop was posted.
+                    $q->where('listing.LST_STATUS', 'SOON_TO_HARVEST')
+                        ->orWhere('listing.LST_EXPIRY_DATE', '>=', now());
+                })
                 ->whereNotIn('listing.LST_AVAILABILITY', self::ADMIN_HIDDEN)
                 ->whereNotExists($openReport),
             default => null,
@@ -328,9 +339,22 @@ class FarmerListingController extends Controller
     }
 
     /**
+     * The one instruction every path that cannot silently renew a listing
+     * returns. Kept together so the app shows the same sentence whether the
+     * seller used the status toggle, the edit form, or an old build's Renew
+     * button.
+     */
+    private const RENEW_REQUIRED_MESSAGE =
+        'This listing has expired. Renew it with a fresh photo to show it again.';
+
+    /**
      * Update just the LST_STATUS of one of the farmer's own listings.
-     * Resets LST_EXPIRY_DATE to now()+3 days (expiry resets on any update),
-     * per the capstone's rule.
+     *
+     * A status change is not a renewal. It used to reset LST_EXPIRY_DATE on
+     * every call, which meant re-sending the current status (the old app's
+     * "Renew") or simply changing Not Available back to Available extended a
+     * stale listing without any new evidence. Expiry now moves only when the
+     * crop is created or explicitly renewed through renew().
      */
     public function updateStatus(Request $request, $listingId)
     {
@@ -363,8 +387,31 @@ class FarmerListingController extends Controller
             'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
         ]);
 
+        // The old client's Renew call sends the status the listing already has.
+        // Returning a clear error is better than a 200 that pretends the expiry
+        // moved while leaving the listing just as stale as it was.
+        if ($validated['status'] === $listing->LST_STATUS) {
+            if ($this->listingHasExpired($listing)) {
+                return response()->json([
+                    'message' => self::RENEW_REQUIRED_MESSAGE,
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => 'Listing status is unchanged.',
+                'listing' => $this->formatListing($listing),
+            ]);
+        }
+
+        // Bringing an expired listing back on sale is a renewal, not an edit.
+        // The dedicated endpoint is the only path allowed to extend it.
+        if ($this->listingHasExpired($listing) && $validated['status'] !== 'NOT_AVAILABLE') {
+            return response()->json([
+                'message' => self::RENEW_REQUIRED_MESSAGE,
+            ], 422);
+        }
+
         $listing->LST_STATUS = $validated['status'];
-        $listing->LST_EXPIRY_DATE = now()->addDays(3);
         $listing->LST_UPDATED_AT = now();
         $listing->save();
 
@@ -379,9 +426,9 @@ class FarmerListingController extends Controller
      * counterpart to updateStatus() (which stays as the quick status toggle).
      *
      * JSON-only: any combination of category_id, crop_icon, harvest_date,
-     * status. LST_EXPIRY_DATE is NOT reset on a plain edit — only when status
-     * is among the changed fields, matching updateStatus()'s expiry-reset
-     * behavior.
+     * status. LST_EXPIRY_DATE is NEVER reset here. An edit — including a
+     * corrected description or a new photo — must not silently buy another
+     * three days; that is what renew() is for.
      *
      * NOTE: photo uploads CANNOT ride this PATCH — PHP only populates
      * $_FILES (and $_POST) for POST requests, so a multipart PATCH arrives
@@ -436,9 +483,20 @@ class FarmerListingController extends Controller
         }
 
         if (array_key_exists('status', $validated)) {
+            // Moving an expired listing back into an on-sale state is a
+            // renewal. Editing text, category, or photos on the expired row is
+            // still allowed; only the revival goes through renew().
+            if (
+                $validated['status'] !== $listing->LST_STATUS
+                && $validated['status'] !== 'NOT_AVAILABLE'
+                && $this->listingHasExpired($listing)
+            ) {
+                return response()->json([
+                    'message' => self::RENEW_REQUIRED_MESSAGE,
+                ], 422);
+            }
+
             $listing->LST_STATUS = $validated['status'];
-            // Expiry resets whenever status changes, exactly like updateStatus().
-            $listing->LST_EXPIRY_DATE = now()->addDays(3);
         }
 
         $listing->LST_UPDATED_AT = now();
@@ -448,6 +506,175 @@ class FarmerListingController extends Controller
 
         return response()->json([
             'message' => 'Listing updated successfully.',
+            'listing' => $this->formatListing($fresh),
+        ]);
+    }
+
+    /**
+     * Renew an expired listing with a fresh gallery of camera photos.
+     *
+     * This is deliberately separate from updateStatus() and update(): an
+     * expiry extension is a claim that the crop is still available, so it
+     * needs fresh images and its own audit fields. The request is multipart
+     * because PHP does not populate files on PATCH.
+     *
+     * The renewal REPLACES the whole gallery, not just the primary photo. Old
+     * secondary photos are last week's crop; leaving them next to a fresh
+     * primary would mix old and new produce in one listing and make the
+     * freshness claim misleading. `primary_index` picks which new photo is the
+     * thumbnail, defaulting to the first.
+     *
+     * Only an expired listing can be renewed. A live listing already has its
+     * window; allowing early renewal would let a seller extend forever without
+     * ever waiting for the old window to end. SOON_TO_HARVEST is not expired:
+     * its window starts when listings:harvest makes it available.
+     */
+    public function renew(Request $request, $listingId)
+    {
+        $farmer = $request->user()->buyer?->farmer;
+
+        if (! $farmer) {
+            return response()->json([
+                'message' => 'No farmer account found.',
+            ], 403);
+        }
+
+        $listing = Listing::with(['farm', 'category', 'photos'])
+            ->where('LST_ID', $listingId)
+            ->where('FMR_ID', $farmer->FMR_ID)
+            ->first();
+
+        if (! $listing) {
+            return response()->json([
+                'message' => 'Listing not found or does not belong to you.',
+            ], 403);
+        }
+
+        if ($removed = $this->removedListingGuard($listing)) {
+            return $removed;
+        }
+
+        if (! $this->listingHasExpired($listing)) {
+            return response()->json([
+                'message' => 'This listing is still active. Renew it after it expires.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            // New clients send a photos[] gallery; the legacy single `photo`
+            // field is still accepted so an older APK can renew after an
+            // upgrade. At least one image is required either way.
+            'photos' => ['nullable', 'array', 'min:1'],
+            'photos.*' => ['image', 'max:5120'],
+            'photo' => ['nullable', 'image', 'max:5120'],
+            'primary_index' => ['nullable', 'integer', 'min:0'],
+            'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST'],
+            'harvest_date' => ['nullable', 'date', 'after_or_equal:today', 'required_if:status,SOON_TO_HARVEST'],
+        ]);
+
+        $uploads = $validated['photos'] ?? [];
+        if ($uploads === [] && isset($validated['photo'])) {
+            $uploads = [$validated['photo']];
+        }
+
+        if ($uploads === []) {
+            throw ValidationException::withMessages([
+                'photos' => ['At least one fresh photo is required.'],
+            ]);
+        }
+
+        $primaryIndex = max(
+            0,
+            min((int) ($validated['primary_index'] ?? 0), count($uploads) - 1)
+        );
+
+        $newUrls = [];
+
+        try {
+            foreach ($uploads as $index => $photo) {
+                $extension = $photo->getClientOriginalExtension() ?: 'jpg';
+                $path = "listing-photos/{$listing->LST_ID}/"
+                    . uniqid() . "-{$index}.{$extension}";
+
+                Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+                $newUrls[] = Storage::disk('cloudinary')->url($path);
+            }
+        } catch (\Throwable $e) {
+            foreach ($newUrls as $url) {
+                CloudinaryImage::deleteByUrl($url);
+            }
+
+            return response()->json([
+                'message' => 'Failed to upload the renewal photos.',
+            ], 500);
+        }
+
+        // Every photo belongs to the previous renewal's crop evidence, so all
+        // of it is replaced. Keeping the old secondary gallery images alongside
+        // a fresh primary would show buyers last week's produce in the same
+        // listing and make the freshness claim meaningless.
+        $oldUrls = ListingPhoto::where('LST_ID', $listing->LST_ID)
+            ->pluck('LPHOTO_FILE_PATH')
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($listing->LST_IMAGE && ! in_array($listing->LST_IMAGE, $oldUrls, true)) {
+            $oldUrls[] = $listing->LST_IMAGE;
+        }
+
+        try {
+            DB::transaction(function () use ($listing, $validated, $newUrls, $primaryIndex) {
+                ListingPhoto::where('LST_ID', $listing->LST_ID)->delete();
+
+                foreach ($newUrls as $index => $url) {
+                    ListingPhoto::create([
+                        'LPHOTO_ID' => $this->uniqueId('listing_photo', 'LPHOTO_ID'),
+                        'LPHOTO_FILE_PATH' => $url,
+                        'LPHOTO_UPLOADED_AT' => now(),
+                        'LPHOTO_IS_PRIMARY' => $index === $primaryIndex ? 1 : 0,
+                        'LST_ID' => $listing->LST_ID,
+                    ]);
+                }
+
+                $listing->LST_IMAGE = $newUrls[$primaryIndex];
+                $listing->LST_STATUS = $validated['status'];
+                $listing->LST_HARVEST_DATE = $validated['status'] === 'SOON_TO_HARVEST'
+                    ? $validated['harvest_date']
+                    : null;
+                $listing->LST_EXPIRY_DATE = now()->addDays(3);
+                $listing->LST_LAST_RENEWED_AT = now();
+                $listing->LST_RENEWAL_COUNT = ((int) $listing->LST_RENEWAL_COUNT) + 1;
+                $listing->LST_UPDATED_AT = now();
+                $listing->save();
+            });
+        } catch (\Throwable $e) {
+            // The images were uploaded before the transaction so a failed upload
+            // never leaves a half-written listing. If the database write fails,
+            // remove those orphans instead of charging Cloudinary for them
+            // forever.
+            foreach ($newUrls as $url) {
+                CloudinaryImage::deleteByUrl($url);
+            }
+
+            return response()->json([
+                'message' => 'Failed to renew listing.',
+            ], 500);
+        }
+
+        // Destroy the replaced gallery only after the new rows and listing are
+        // committed, matching uploadPhoto(): a failed renewal must not lose the
+        // old photos while the listing still points at them.
+        foreach ($oldUrls as $oldUrl) {
+            if (! in_array($oldUrl, $newUrls, true)) {
+                CloudinaryImage::deleteByUrl($oldUrl);
+            }
+        }
+
+        $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
+
+        return response()->json([
+            'message' => 'Listing renewed for another 3 days.',
             'listing' => $this->formatListing($fresh),
         ]);
     }
@@ -599,6 +826,28 @@ class FarmerListingController extends Controller
         return response()->json([
             'message' => Listing::REMOVED_EDIT_MESSAGE,
         ], 403);
+    }
+
+    /**
+     * Whether the listing's three-day on-sale window has ended.
+     *
+     * A null expiry is treated as expired: legacy rows that never had one
+     * cannot be "still active", and allowing them through renew() is safer than
+     * leaving the seller with no way to refresh them.
+     *
+     * SOON_TO_HARVEST is never expired. It is not on sale yet, so the expiry
+     * stamped at creation does not describe a window that has ended; the crop
+     * stays "soon" until listings:harvest starts its window. Without this,
+     * a crop harvested next week was treated as expired after three days.
+     */
+    private function listingHasExpired(Listing $listing): bool
+    {
+        if ($listing->LST_STATUS === 'SOON_TO_HARVEST') {
+            return false;
+        }
+
+        return $listing->LST_EXPIRY_DATE === null
+            || now()->greaterThanOrEqualTo($listing->LST_EXPIRY_DATE);
     }
 
     private function uniqueId($table, $column): string

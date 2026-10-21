@@ -84,7 +84,12 @@ class ListingOwnerChips extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: [
-        MyFarmStatusChip(label: statusLabel, color: statusColor),
+        // An expired row shows Expired INSTEAD of its underlying status. The
+        // expiry command leaves LST_STATUS at NOT_AVAILABLE, so rendering both
+        // chips said "Not Available" and "Expired" at once — two answers to the
+        // same question, one of which the seller cannot act on.
+        if (!state.isExpired)
+          MyFarmStatusChip(label: statusLabel, color: statusColor),
 
         // Expiry is only worth a countdown while there is time left. Past the
         // date the row says Expired, which is the fact the farmer can act on.
@@ -400,10 +405,7 @@ class MyFarmListingRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (!takenDown) ...[
-              const SizedBox(width: 4),
-              _buildMenu(),
-            ],
+            if (!takenDown) ...[const SizedBox(width: 4), _buildMenu()],
           ],
         ),
       ),
@@ -485,12 +487,12 @@ class MyFarmListingRow extends StatelessWidget {
     );
   }
 
-  /// The existing status picker entry point, plus Renew on an expired row.
+  /// The existing status picker entry point, plus Renew once the window ends.
   ///
-  /// Renew re-sends the listing's CURRENT status rather than forcing
-  /// AVAILABLE_NOW: the endpoint resets the expiry date on any status update,
-  /// and quietly putting a crop back on sale is not something a farmer should
-  /// get from a button labelled "Renew".
+  /// Renew is driven by the expiry date rather than LST_STATUS, so it stays
+  /// available after listings:expire has already turned the row into
+  /// NOT_AVAILABLE. The renewal sheet itself asks for a fresh camera photo and
+  /// confirms whether the crop is available now or still soon.
   Widget _buildActions() {
     if (updating) {
       return const SizedBox(
@@ -539,7 +541,7 @@ class MyFarmListingRow extends StatelessWidget {
               ),
             ),
           ),
-        if (state.isExpired && onRenewTap != null)
+        if (state.canRenew && onRenewTap != null)
           GestureDetector(
             onTap: onRenewTap,
             child: Container(
@@ -883,7 +885,10 @@ class TakedownDetailsSheet extends StatelessWidget {
                   highlight: true,
                 ),
                 const SizedBox(height: 14),
-                _section('Taken down on', _formatTakedownDate(listing.takedownAt)),
+                _section(
+                  'Taken down on',
+                  _formatTakedownDate(listing.takedownAt),
+                ),
                 const SizedBox(height: 14),
                 _section(
                   'Farm',
@@ -1031,7 +1036,9 @@ class _ReEvaluationDialogState extends State<ReEvaluationDialog> {
             ),
             const SizedBox(height: 14),
           ],
-          const Text('Tell the Association why this listing should be restored.'),
+          const Text(
+            'Tell the Association why this listing should be restored.',
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _controller,
@@ -1066,8 +1073,18 @@ String _formatTakedownDate(String? raw) {
   if (dt == null) return raw;
 
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final hour24 = dt.hour;
   final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;

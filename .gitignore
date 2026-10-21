@@ -38,3 +38,8 @@ website/public/testing-crops/
 # Pre-migration mysqldump snapshots of capstone_db. Local safety copies only,
 # never committed: they contain every row of the live capstone database.
 backups/
+
+# Built APK artifacts distributed for testing. Rebuild them from source; the
+# binaries are large and go stale, so they are never committed.
+apk/
+*.apk

@@ -193,6 +193,20 @@ class ListingFeedFilterTest extends TestCase
         $this->assertSame(['LST002'], $this->idsFrom($response->json()));
     }
 
+    public function test_an_expired_available_now_listing_stays_in_the_feed_and_detail()
+    {
+        $listing = $this->makeListing('LST001', 'LEAFVG', 'AVAILABLE_NOW', '2026-01-01 09:00:00');
+        $listing->LST_EXPIRY_DATE = now()->subDays(4);
+        $listing->save();
+
+        $feed = $this->getJson('/api/listings');
+        $feed->assertOk();
+        $this->assertSame(['LST001'], $this->idsFrom($feed->json()));
+
+        $detail = $this->getJson('/api/listings/LST001');
+        $detail->assertOk()->assertJsonPath('listing.id', 'LST001');
+    }
+
     // ------------------------------------------------ sorting
 
     public function test_latest_puts_the_newest_post_first()

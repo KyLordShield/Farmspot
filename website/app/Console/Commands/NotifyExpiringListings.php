@@ -11,11 +11,10 @@ use Illuminate\Console\Command;
 /**
  * Warn sellers about listings that are about to expire, and tell them once.
  *
- * The three-day listing rule expires a crop automatically, and until this
- * existed the farmer only found out because their produce quietly disappeared
- * from the feed. A listing that has not sold and simply rolled off is the most
- * common and least explicable thing that happens to a seller, so it gets a
- * warning a day ahead.
+ * The three-day freshness window ends automatically, and until this existed the
+ * farmer only found out after buyers started seeing the listing marked expired.
+ * A listing that has not sold and simply aged out is the most common and least
+ * explicable thing that happens to a seller, so it gets a warning a day ahead.
  *
  * Two decisions worth stating:
  *
@@ -84,7 +83,7 @@ class NotifyExpiringListings extends Command
                 $ownerId,
                 'LISTING_EXPIRING_SOON',
                 'Listing expiring soon',
-                "Your {$crop} listing expires in less than a day. Update it to keep it showing in the app.",
+                "Your {$crop} listing expires in less than a day. Renew it with a fresh photo to keep it looking fresh to buyers.",
                 $listing->LST_ID,
             );
 
@@ -110,7 +109,7 @@ class NotifyExpiringListings extends Command
             $service->pushOnly(
                 $ownerId,
                 'Listings expiring soon',
-                "{$count} of your listings expire in less than a day. Open the app to update them.",
+                "{$count} of your listings expire in less than a day. Renew them with a fresh photo to keep them looking fresh to buyers.",
             );
         }
 

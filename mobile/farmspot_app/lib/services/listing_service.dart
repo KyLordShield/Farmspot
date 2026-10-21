@@ -415,6 +415,66 @@ class ListingService {
     return _listingResult(response, 'Update listing status failed.');
   }
 
+  /// Renews an expired listing with a fresh gallery of camera photos
+  /// (POST /api/listings/{id}/renew). Multipart because the photos and the
+  /// status/date travel together, and because PHP does not parse files on
+  /// PATCH. The backend refuses early renewals and requires at least one image.
+  ///
+  /// The renewal REPLACES every old photo: an expired listing's gallery is
+  /// last week's crop, so keeping it next to a fresh primary would show buyers
+  /// a mix of old and new produce. [primaryIndex] chooses which new photo is
+  /// the thumbnail buyers see.
+  static Future<Listing> renewListing({
+    required String listingId,
+    required List<XFile> photos,
+    int primaryIndex = 0,
+    required String status,
+    DateTime? harvestDate,
+  }) async {
+    final token = await AuthService.getToken();
+    if (token == null) throw Exception('Not logged in.');
+    if (photos.isEmpty) {
+      throw Exception('Take at least one fresh photo to renew this listing.');
+    }
+
+    final safePrimaryIndex = primaryIndex.clamp(0, photos.length - 1);
+
+    http.Response response;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/listings/$listingId/renew'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      request.fields['status'] = status;
+      request.fields['primary_index'] = '$safePrimaryIndex';
+      if (harvestDate != null) {
+        request.fields['harvest_date'] = _dateOnly(harvestDate);
+      }
+
+      for (final photo in photos) {
+        final bytes = await photo.readAsBytes();
+        final uploadName = _uploadFileName(photo.name, photo.path);
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'photos[]',
+            bytes,
+            filename: uploadName,
+            contentType: _contentTypeFor(uploadName),
+          ),
+        );
+      }
+
+      final streamed = await request.send();
+      response = await http.Response.fromStream(streamed);
+    } catch (e) {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+
+    return _listingResult(response, 'Renew listing failed.');
+  }
+
   /// Full edit of one of the farmer's own listings (PATCH /api/listings/{id}).
   /// JSON-only — only the provided fields are sent, an absent one is left
   /// untouched on the server. Returns the updated Listing on success, or

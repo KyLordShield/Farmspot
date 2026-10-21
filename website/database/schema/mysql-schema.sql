@@ -4,6 +4,25 @@
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+DROP TABLE IF EXISTS `admin_planner`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `admin_planner` (
+  `APL_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `APL_TYPE` enum('NOTE','EVENT') NOT NULL DEFAULT 'NOTE',
+  `APL_TITLE` varchar(150) NOT NULL,
+  `APL_BODY` text DEFAULT NULL,
+  `APL_DATETIME` datetime DEFAULT NULL,
+  `APL_IS_DONE` tinyint(1) NOT NULL DEFAULT 0,
+  `APL_CREATED_AT` datetime NOT NULL,
+  `APL_UPDATED_AT` datetime DEFAULT NULL,
+  PRIMARY KEY (`APL_ID`),
+  KEY `admin_planner_usr_id_index` (`USR_ID`),
+  KEY `admin_planner_usr_id_apl_type_index` (`USR_ID`,`APL_TYPE`),
+  CONSTRAINT `admin_planner_usr_id_foreign` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `audit_log`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -149,9 +168,9 @@ DROP TABLE IF EXISTS `farm_photo`;
 CREATE TABLE `farm_photo` (
   `FPHOTO_ID` char(6) NOT NULL COMMENT 'Unique photo record ID',
   `FPHOTO_FILE_PATH` varchar(500) NOT NULL COMMENT 'URL/path to farm photo',
-`FPHOTO_UPLOADED_AT` datetime NOT NULL COMMENT 'When photo was uploaded',
-  `FPHOTO_IS_PRIMARY` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Whether this photo is the farm cover (0 or 1)',
+  `FPHOTO_UPLOADED_AT` datetime NOT NULL COMMENT 'When photo was uploaded',
   `FRM_ID` char(6) NOT NULL COMMENT 'References the farm',
+  `FPHOTO_IS_PRIMARY` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`FPHOTO_ID`),
   KEY `FK_FARMPHOTO_FARM` (`FRM_ID`),
   CONSTRAINT `FK_FARMPHOTO_FARM` FOREIGN KEY (`FRM_ID`) REFERENCES `farm` (`FRM_ID`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -246,8 +265,13 @@ CREATE TABLE `listing` (
   `LST_EXPIRY_DATE` datetime DEFAULT NULL COMMENT 'Auto-expiry date (3-day rule)',
   `LST_IMAGE` varchar(500) DEFAULT NULL COMMENT 'URL to crop image',
   `LST_DESCRIPTION` text DEFAULT NULL,
+  `LST_TAKEDOWN_REASON` varchar(500) DEFAULT NULL,
+  `LST_TAKEDOWN_AT` timestamp NULL DEFAULT NULL,
+  `LST_HIDDEN_BY_TAKEDOWN` tinyint(1) NOT NULL DEFAULT 0,
   `LST_CREATED_AT` datetime NOT NULL COMMENT 'Listing creation timestamp',
   `LST_UPDATED_AT` datetime NOT NULL COMMENT 'Last update timestamp',
+  `LST_LAST_RENEWED_AT` datetime DEFAULT NULL COMMENT 'When the seller last renewed this listing with a fresh photo',
+  `LST_RENEWAL_COUNT` smallint(5) unsigned NOT NULL DEFAULT 0 COMMENT 'How many times the seller has renewed this listing',
   `FMR_ID` char(6) NOT NULL COMMENT 'Farmer who owns the listing',
   `FRM_ID` char(6) NOT NULL COMMENT 'Farm the listing belongs to',
   `CAT_ID` char(6) NOT NULL COMMENT 'Classifies crop category',
@@ -274,18 +298,39 @@ CREATE TABLE `listing_photo` (
   CONSTRAINT `listing_photo_lst_id_foreign` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `listing_review`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `listing_review` (
+  `LRV_ID` char(6) NOT NULL,
+  `LST_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `LRV_RATING` tinyint(3) unsigned NOT NULL,
+  `LRV_COMMENT` varchar(300) DEFAULT NULL,
+  `LRV_STATUS` enum('VISIBLE','HIDDEN') NOT NULL DEFAULT 'VISIBLE',
+  `LRV_CREATED_AT` datetime(6) NOT NULL,
+  `LRV_UPDATED_AT` datetime(6) NOT NULL,
+  PRIMARY KEY (`LRV_ID`),
+  UNIQUE KEY `UX_REVIEW_LISTING_USER` (`LST_ID`,`USR_ID`),
+  KEY `IDX_REVIEW_LISTING_STATUS` (`LST_ID`,`LRV_STATUS`),
+  KEY `IDX_REVIEW_USER` (`USR_ID`),
+  CONSTRAINT `listing_review_lst_id_foreign` FOREIGN KEY (`LST_ID`) REFERENCES `listing` (`LST_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `listing_review_usr_id_foreign` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `CHK_REVIEW_RATING` CHECK (`LRV_RATING` between 1 and 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `message`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `message` (
   `MSG_ID` char(6) NOT NULL COMMENT 'Unique message ID',
   `MSG_SEQ` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-`MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
-  `MSG_IMAGE_PATH` varchar(500) DEFAULT NULL COMMENT 'Cloudinary URL of the photo this message carries, null for a text-only message',
-  `MSG_LATITUDE` decimal(10,7) DEFAULT NULL COMMENT 'Latitude of a location shared in the chat, null when the message carries no pin.',
-  `MSG_LONGITUDE` decimal(10,7) DEFAULT NULL COMMENT 'Longitude of a location shared in the chat, null when the message carries no pin.',
-  `MSG_LOCATION_LABEL` varchar(255) DEFAULT NULL COMMENT 'Optional human label for a shared location, e.g. Farm gate.',
-  `MSG_FARM_ID` char(6) DEFAULT NULL COMMENT 'Farm whose location was shared, so the app can open the same directions screen as a listing. Null for a generic pin or legacy messages.',
+  `MSG_CONTENT` text NOT NULL COMMENT 'Message text content',
+  `MSG_IMAGE_PATH` varchar(500) DEFAULT NULL,
+  `MSG_LATITUDE` decimal(10,7) DEFAULT NULL,
+  `MSG_LONGITUDE` decimal(10,7) DEFAULT NULL,
+  `MSG_LOCATION_LABEL` varchar(255) DEFAULT NULL,
+  `MSG_FARM_ID` char(6) DEFAULT NULL,
   `MSG_VISIBILITY` enum('VISIBLE','HIDDEN') NOT NULL DEFAULT 'VISIBLE' COMMENT 'HIDDEN by a moderator after a report. Rows are kept so the action can be undone and the history stays auditable.',
   `MSG_HIDDEN_AT` datetime DEFAULT NULL COMMENT 'When it was hidden, for the audit trail.',
   `MSG_IS_READ` tinyint(1) NOT NULL DEFAULT 0,
@@ -317,7 +362,7 @@ DROP TABLE IF EXISTS `notification`;
 CREATE TABLE `notification` (
   `NOTIF_ID` char(6) NOT NULL COMMENT 'Unique notification ID',
   `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'User the notification is addressed to',
-  `NOTIF_TYPE` enum('LISTING_EXPIRING_SOON','LISTING_EXPIRED','LISTING_REMOVED','SELLER_DEACTIVATED','ACCOUNT_SUSPENDED','ACCOUNT_REACTIVATED','REPORT_UPDATE','HARVEST_REMINDER','SETUP_COMPLETE','WHITELIST_APPROVED','SELLER_REACTIVATED') NOT NULL COMMENT 'What happened: listing expiring/expired/removed, seller or account change, report outcome, harvest reminder, setup finished, whitelist approval, seller reactivation',
+  `NOTIF_TYPE` enum('LISTING_EXPIRING_SOON','LISTING_EXPIRED','LISTING_REMOVED','SELLER_DEACTIVATED','ACCOUNT_SUSPENDED','ACCOUNT_REACTIVATED','REPORT_UPDATE','HARVEST_REMINDER','SETUP_COMPLETE','WHITELIST_APPROVED','SELLER_REACTIVATED','FARM_REJECTED','LISTING_AVAILABLE','APPEAL_APPROVED','APPEAL_DENIED') NOT NULL COMMENT 'What happened: listing expiring/expired/removed/available, seller or account change, report outcome, harvest reminder, setup finished, whitelist approval, seller reactivation, farm rejection, appeal outcome',
   `NOTIF_TITLE` varchar(150) NOT NULL COMMENT 'Short headline shown in the notification list',
   `NOTIF_BODY` varchar(300) NOT NULL COMMENT 'One short sentence of plain language for the farmer or buyer',
   `NOTIF_REF_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Related record id (e.g. LST_ID) used for deep-linking and to avoid telling the user twice',
@@ -343,6 +388,31 @@ CREATE TABLE `notifications` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `notifications_notifiable_type_notifiable_id_index` (`notifiable_type`,`notifiable_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `password_reset_code`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `password_reset_code` (
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'User the code was issued to; one live code per user',
+  `RSTC_CODE_HASH` varchar(60) NOT NULL COMMENT 'bcrypt hash of the 6-digit code, never the code itself',
+  `RSTC_EXPIRES_AT` datetime NOT NULL COMMENT 'When the code stops being accepted',
+  `RSTC_ATTEMPTS` tinyint(4) NOT NULL DEFAULT 0 COMMENT 'Failed verification attempts; locks the code out once it hits the cap',
+  `RSTC_CONSUMED_AT` datetime DEFAULT NULL COMMENT 'Set the moment the code is successfully used, so it cannot be replayed',
+  `RSTC_CREATED_AT` datetime NOT NULL COMMENT 'When the code was issued',
+  PRIMARY KEY (`USR_ID`),
+  KEY `IDX_RESET_CODE_EXPIRES` (`RSTC_EXPIRES_AT`),
+  CONSTRAINT `FK_RESET_CODE_USER` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `password_reset_tokens`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `password_reset_tokens` (
+  `email` varchar(255) NOT NULL,
+  `token` varchar(255) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `personal_access_tokens`;
@@ -380,6 +450,7 @@ CREATE TABLE `report` (
   `RPT_REASON_CODE` enum('MISLEADING_INFO','FAKE_LISTING','HARASSMENT','INAPPROPRIATE_CONTENT','FRAUD_OR_SCAM','SPAM','UNSAFE_BEHAVIOR','OTHER') NOT NULL DEFAULT 'OTHER' COMMENT 'The taxonomy value. RPT_REASON keeps the human-readable label for the existing admin search and tables.',
   `RPT_DETAILS` text DEFAULT NULL COMMENT 'Optional free text the reporter typed in the app.',
   `RPT_UPDATED_AT` datetime DEFAULT NULL COMMENT 'When a moderator last changed the status, for "how long has this been open".',
+  `RPT_FLAGGED_AT` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`RPT_ID`),
   KEY `FK_REPORT_LISTING` (`LST_ID`),
   KEY `FK_REPORT_USER` (`USR_ID`),
@@ -411,6 +482,27 @@ CREATE TABLE `report_action` (
   KEY `IDX_ACTION_LIVE` (`RPT_ID`,`RAC_REVERTED_AT`),
   KEY `IDX_ACTION_SEQ` (`RAC_SEQ`),
   CONSTRAINT `report_action_rpt_id_foreign` FOREIGN KEY (`RPT_ID`) REFERENCES `report` (`RPT_ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_request`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `review_request` (
+  `RRQ_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `USR_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `RRQ_TARGET_TYPE` enum('LISTING','USER') NOT NULL,
+  `RRQ_TARGET_ID` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `RRQ_REASON` text DEFAULT NULL,
+  `RRQ_ADMIN_NOTE` text DEFAULT NULL,
+  `RRQ_STATUS` enum('PENDING','APPROVED','DENIED') NOT NULL DEFAULT 'PENDING',
+  `RRQ_DECIDED_BY` char(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `RRQ_CREATED_AT` datetime NOT NULL,
+  `RRQ_DECIDED_AT` datetime DEFAULT NULL,
+  PRIMARY KEY (`RRQ_ID`),
+  KEY `review_request_usr_id_index` (`USR_ID`),
+  KEY `review_request_rrq_target_type_rrq_target_id_index` (`RRQ_TARGET_TYPE`,`RRQ_TARGET_ID`),
+  KEY `review_request_rrq_status_index` (`RRQ_STATUS`),
+  CONSTRAINT `review_request_usr_id_foreign` FOREIGN KEY (`USR_ID`) REFERENCES `user` (`USR_ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `search_log`;
@@ -456,6 +548,9 @@ CREATE TABLE `user` (
   `USR_ROLE` enum('GENERAL_USER','ADMIN') NOT NULL COMMENT 'System role',
   `USR_IS_SELLER` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Seller mode flag (0 or 1)',
   `USR_STATUS` enum('ACTIVE','PENDING_VERIFICATION','DEACTIVATED') NOT NULL COMMENT 'Account state',
+  `USR_TAKEDOWN_REASON` varchar(500) DEFAULT NULL,
+  `USR_TAKEDOWN_AT` timestamp NULL DEFAULT NULL,
+  `USR_HIDDEN_BY_TAKEDOWN` tinyint(1) NOT NULL DEFAULT 0,
   `USR_CREATED_AT` datetime NOT NULL COMMENT 'Account creation timestamp',
   PRIMARY KEY (`USR_ID`),
   UNIQUE KEY `UX_USER_EMAIL` (`USR_EMAIL`),
@@ -514,4 +609,19 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_10_01_000
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_10_01_000010_add_sequence_to_report_action_table',14);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_10_02_000001_create_notification_table',15);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_10_03_000001_add_whitelist_and_reactivation_notification_types',16);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_10_07_000001_add_msg_image_path_to_message_table',20);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2026_10_05_000001_create_listing_review_table',17);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2026_10_06_000001_create_password_reset_tokens_table',18);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (33,'2026_10_06_000002_create_password_reset_code_table',19);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (34,'2026_10_07_000001_add_msg_image_path_to_message_table',20);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (35,'2026_10_08_000001_add_fphoto_is_primary_to_farm_photo_table',21);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (36,'2026_10_14_000001_add_farm_rejected_notification_type',22);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (37,'2026_10_14_000002_add_listing_available_notification_type',23);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (38,'2026_10_15_112407_add_mass_report_flag_to_report_table',24);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (39,'2026_10_15_112408_add_takedown_fields_to_listing_and_user',24);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (40,'2026_10_15_112409_create_review_request_table',24);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (41,'2026_10_15_112410_add_appeal_notification_types',24);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (42,'2026_10_16_000001_create_admin_planner_table',25);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (43,'2026_10_20_000001_add_location_to_message_table',26);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (44,'2026_10_20_000002_add_farm_id_to_message_table',27);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (45,'2026_10_21_000001_backfill_legacy_farm_locations',28);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (46,'2026_10_21_000002_add_renewal_fields_to_listing_table',29);

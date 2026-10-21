@@ -62,8 +62,9 @@ class ListingController extends Controller
         $status = $request->query('status');
 
         // LST_STATUS is an enum, so these are the only two reachable values on
-        // the public feed: the query below already excludes NOT_AVAILABLE, and
-        // listings:expire has moved every past-due row out of circulation.
+        // the public feed: the query below already excludes NOT_AVAILABLE.
+        // Expired rows stay AVAILABLE_NOW on purpose, so they remain visible;
+        // the detail screen warns buyers and the seller can renew them.
         $allowedStatuses = ['AVAILABLE_NOW', 'SOON_TO_HARVEST'];
         $allowedSorts = ['latest', 'date', 'popular'];
         $sort = in_array($request->query('sort'), $allowedSorts, true)

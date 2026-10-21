@@ -166,6 +166,21 @@
                     <th>Seller</th>
                     <td>{{ $report->listing?->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
                 </tr>
+                <tr>
+                    <th>Renewals</th>
+                    <td>
+                        @if((int) ($report->listing?->LST_RENEWAL_COUNT ?? 0) > 0)
+                            <span class="badge badge-soft-warning">
+                                {{ (int) $report->listing->LST_RENEWAL_COUNT }} time(s)
+                            </span>
+                            <span class="cell-secondary ms-2">
+                                Last {{ $report->listing->LST_LAST_RENEWED_AT ?: 'unknown' }}
+                            </span>
+                        @else
+                            <span class="badge badge-soft-neutral">Never renewed</span>
+                        @endif
+                    </td>
+                </tr>
             </table>
         </div>
     </div>
