@@ -13,5 +13,11 @@ php artisan migrate --force --no-interaction || true
 
 php artisan storage:link --no-interaction >/dev/null 2>&1 || true
 
+# Render's free plan has no separate cron service. Run the scheduler in the
+# same container so the hourly listing jobs still run while this web service
+# is awake. Command logs still reach stderr (LOG_CHANNEL=stderr); only the
+# scheduler's once-a-minute "nothing due" chatter is discarded.
+php artisan schedule:work >/dev/null 2>&1 &
+
 # Render injects the listening port through $PORT (default 10000).
 exec php artisan serve --host=0.0.0.0 --port="${PORT:-10000}"
