@@ -10,6 +10,8 @@ ml_service/uploads/
 
 # YOLO training outputs -- weights, curves, predictions (big binaries)
 runs/
+# Experimental checkpoints stay local; the deployed checkpoint remains tracked.
+ml_service/farmspot_9class_v*_best.pt
 
 # Service runtime artifacts -- uvicorn output and the per-request detection log
 ml_service/detect_log.txt
