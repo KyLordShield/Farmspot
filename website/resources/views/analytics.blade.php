@@ -9,12 +9,6 @@
         <h1 class="page-title">System Analytics</h1>
         <div class="page-desc">Demand trends &amp; system usage</div>
     </div>
-    <div class="page-actions">
-        <button class="btn btn-ghost" title="Export is not wired to a backend report yet">
-            <i class="bi bi-download me-1"></i>
-            Export Data
-        </button>
-    </div>
 </div>
 
 <div class="row g-4">
