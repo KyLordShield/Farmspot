@@ -66,6 +66,19 @@ class User extends Authenticatable
         'USR_PASSWORD',
     ];
 
+    protected $appends = ['USR_IS_PREMIUM'];
+
+    protected $casts = [
+        'USR_PREMIUM_STARTED_AT' => 'datetime',
+        'USR_PREMIUM_EXPIRES_AT' => 'datetime',
+    ];
+
+    public function getUsrIsPremiumAttribute(): bool
+    {
+        return $this->USR_PREMIUM_EXPIRES_AT !== null
+            && $this->USR_PREMIUM_EXPIRES_AT->isFuture();
+    }
+
     /**
      * Tell Laravel which column holds the password,
      * since it's not called "password" here.

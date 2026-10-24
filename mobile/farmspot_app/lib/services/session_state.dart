@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../premium/premium_state.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,6 +80,9 @@ class SessionState extends ChangeNotifier {
   /// that confirms the role we already had does not rebuild the nav.
   void applyUser(Map<String, dynamic>? user) {
     final next = user == null ? null : Map<String, dynamic>.from(user);
+    // Reconcile entitlement even if the cached record is unchanged (for
+    // example after hot reload or a missed premium notifier update).
+    syncPremiumUser(next);
     if (_mapsEqual(_user, next)) return;
     _user = next;
     notifyListeners();
@@ -96,6 +100,7 @@ class SessionState extends ChangeNotifier {
   void clear() {
     if (_user == null) return;
     _user = null;
+    syncPremiumUser(null);
     notifyListeners();
   }
 
@@ -103,6 +108,7 @@ class SessionState extends ChangeNotifier {
   void debugSetUser(Map<String, dynamic>? user) {
     _user = user == null ? null : Map<String, dynamic>.from(user);
     _initialised = true;
+    syncPremiumUser(_user);
     notifyListeners();
   }
 

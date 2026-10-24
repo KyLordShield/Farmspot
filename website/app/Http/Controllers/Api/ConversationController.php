@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Buyer;
+use App\Models\BuyRequest;
+use App\Support\BuyRequestAccess;
 use App\Models\Conversation;
 use App\Models\Farm;
 use App\Models\Farmer;
@@ -20,6 +22,37 @@ use Illuminate\Support\Str;
 class ConversationController extends Controller
 {
     use FormatsListings;
+
+    public function storeForBuyRequest(Request $request, string $id)
+    {
+        $seller = BuyRequestAccess::seller($request->user());
+        [$conversation, $created] = DB::transaction(function () use ($id, $request, $seller) {
+            $buyRequest = BuyRequest::whereKey($id)->lockForUpdate()->firstOrFail();
+            abort_if($buyRequest->BRQ_REMOVED_AT !== null, 404, 'This request has been removed.');
+            abort_if($buyRequest->USR_ID === $request->user()->USR_ID, 422, 'You cannot contact your own request.');
+            $owner = User::whereKey($buyRequest->USR_ID)->lockForUpdate()->firstOrFail();
+            abort_unless($owner->USR_STATUS === 'ACTIVE', 403, 'This buyer is no longer active.');
+            $existing = Conversation::where('BRQ_ID', $id)->where('FMR_ID', $seller->FMR_ID)->first();
+            if ($existing) return [$existing, false];
+            do { $conversationId = strtoupper(Str::random(6)); } while (Conversation::whereKey($conversationId)->exists());
+            return [Conversation::create([
+                'CONV_ID' => $conversationId, 'BRQ_ID' => $id,
+                'BUY_ID' => $this->ensureBuyerId($owner), 'FMR_ID' => $seller->FMR_ID,
+                'FRM_ID' => $seller->farms->sortBy('FRM_ID')->first()->FRM_ID,
+                'CONV_CREATED_AT' => now(),
+            ]), true];
+        });
+        return response()->json(['conversation' => $this->formatConversation($conversation->load(['buyRequest', 'farmer.buyer.user', 'farm']), $this->myBuyerId($request->user()->USR_ID))], $created ? 201 : 200);
+    }
+
+    public function requestResponses(Request $request, string $id)
+    {
+        $row = BuyRequest::findOrFail($id);
+        abort_unless($row->USR_ID === $request->user()->USR_ID, 403, 'This request is not yours.');
+        $rows = Conversation::with(['buyRequest', 'farmer.buyer.user', 'farm'])
+            ->where('BRQ_ID', $id)->orderByDesc('CNV_LAST_MESSAGE_AT')->orderByDesc('CONV_CREATED_AT')->get();
+        return response()->json(['conversations' => $rows->map(fn ($c) => $this->formatConversation($c, $c->BUY_ID))->values()]);
+    }
 
     /**
      * Start — or return the existing — conversation between the signed-in
@@ -50,7 +83,7 @@ class ConversationController extends Controller
             ], 422);
         }
 
-        $withContext = ['listing.farm', 'listing.category', 'listing.farmer.buyer.user'];
+        $withContext = ['listing.farm', 'listing.category', 'listing.farmer.buyer.user', 'buyRequest', 'farmer.buyer.user', 'farm'];
 
         $existing = Conversation::where('LST_ID', $listing->LST_ID)
             ->where('BUY_ID', $myBuyerId)
@@ -108,6 +141,7 @@ class ConversationController extends Controller
                 'listing.farm',
                 'listing.category',
                 'listing.farmer.buyer.user',
+                'buyRequest', 'farmer.buyer.user', 'farm',
             ])
             ->where(function ($query) use ($myBuyerId, $myFarmerId) {
                 if ($myBuyerId) {
@@ -209,7 +243,7 @@ class ConversationController extends Controller
                 ->map(fn ($message) => $this->formatMessage($message, $request->user()->USR_ID))
                 ->values(),
             'conversation' => $this->formatConversation(
-                $conversation->load(['listing.farm', 'listing.category', 'listing.farmer.buyer.user']),
+                $conversation->load(['listing.farm', 'listing.category', 'listing.farmer.buyer.user', 'buyRequest', 'farmer.buyer.user', 'farm']),
                 $this->myBuyerId($request->user()->USR_ID)
             ),
         ]);
@@ -382,21 +416,9 @@ class ConversationController extends Controller
         $viewerIsBuyer = $viewerBuyerId !== null
             && $conversation->BUY_ID === $viewerBuyerId;
 
-        if ($viewerIsBuyer) {
-            // Other party is the seller
-            $listing = $conversation->listing()->first();
-            if ($listing && $listing->farmer && $listing->farmer->buyer && $listing->farmer->buyer->user) {
-                return $listing->farmer->buyer->user;
-            }
-            // Fallback: load via relations
-            $conversation->load(['listing.farmer.buyer.user']);
-            $listing = $conversation->listing;
-            return $listing?->farmer?->buyer?->user;
-        } else {
-            // Other party is the buyer
-            $buyer = Buyer::with('user')->find($conversation->BUY_ID);
-            return $buyer?->user;
-        }
+        return $viewerIsBuyer
+            ? $conversation->farmer?->buyer?->user
+            : Buyer::with('user')->find($conversation->BUY_ID)?->user;
     }
 
     /**
@@ -543,12 +565,19 @@ class ConversationController extends Controller
         // is a buyer.BUY_ID, so the buyer's user is one hop along its own
         // relation rather than a hand-written join.
         $otherUser = $viewerIsBuyer
-            ? $listing?->farmer?->buyer?->user
+            ? $conversation->farmer?->buyer?->user
             : Buyer::with('user')->find($conversation->BUY_ID)?->user;
 
         return [
             'id' => $conversation->CONV_ID,
             'listing_id' => $conversation->LST_ID,
+            'my_role' => $viewerIsBuyer ? 'BUYER' : 'SELLER',
+            'buy_request' => $conversation->BRQ_ID ? [
+                'id' => $conversation->BRQ_ID,
+                'crop' => $conversation->buyRequest?->BRQ_CROP,
+                'quantity_kg' => (float) $conversation->buyRequest?->BRQ_QUANTITY_KG,
+                'removed' => $conversation->buyRequest?->BRQ_REMOVED_AT !== null,
+            ] : null,
             'buyer_id' => $conversation->BUY_ID,
             'seller_farmer_id' => $conversation->FMR_ID,
             'farm_id' => $conversation->FRM_ID,
@@ -558,8 +587,8 @@ class ConversationController extends Controller
             'listing' => $listing ? $this->formatListing($listing) : null,
             'farm' => [
                 'id' => $listing?->farm?->FRM_ID ?? $conversation->FRM_ID,
-                'name' => $listing?->farm?->FRM_NAME ?? null,
-                'barangay' => $listing?->farm?->FRM_BARANGAY ?? null,
+                'name' => $listing?->farm?->FRM_NAME ?? $conversation->farm?->FRM_NAME,
+                'barangay' => $listing?->farm?->FRM_BARANGAY ?? $conversation->farm?->FRM_BARANGAY,
             ],
             'other_party' => [
                 'id' => $otherUser?->USR_ID,

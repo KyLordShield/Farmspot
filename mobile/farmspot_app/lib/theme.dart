@@ -24,6 +24,11 @@ class AppColors {
   static const Color errorSoft = Color(0xFFFBE9E4);
   static const Color infoSage = Color(0xFF4E6E58);
   static const Color infoSoft = Color(0xFFEAF0EA);
+
+  /// Warm amber/gold used ONLY for FarmSpot Business (Premium) markers —
+  /// badges, crown icons, upgrade highlights. Do not use for general UI.
+  static const Color premiumGold = Color(0xFFC9922A);
+  static const Color premiumGoldSoft = Color(0xFFFFF6E5);
 }
 
 final ThemeData appTheme = ThemeData(

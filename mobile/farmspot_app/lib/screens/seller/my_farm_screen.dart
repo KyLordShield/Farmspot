@@ -21,6 +21,8 @@ import '../profile_screen.dart';
 import 'add_crop_screen.dart';
 import 'edit_farm_screen.dart';
 import 'farm_setup_details_screen.dart';
+import 'requests_board_screen.dart';
+import '../../widgets/premium_widgets.dart';
 
 class MyFarmScreen extends StatefulWidget {
   /// Injectable so the paging behaviour can be tested without a server. Omitted
@@ -914,8 +916,50 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
           _buildFarmSwitcher(),
           const SizedBox(height: 12),
           _buildFarmCard(),
+          const SizedBox(height: 12),
+          _buildBuyerRequestsEntry(),
           const SizedBox(height: 20),
           _buildStatsRow(),
+        ],
+      ),
+    );
+  }
+
+  /// Free farmer entry to the Buyer Requests board (Business users shout needs).
+  Widget _buildBuyerRequestsEntry() {
+    return PremiumCard(
+      background: const Color(0xFFEAF6EC),
+      borderColor: AppColors.primaryGreen.withValues(alpha: 0.25),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const RequestsBoardScreen()),
+        );
+      },
+      child: const Row(
+        children: [
+          Icon(Icons.campaign_outlined, color: AppColors.primaryGreen, size: 28),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Buyer Requests',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: AppColors.darkGreen,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Find buyers looking for your produce — message them to discuss supply.',
+                  style: TextStyle(fontSize: 12, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: AppColors.primaryGreen),
         ],
       ),
     );

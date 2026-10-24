@@ -72,6 +72,19 @@ Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
 Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::get('/saved-farms', [\App\Http\Controllers\Api\SavedFarmController::class, 'index']);
+    Route::put('/saved-farms/{farmId}', [\App\Http\Controllers\Api\SavedFarmController::class, 'store'])->middleware('throttle:30,1');
+    Route::delete('/saved-farms/{farmId}', [\App\Http\Controllers\Api\SavedFarmController::class, 'destroy']);
+    Route::get('/buy-request-crops', [\App\Http\Controllers\Api\BuyRequestController::class, 'crops']);
+    Route::get('/buy-requests/mine', [\App\Http\Controllers\Api\BuyRequestController::class, 'mine']);
+    Route::get('/buy-requests', [\App\Http\Controllers\Api\BuyRequestController::class, 'index']);
+    Route::post('/buy-requests', [\App\Http\Controllers\Api\BuyRequestController::class, 'store'])->middleware('throttle:10,1');
+    Route::delete('/buy-requests/{id}', [\App\Http\Controllers\Api\BuyRequestController::class, 'destroy']);
+    Route::post('/buy-requests/{id}/conversation', [ConversationController::class, 'storeForBuyRequest'])->middleware('throttle:20,1');
+    Route::get('/buy-requests/{id}/conversations', [ConversationController::class, 'requestResponses']);
+    Route::get('/premium', [\App\Http\Controllers\Api\PremiumController::class, 'show']);
+    Route::post('/premium/simulate-purchase', [\App\Http\Controllers\Api\PremiumController::class, 'simulatePurchase'])
+        ->middleware('throttle:5,1');
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/seller/activate', [SellerController::class, 'activate']);
     Route::post('/seller/deactivate', [SellerController::class, 'deactivate']);

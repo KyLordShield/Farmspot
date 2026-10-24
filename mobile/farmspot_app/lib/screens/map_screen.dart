@@ -11,6 +11,8 @@ import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/farmspot_loader.dart';
 import '../widgets/map_tile_layer.dart';
+import '../widgets/save_farm_button.dart';
+import '../services/saved_farms_state.dart';
 import 'farm_directions_screen.dart';
 import 'farm_profile_screen.dart';
 import 'home_screen.dart';
@@ -52,11 +54,14 @@ class MapScreen extends StatefulWidget {
   final void Function(BuildContext context, FarmPin farm)?
   onDirectionsRequested;
 
+  final SavedFarmsState? savedFarms;
+
   const MapScreen({
     super.key,
     this.loadFarms = FarmService.fetchPublicFarms,
     this.loadPosition = _defaultPosition,
     this.onDirectionsRequested,
+    this.savedFarms,
   });
 
   @override
@@ -280,6 +285,7 @@ class _MapScreenState extends State<MapScreen> {
               distanceLabel: _distanceLabel(_selectedFarm!),
               onOpenProfile: () => _openFarmProfile(_selectedFarm!),
               onDirections: _openDirections,
+              saveButton: SaveFarmButton(farmId: _selectedFarm!.id, savedFarms: widget.savedFarms),
             ),
           ),
       ],
@@ -410,11 +416,15 @@ class _FarmCard extends StatelessWidget {
   /// action from opening the profile tap target above).
   final VoidCallback onDirections;
 
+  /// Real account-specific save/unsave control.
+  final Widget saveButton;
+
   const _FarmCard({
     required this.farm,
     required this.distanceLabel,
     required this.onOpenProfile,
     required this.onDirections,
+    required this.saveButton,
   });
 
   @override
@@ -480,10 +490,16 @@ class _FarmCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                distanceLabel,
-                style: const TextStyle(fontSize: 13, color: Colors.black54),
+              const SizedBox(width: 4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  saveButton,
+                  Text(
+                    distanceLabel,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
               ),
             ],
           ),

@@ -3,6 +3,9 @@ import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/premium_widgets.dart';
+import '../premium/premium_nav.dart';
+import '../premium/premium_state.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'insights_screen.dart';
@@ -132,9 +135,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Case B: first-timer or no approved farm yet — enter the wizard.
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => FarmSetupDetailsScreen(
-            farmSetupData: FarmSetupData(),
-          ),
+          builder: (_) =>
+              FarmSetupDetailsScreen(farmSetupData: FarmSetupData()),
         ),
       );
     }
@@ -149,9 +151,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
         break;
       case 1:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MapScreen()),
-        );
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => const MapScreen()));
         break;
       case 2:
         Navigator.of(context).pushReplacement(
@@ -213,8 +215,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (source == null || !mounted) return;
 
-    final picked =
-        await ImagePicker().pickImage(source: source, imageQuality: 85);
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+    );
     if (picked == null || !mounted) return;
 
     setState(() => _photoBusy = true);
@@ -261,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // the Become-a-Seller switch read the same shared role, so a toggle can
       // never leave them disagreeing with the nav above them.
       body: ListenableBuilder(
-        listenable: SessionState.instance,
+        listenable: Listenable.merge([SessionState.instance, isPremium]),
         builder: (context, _) => SafeArea(
           child: RefreshIndicator(
             // Pull-to-refresh: re-pull user + farm state from the server (same
@@ -278,7 +282,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildBecomeSellerCard(),
+                      const SizedBox(height: 12),
+                      _buildBusinessCard(),
                       const SizedBox(height: 20),
+                      const SectionHeader(title: 'BUSINESS TOOLS'),
+                      const SizedBox(height: 4),
+                      BusinessToolRow(
+                        icon: Icons.campaign_outlined,
+                        label: 'My Buy Requests',
+                        showPremiumTag: !isPremium.value,
+                        onTap: () => openBuyRequests(context),
+                      ),
+                      BusinessToolRow(
+                        icon: Icons.favorite_border,
+                        label: 'Saved Farms',
+                        showPremiumTag: !isPremium.value,
+                        onTap: () => openSavedFarms(context),
+                      ),
+                      BusinessToolRow(
+                        icon: Icons.route_outlined,
+                        label: 'Weekly Sourcing List',
+                        showPremiumTag: !isPremium.value,
+                        onTap: () => openSourcingList(context),
+                      ),
+                      BusinessToolRow(
+                        icon: Icons.notifications_active_outlined,
+                        label: 'Alert Settings',
+                        showPremiumTag: !isPremium.value,
+                        onTap: () => openAlertSettings(context),
+                      ),
+                      const SizedBox(height: 16),
                       const Text(
                         'ACCOUNT',
                         style: TextStyle(
@@ -338,8 +371,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         CircleAvatar(
           radius: 28,
           backgroundColor: Colors.white,
-          backgroundImage:
-              hasPhoto ? ResizeImage(NetworkImage(_photoUrl), width: 160) : null,
+          backgroundImage: hasPhoto
+              ? ResizeImage(NetworkImage(_photoUrl), width: 160)
+              : null,
           child: hasPhoto
               ? null
               : Text(
@@ -361,9 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: const BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: Colors.black26, blurRadius: 4),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
               ),
               child: _photoBusy
                   ? const SizedBox(
@@ -408,7 +440,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.white54),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
               ),
             ),
           ),
@@ -431,11 +466,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     Row(
                       children: [
-                        const Icon(Icons.location_on, size: 12, color: Colors.white70),
+                        const Icon(
+                          Icons.location_on,
+                          size: 12,
+                          color: Colors.white70,
+                        ),
                         const SizedBox(width: 2),
                         Text(
                           _address,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -445,19 +487,145 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(14),
+          _buildAccountBadge(),
+        ],
+      ),
+    );
+  }
+
+  /// Account type chip. Sellers stay "Seller Account". Premium buyers become
+  /// "Business Account" with a premium icon; everyone else stays Buyer.
+  Widget _buildAccountBadge() {
+    if (isSellerNav) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white24,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Text(
+          'Seller Account',
+          style: TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      );
+    }
+
+    if (isPremium.value) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.premiumGold.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.workspace_premium, size: 14, color: Colors.white),
+            SizedBox(width: 4),
+            Text(
+              'Business Account',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            child: Text(
-              // Approved sellers get the seller badge; everyone else stays a
-              // buyer. A pending seller keeps 'Buyer Account' — the separate
-              // Pending Approval card already makes that status obvious, so a
-              // third badge would be redundant.
-              isSellerNav ? 'Seller Account' : 'Buyer Account',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white24,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text(
+        'Buyer Account',
+        style: TextStyle(color: Colors.white, fontSize: 12),
+      ),
+    );
+  }
+
+  /// Upgrade pitch for free users, or compact "Premium active" for Business.
+  Widget _buildBusinessCard() {
+    if (isPremium.value) {
+      return PremiumCard(
+        background: AppColors.successSoft,
+        borderColor: AppColors.primaryGreen.withValues(alpha: 0.25),
+        onTap: () => openUpgrade(context),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: AppColors.primaryGreen),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Subscription active\nAccess until $premiumExpiryLabel',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.darkGreen,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.premiumGold),
+          ],
+        ),
+      );
+    }
+
+    return PremiumCard(
+      padding: EdgeInsets.zero,
+      borderColor: AppColors.premiumGold.withValues(alpha: 0.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: const BoxDecoration(
+              color: AppColors.premiumGold,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+            ),
+            child: const Text(
+              'NEW · FARMSPOT BUSINESS',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Source produce faster for your kitchen — alerts, buy requests, and multi-farm trips.',
+                  style: TextStyle(fontSize: 12.5, height: 1.35),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: () => openUpgrade(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.premiumGold,
+                      side: const BorderSide(color: AppColors.premiumGold),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'See Premium plan',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -478,11 +646,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFEAF6EC),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
+            border: Border.all(
+              color: AppColors.primaryGreen.withValues(alpha: 0.2),
+            ),
           ),
           child: Row(
             children: [
-              const Icon(Icons.storefront, color: AppColors.primaryGreen, size: 30),
+              const Icon(
+                Icons.storefront,
+                color: AppColors.primaryGreen,
+                size: 30,
+              ),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -561,7 +735,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Text(
             'Your seller application is under review. You\u2019ll be notified '
             'once it\u2019s approved.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF8A6D1A), height: 1.4),
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF8A6D1A),
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 8),
           Align(
@@ -587,7 +765,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showFarmSpotDialog(
       context,
       title: 'Contact Support',
-      message: 'Need help with your seller application?\n\n'
+      message:
+          'Need help with your seller application?\n\n'
           'Contact the Association Secretary:\n'
           'PHONE: [PHONE NUMBER HERE]\n'
           'EMAIL: [EMAIL ADDRESS HERE]',
@@ -614,11 +793,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Expanded(
               child: Text(
                 label,
-                style: TextStyle(color: labelColor, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: labelColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             if (value.isNotEmpty)
-              Text(value, style: const TextStyle(color: Colors.black45, fontSize: 12)),
+              Text(
+                value,
+                style: const TextStyle(color: Colors.black45, fontSize: 12),
+              ),
             if (label != 'log out') ...[
               const SizedBox(width: 6),
               const Icon(Icons.chevron_right, color: Colors.black26, size: 18),

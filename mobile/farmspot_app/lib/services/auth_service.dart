@@ -495,6 +495,48 @@ class AuthService {
     return prefs.getString('auth_token');
   }
 
+  /// A demo checkout: access is granted and dated by the server, never locally.
+  static Future<String?> simulatePremiumPurchase() async {
+    final token = await getToken();
+    if (token == null) return 'Please sign in to activate Premium.';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/premium/simulate-purchase'),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+      if (await getToken() != token) {
+        return 'Your account changed. Please try again.';
+      }
+      if (response.statusCode == 401) {
+        await expireSession();
+        return 'Please sign in again.';
+      }
+      final data = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        return data is Map && data['message'] is String
+            ? data['message'] as String
+            : 'Could not activate Premium. Please try again.';
+      }
+      if (data is! Map ||
+          data['user'] is! Map<String, dynamic> ||
+          data['user']['USR_IS_PREMIUM'] != true) {
+        return 'Could not confirm Premium access. Please try again.';
+      }
+      await _cacheUser(data['user'] as Map<String, dynamic>);
+      return null;
+    } on TimeoutException {
+      // A retry is safe: the server does not extend an already-active plan.
+      return 'The request timed out. Please try again to confirm your plan.';
+    } catch (_) {
+      return 'Could not reach the server. Please try again.';
+    }
+  }
+
   static Future<Map<String, dynamic>?> getUser() async {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(SessionState.userPrefsKey);

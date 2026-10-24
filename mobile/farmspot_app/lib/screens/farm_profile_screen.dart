@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 import '../models/farm_profile.dart';
 import '../models/report.dart';
 import '../services/farm_service.dart';
+import '../services/saved_farms_state.dart';
+import '../widgets/save_farm_button.dart';
 import '../services/location_service.dart';
 import '../services/report_service.dart';
 import '../theme.dart';
@@ -27,12 +29,14 @@ class FarmProfileScreen extends StatefulWidget {
 
   /// Injectable for tests; the real HTTP-backed service is used when omitted.
   final ReportsGateway? reportsGateway;
+  final SavedFarmsState? savedFarms;
 
   const FarmProfileScreen({
     super.key,
     required this.farmId,
     this.initialData,
     this.reportsGateway,
+    this.savedFarms,
   });
 
   @override
@@ -316,10 +320,11 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
               ),
             ),
           ),
+          Positioned(top: 10, right: 14, child: DecoratedBox(decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle), child: SaveFarmButton(farmId: profile.id, savedFarms: widget.savedFarms, color: Colors.white))),
           if (profile.photoUrls.length > 1)
             Positioned(
               top: 12,
-              right: 16,
+              right: 70,
               child: _FarmPhotoHint(
                 onTap: () => _openPhotoViewer(profile, 0),
               ),

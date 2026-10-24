@@ -8,7 +8,12 @@ import '../models/listing_review.dart';
 import '../widgets/home_filter_sheet.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
+import '../widgets/premium_widgets.dart';
+import '../premium/premium_mock_data.dart';
+import '../premium/premium_nav.dart';
+import '../premium/premium_state.dart';
 import '../services/home_feed_gateway.dart';
+import '../services/auth_service.dart';
 import '../services/listing_service.dart';
 import '../services/farm_service.dart';
 import '../services/location_service.dart';
@@ -128,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    AuthService.fetchUser();
     _loadListings();
     _loadCategories();
     _loadUnreadMessages();
@@ -317,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
         perPage: _pageSize,
         category: _filters.categoryId,
         availability: _filters.availability?.wireValue,
-sort: _filters.sort,
+        sort: _filters.sort,
         // Ranking and an explicit ordering are two answers to the same
         // question, and the backend can only give one. Asking for the ranked
         // feed when the buyer picked "soonest harvest" would leave the sheet
@@ -383,6 +389,7 @@ sort: _filters.sort,
     // buyer saying "something changed", and a farm that moved or appeared since
     // the last load is exactly the kind of change it should pick up.
     _distanceLookupDone = false;
+    await AuthService.fetchUser();
     await _loadListings(showLoading: false);
     // The role is not refetched here. It is shared session state that survives
     // navigation, so re-deriving it on refresh is what used to make the nav
@@ -523,8 +530,32 @@ sort: _filters.sort,
                           controller: _scrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
                           slivers: [
+                            ListenableBuilder(
+                              listenable: Listenable.merge([
+                                isPremium,
+                                homeAlertDismissed,
+                              ]),
+                              builder: (context, _) => SliverToBoxAdapter(
+                                child: isPremium.value
+                                    ? Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          12,
+                                          16,
+                                          0,
+                                        ),
+                                        child: _buildBusinessToolsBlock(),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ),
                             SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                12,
+                                16,
+                                12,
+                              ),
                               sliver: SliverToBoxAdapter(
                                 child: _buildSectionTitle(),
                               ),
@@ -811,6 +842,59 @@ sort: _filters.sort,
     );
   }
 
+  /// Compact Premium quick-actions strip (+ early alert for Premium users).
+  ///
+  /// Lives between the green search header and the feed heading so it is
+  /// always reachable without scrolling past product cards, but stays short
+  /// enough that the ladder feed still starts near the top of the viewport.
+  Widget _buildBusinessToolsBlock() {
+    final premium = isPremium.value;
+    if (!premium) return const SizedBox.shrink();
+    final alert = mockEarlyAlert;
+    final showAlert = premium && !homeAlertDismissed.value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showAlert) ...[
+          _EarlyAlertBanner(
+            crop: alert.crop,
+            farmCount: alert.farmCount,
+            withinKm: alert.withinKm,
+            onDismiss: () => homeAlertDismissed.value = true,
+            onTap: () {
+              // Open a matching listing when the feed has one; otherwise the
+              // first card. UI-only — no dedicated alert endpoint yet.
+              CropListing? match;
+              for (final l in _listings) {
+                if (l.cropName.toLowerCase().contains(
+                  alert.crop.toLowerCase(),
+                )) {
+                  match = l;
+                  break;
+                }
+              }
+              match ??= _listings.isNotEmpty ? _listings.first : null;
+              if (match != null) _openDetail(match);
+            },
+          ),
+          const SizedBox(height: 10),
+        ],
+        BusinessToolsQuickCard(
+          locked: !premium,
+          onBuyRequest: () =>
+              premium ? openBuyRequests(context) : openUpgrade(context),
+          onSavedFarms: () =>
+              premium ? openSavedFarms(context) : openUpgrade(context),
+          onSourcingTrip: () =>
+              premium ? openSourcingList(context) : openUpgrade(context),
+          onAlerts: () =>
+              premium ? openAlertSettings(context) : openUpgrade(context),
+        ),
+      ],
+    );
+  }
+
   /// The feed itself, in whichever of its four states it currently is.
   ///
   /// Returning a list rather than one widget is what lets the cards and the
@@ -916,6 +1000,68 @@ class _EmptyFeedState extends StatelessWidget {
           'No crops match these filters yet.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.black54),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dismissible Premium early-alert strip above Business tools.
+class _EarlyAlertBanner extends StatelessWidget {
+  final String crop;
+  final int farmCount;
+  final double withinKm;
+  final VoidCallback onDismiss;
+  final VoidCallback onTap;
+
+  const _EarlyAlertBanner({
+    required this.crop,
+    required this.farmCount,
+    required this.withinKm,
+    required this.onDismiss,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          decoration: BoxDecoration(
+            color: AppColors.premiumGoldSoft,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.premiumGold.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.bolt, color: AppColors.premiumGold, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$crop is Available Now — $farmCount farms within ${withinKm.toStringAsFixed(0)} km',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.darkGreen,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onDismiss,
+                tooltip: 'Dismiss',
+                icon: const Icon(Icons.close, size: 18),
+                color: Colors.black45,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              ),
+            ],
+          ),
         ),
       ),
     );

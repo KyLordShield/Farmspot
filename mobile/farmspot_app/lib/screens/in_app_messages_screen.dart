@@ -627,7 +627,7 @@ class _InAppMessagesScreenState extends State<InAppMessagesScreen> {
                         size: 14, color: AppColors.primaryGreen),
                     const SizedBox(width: 5),
                     Flexible(
-                      child: Text('About: ${thread.cropName ?? 'this crop'}',
+                      child: Text('${thread.buyRequestId == null ? 'About' : 'Buy request'}: ${thread.cropName ?? 'this crop'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

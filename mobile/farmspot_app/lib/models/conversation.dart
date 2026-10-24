@@ -8,6 +8,8 @@ import 'report.dart';
 class Conversation {
   final String id;
   final String listingId;
+  final String? buyRequestId;
+  final bool requestRemoved;
 
   /// The farm being discussed, and where it is.
   final String? farmId;
@@ -45,6 +47,8 @@ class Conversation {
   const Conversation({
     required this.id,
     required this.listingId,
+    this.buyRequestId,
+    this.requestRemoved = false,
     this.farmId,
     this.farmName,
     this.barangay,
@@ -104,6 +108,7 @@ class Conversation {
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final listing = json['listing'] as Map?;
+    final buyRequest = json['buy_request'] as Map?;
     final farm = json['farm'] as Map?;
     final other = json['other_party'] as Map?;
 
@@ -115,6 +120,8 @@ class Conversation {
     return Conversation(
       id: json['id'] as String,
       listingId: (json['listing_id'] ?? listing?['id']) as String? ?? '',
+      buyRequestId: buyRequest?['id'] as String?,
+      requestRemoved: buyRequest?['removed'] == true,
       farmId: (farm?['id'] ?? json['farm_id']) as String?,
       farmName: farm?['name'] as String?,
       barangay: farm?['barangay'] as String?,
@@ -122,7 +129,9 @@ class Conversation {
       otherPartyPhoto: other?['photo'] as String?,
       otherPartyId: other?['id'] as String?,
       sellerFarmerId: json['seller_farmer_id'] as String?,
-      cropName: (cropIcon != null && cropIcon.isNotEmpty) ? cropIcon : categoryName,
+      cropName: (cropIcon != null && cropIcon.isNotEmpty)
+          ? cropIcon
+          : (buyRequest?['crop'] as String? ?? categoryName),
       cropImage: listing?['image'] as String?,
       lastMessage: json['last_message'] as String?,
       lastMessageAt: _parseDate(json['last_message_at']),
@@ -213,7 +222,8 @@ class ChatMessage {
       isMine: json['is_mine'] as bool? ?? false,
       isRead: json['is_read'] as bool? ?? false,
       createdAt:
-          DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+          DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }

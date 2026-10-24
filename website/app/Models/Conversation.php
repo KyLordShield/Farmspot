@@ -18,6 +18,16 @@ class Conversation extends Model
 
     protected $guarded = [];
 
+    public function buyRequest()
+    {
+        return $this->belongsTo(BuyRequest::class, 'BRQ_ID', 'BRQ_ID');
+    }
+
+    public function farm()
+    {
+        return $this->belongsTo(Farm::class, 'FRM_ID', 'FRM_ID');
+    }
+
     public function listing()
     {
         return $this->belongsTo(Listing::class, 'LST_ID', 'LST_ID');
