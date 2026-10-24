@@ -60,6 +60,12 @@ void main() {
               'enabled': true,
               'saved_farms': false,
               'buy_requests': true,
+              'push_enabled': false,
+              'push_frequency': 'hourly',
+              'quiet_enabled': true,
+              'quiet_start': '22:00',
+              'quiet_end': '07:00',
+              'daily_time': '09:00',
               'crop_alerts': true,
               'crops': <String>[],
             });
@@ -111,6 +117,47 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'phone push is opt-in with editable hourly daily and quiet controls',
+    (tester) async {
+      final fake = FakeAlerts();
+      await tester.pumpWidget(
+        MaterialApp(home: AlertSettingsScreen(gateway: fake)),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(SwitchListTile, 'Phone notifications'),
+        100,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, 'Phone notifications'),
+            )
+            .value,
+        isFalse,
+      );
+      await tester.tap(
+        find.widgetWithText(SwitchListTile, 'Phone notifications'),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Grouped hourly (recommended)'),
+        100,
+      );
+      await tester.tap(find.text('Grouped hourly (recommended)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Daily summary').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Summary time: 09:00'), 100);
+      expect(find.text('Summary time: 09:00'), findsOneWidget);
+      await tester.tap(find.text('Save settings'));
+      await tester.pumpAndSettle();
+      expect(fake.settings.pushEnabled, isTrue);
+      expect(fake.settings.pushFrequency, 'daily');
+      expect(fake.settings.quietEnabled, isTrue);
+    },
+  );
   test('new notification types open their actual destinations', () {
     expect(
       notificationStyleFor('SAVED_FARM_NEW_LISTING').target,
@@ -137,6 +184,10 @@ void main() {
       find.widgetWithText(SwitchListTile, 'Saved farm updates'),
       120,
     );
+    await tester.ensureVisible(
+      find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SwitchListTile, 'Saved farm updates'));
     await tester.tap(find.text('Save settings'));
     await tester.pumpAndSettle();
@@ -146,6 +197,14 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       MaterialApp(home: AlertSettingsScreen(gateway: fake)),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+      120,
+    );
+    await tester.ensureVisible(
+      find.widgetWithText(SwitchListTile, 'Saved farm updates'),
     );
     await tester.pumpAndSettle();
     expect(
@@ -167,6 +226,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Business alerts'));
       await tester.pump();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(SwitchListTile, 'Matching buy requests'),
+        120,
+      );
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Matching buy requests'),
+      );
+      await tester.pumpAndSettle();
       expect(
         tester
             .widget<SwitchListTile>(
@@ -197,6 +264,22 @@ void main() {
       expect(find.text('Load failed'), findsOneWidget);
       fake.failLoad = false;
       await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+        120,
+      );
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+        120,
+      );
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Saved farm updates'),
+      );
       await tester.pumpAndSettle();
       expect(
         tester

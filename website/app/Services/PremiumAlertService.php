@@ -14,7 +14,9 @@ class PremiumAlertService
     {
         $row = DB::table('premium_alert_setting')->where('USR_ID', $userId)->first();
 
-        return ['enabled' => (bool) ($row->ALERTS_ENABLED ?? true), 'saved_farms' => (bool) ($row->SAVED_FARM_ALERTS ?? true), 'buy_requests' => (bool) ($row->BUY_REQUEST_ALERTS ?? true), 'crop_alerts' => (bool) ($row->CROP_ALERTS ?? true), 'crops' => $row?->ALERT_CROPS ? json_decode($row->ALERT_CROPS, true) : []];
+        return ['enabled' => (bool) ($row->ALERTS_ENABLED ?? true), 'saved_farms' => (bool) ($row->SAVED_FARM_ALERTS ?? true), 'buy_requests' => (bool) ($row->BUY_REQUEST_ALERTS ?? true), 'crop_alerts' => (bool) ($row->CROP_ALERTS ?? true), 'crops' => $row?->ALERT_CROPS ? json_decode($row->ALERT_CROPS, true) : [],
+            'push_enabled' => (bool) ($row->PUSH_ENABLED ?? false), 'push_frequency' => $row->PUSH_FREQUENCY ?? 'hourly',
+            'quiet_enabled' => (bool) ($row->QUIET_ENABLED ?? true), 'quiet_start' => $row->QUIET_START ?? '22:00', 'quiet_end' => $row->QUIET_END ?? '07:00', 'daily_time' => $row->DAILY_TIME ?? '09:00'];
     }
 
     private function publicListing(Listing $listing): bool
@@ -51,7 +53,7 @@ class PremiumAlertService
             if ($cropMatch) {
                 // A single crop alert covers the event when the farm is also saved.
                 $this->deliver($user->USR_ID, 'CROP_AVAILABLE', $listing->LST_ID, $eventKey,
-                    "$crop is available now", "$farm has $crop available now. Open the listing to confirm details.");
+                    "$crop is available now", "$farm has $crop available now. Open the listing to confirm details.", $crop);
 
                 continue;
             }
@@ -62,7 +64,7 @@ class PremiumAlertService
             $state = $listing->LST_STATUS === 'AVAILABLE_NOW' ? 'available now' : 'soon to harvest';
             $this->deliver($user->USR_ID, $type, $listing->LST_ID, $eventKey,
                 $event === 'new' ? 'New listing from a saved farm' : 'A saved farm has crops available',
-                "$farm: $crop is $state. Open the listing to confirm details.");
+                "$farm: $crop is $state. Open the listing to confirm details.", $crop);
         }
     }
 
@@ -94,20 +96,21 @@ class PremiumAlertService
                 continue;
             }
             $this->deliver($userId, 'BUY_REQUEST_MATCH', $id, 'created', 'A buyer is looking for your crop',
-                "A buyer requested {$request->BRQ_QUANTITY_KG} kg of {$request->BRQ_CROP}. Open Buy Requests to view and contact them.");
+                "A buyer requested {$request->BRQ_QUANTITY_KG} kg of {$request->BRQ_CROP}. Open Buy Requests to view and contact them.", $request->BRQ_CROP);
         }
     }
 
-    private function deliver(string $userId, string $type, string $ref, string $event, string $title, string $body): void
+    private function deliver(string $userId, string $type, string $ref, string $event, string $title, string $body, string $crop): void
     {
-        DB::transaction(function () use ($userId, $type, $ref, $event, $title, $body) {
+        DB::transaction(function () use ($userId, $type, $ref, $event, $title, $body, $crop) {
             $key = hash('sha256', implode('|', [$userId, $type, $ref, $event]));
             $inserted = DB::table('premium_alert_delivery')->insertOrIgnore(['DELIVERY_KEY' => $key, 'USR_ID' => $userId, 'CREATED_AT' => now()]);
             if (! $inserted) {
                 return;
             }
-            // First release uses the existing in-app inbox only, no external push.
+            // The inbox remains immediate; phone delivery is grouped separately.
             app(NotificationService::class)->notify($userId, $type, Str::substr($title, 0, 100), Str::substr($body, 0, 300), $ref, false);
+            app(PremiumPushService::class)->enqueue($key, $userId, $type, $ref, $crop);
         });
     }
 }

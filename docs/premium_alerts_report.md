@@ -10,7 +10,7 @@
 - Alert settings are accessible from Notifications and existing Business tools. Changes apply to future alerts. Existing inbox records remain.
 - Saved-farm notifications open listing details. Request alerts open the seller request board with the referenced request first and labeled. A removed request is explained rather than silently opening another request.
 
-This release uses the existing Notifications inbox only, with no external push delivery for these new alert types. Other account/safety notifications retain their existing behavior. Backup Supplier Alerts have been removed; crop alerts cover all public farms without radius rules, alongside optional saved-farm and matching-request preferences.
+Phone delivery is now optional and grouped; see premium_push_report.md for settings, rate limits, quiet hours, and the required worker. The Notifications inbox remains immediate. Other account/safety notifications retain their existing behavior. Backup Supplier Alerts have been removed; crop alerts cover all public farms without radius rules, alongside optional saved-farm and matching-request preferences.
 
 ## Database and API
 

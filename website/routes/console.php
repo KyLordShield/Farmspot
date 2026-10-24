@@ -28,3 +28,6 @@ Schedule::command('listings:remind-harvest')->hourly();
 
 // Flip SOON_TO_HARVEST listings whose harvest date has arrived to AVAILABLE_NOW.
 Schedule::command('listings:harvest')->hourly();
+
+// Premium pushes are collected into due summaries; settings and entitlement are checked at send time.
+Schedule::command('premium:send-push')->everyMinute()->withoutOverlapping(10);

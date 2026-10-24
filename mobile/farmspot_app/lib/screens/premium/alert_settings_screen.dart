@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/premium_alert_settings.dart';
 import '../../services/premium_alert_service.dart';
 import '../../services/session_state.dart';
+import '../../services/push_service.dart';
 import '../../premium/premium_state.dart';
 import '../../theme.dart';
 import '../../widgets/premium_widgets.dart';
@@ -51,6 +52,7 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
+      if (_settings!.pushEnabled) await PushService.requestPermissionIfNeeded();
       final saved = await _api.saveSettings(_settings!);
       if (!mounted) return;
       setState(() => _settings = saved);
@@ -153,6 +155,134 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
     );
   }
 
+  Future<void> _pickTime(String field, String current) async {
+    final parts = current.split(':');
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
+      ),
+    );
+    if (!mounted || time == null) return;
+    final value =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    setState(
+      () => _settings = _settings!.copyWith(
+        quietStart: field == 'start' ? value : null,
+        quietEnd: field == 'end' ? value : null,
+        dailyTime: field == 'daily' ? value : null,
+      ),
+    );
+  }
+
+  Widget _pushCard() {
+    final editable = !_saving && _settings!.enabled;
+    final controls = editable && _settings!.pushEnabled;
+    return _settingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Phone notifications',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: const Text(
+              'Optional summaries of your alerts. Every update still appears in your inbox.',
+            ),
+            value: _settings!.pushEnabled,
+            onChanged: editable
+                ? (v) => setState(
+                    () => _settings = _settings!.copyWith(pushEnabled: v),
+                  )
+                : null,
+          ),
+          if (_settings!.pushEnabled) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _settings!.pushFrequency,
+              decoration: const InputDecoration(
+                labelText: 'Delivery frequency',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'hourly',
+                  child: Text('Grouped hourly (recommended)'),
+                ),
+                DropdownMenuItem(
+                  value: 'instant',
+                  child: Text('Instant, with limits'),
+                ),
+                DropdownMenuItem(value: 'daily', child: Text('Daily summary')),
+              ],
+              onChanged: !controls
+                  ? null
+                  : (v) {
+                      if (v != null)
+                        setState(
+                          () =>
+                              _settings = _settings!.copyWith(pushFrequency: v),
+                        );
+                    },
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _settings!.pushFrequency == 'instant'
+                  ? 'At most one push per crop per hour. New updates wait for the next allowed send.'
+                  : _settings!.pushFrequency == 'hourly'
+                  ? 'Updates are collected for an hour and sent together.'
+                  : 'One combined summary each day.',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            if (_settings!.pushFrequency == 'daily')
+              TextButton(
+                onPressed: controls
+                    ? () => _pickTime('daily', _settings!.dailyTime)
+                    : null,
+                child: Text('Summary time: ${_settings!.dailyTime}'),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Quiet hours'),
+              subtitle: const Text(
+                'Hold phone notifications during these hours.',
+              ),
+              value: _settings!.quietEnabled,
+              onChanged: controls
+                  ? (v) => setState(
+                      () => _settings = _settings!.copyWith(quietEnabled: v),
+                    )
+                  : null,
+            ),
+            if (_settings!.quietEnabled)
+              Wrap(
+                spacing: 12,
+                children: [
+                  TextButton(
+                    onPressed: controls
+                        ? () => _pickTime('start', _settings!.quietStart)
+                        : null,
+                    child: Text('From ${_settings!.quietStart}'),
+                  ),
+                  TextButton(
+                    onPressed: controls
+                        ? () => _pickTime('end', _settings!.quietEnd)
+                        : null,
+                    child: Text('Until ${_settings!.quietEnd}'),
+                  ),
+                ],
+              ),
+            const Text(
+              'Times use Philippine time. Your phone must also allow FarmSpot notifications.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _settingsCard({required Widget child}) => PremiumCard(
     child: Material(color: Colors.transparent, child: child),
   );
@@ -208,6 +338,8 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                                   ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        _pushCard(),
                         const SizedBox(height: 12),
                         _cropAlertsCard(premium),
                         const SizedBox(height: 12),
