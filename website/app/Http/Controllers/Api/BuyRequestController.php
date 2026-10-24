@@ -63,7 +63,7 @@ class BuyRequestController extends Controller
         $search = $request->validate(['search' => ['nullable', 'string', 'max:80']])['search'] ?? null;
         $rows = BuyRequest::with('owner')->withCount('conversations')
             ->whereNull('BRQ_REMOVED_AT')->where('USR_ID', '!=', $request->user()->USR_ID)
-            ->whereHas('owner', fn ($q) => $q->where('USR_STATUS', 'ACTIVE'))
+            ->whereHas('owner', fn ($q) => $q->where('USR_STATUS', 'ACTIVE')->where('USR_PREMIUM_EXPIRES_AT', '>', now()))
             ->when($search, fn ($q) => $q->where('BRQ_CROP', 'like', '%'.$search.'%'))
             ->orderByDesc('BRQ_CREATED_AT')->orderBy('BRQ_ID')->get();
         $results = $rows->map(function ($row) use ($seller) {
@@ -97,7 +97,7 @@ class BuyRequestController extends Controller
                 ? ['latitude' => (float) $row->BRQ_LATITUDE, 'longitude' => (float) $row->BRQ_LONGITUDE] : null,
             'created_at' => Carbon::parse($row->BRQ_CREATED_AT)->toIso8601String(),
             'response_count' => (int) ($row->conversations_count ?? 0),
-            'buyer' => ['id' => $row->USR_ID, 'name' => $row->owner?->USR_NAME, 'photo' => $row->owner?->USR_PHOTO_PATH, 'phone' => $row->owner?->USR_MOBILE_NUMBER],
+            'buyer' => ['id' => $row->USR_ID, 'name' => $row->owner?->USR_NAME, 'photo' => $row->owner?->USR_PHOTO_PATH, 'phone' => $row->owner?->USR_MOBILE_NUMBER, 'is_premium' => (bool) $row->owner?->USR_IS_PREMIUM, 'premium_expires_at' => $row->owner?->USR_PREMIUM_EXPIRES_AT?->toIso8601String()],
         ];
     }
 

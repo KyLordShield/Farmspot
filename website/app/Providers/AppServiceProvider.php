@@ -2,8 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\BuyRequest;
+use App\Models\Listing;
 use App\Models\Report;
 use App\Models\ReviewRequest;
+use App\Observers\PremiumBuyRequestObserver;
+use App\Observers\PremiumListingObserver;
 use App\Services\MassReportService;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
@@ -26,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useBootstrapFive();
+        Listing::observe(PremiumListingObserver::class);
+        BuyRequest::observe(PremiumBuyRequestObserver::class);
 
         // Share light-weight sidebar counts for the admin layout. Doing it as a
         // composer avoids the temptation to compute them in every controller
@@ -39,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
                 $view->with('sidebarMassReports', null);
                 $view->with('sidebarPendingAppeals', null);
                 $view->with('sidebarReportThreshold', MassReportService::THRESHOLD);
+
                 return;
             }
 
@@ -49,6 +56,7 @@ class AppServiceProvider extends ServiceProvider
                 $view->with('sidebarMassReports', null);
                 $view->with('sidebarPendingAppeals', null);
                 $view->with('sidebarReportThreshold', MassReportService::THRESHOLD);
+
                 return;
             }
 

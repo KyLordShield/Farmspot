@@ -9,7 +9,6 @@ import '../widgets/home_filter_sheet.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/premium_widgets.dart';
-import '../premium/premium_mock_data.dart';
 import '../premium/premium_nav.dart';
 import '../premium/premium_state.dart';
 import '../services/home_feed_gateway.dart';
@@ -531,10 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           slivers: [
                             ListenableBuilder(
-                              listenable: Listenable.merge([
-                                isPremium,
-                                homeAlertDismissed,
-                              ]),
+                              listenable: isPremium,
                               builder: (context, _) => SliverToBoxAdapter(
                                 child: isPremium.value
                                     ? Padding(
@@ -842,7 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Compact Premium quick-actions strip (+ early alert for Premium users).
+  /// Compact Premium quick-actions strip.
   ///
   /// Lives between the green search header and the feed heading so it is
   /// always reachable without scrolling past product cards, but stays short
@@ -850,36 +846,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBusinessToolsBlock() {
     final premium = isPremium.value;
     if (!premium) return const SizedBox.shrink();
-    final alert = mockEarlyAlert;
-    final showAlert = premium && !homeAlertDismissed.value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showAlert) ...[
-          _EarlyAlertBanner(
-            crop: alert.crop,
-            farmCount: alert.farmCount,
-            withinKm: alert.withinKm,
-            onDismiss: () => homeAlertDismissed.value = true,
-            onTap: () {
-              // Open a matching listing when the feed has one; otherwise the
-              // first card. UI-only — no dedicated alert endpoint yet.
-              CropListing? match;
-              for (final l in _listings) {
-                if (l.cropName.toLowerCase().contains(
-                  alert.crop.toLowerCase(),
-                )) {
-                  match = l;
-                  break;
-                }
-              }
-              match ??= _listings.isNotEmpty ? _listings.first : null;
-              if (match != null) _openDetail(match);
-            },
-          ),
-          const SizedBox(height: 10),
-        ],
         BusinessToolsQuickCard(
           locked: !premium,
           onBuyRequest: () =>
@@ -1000,68 +970,6 @@ class _EmptyFeedState extends StatelessWidget {
           'No crops match these filters yet.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.black54),
-        ),
-      ),
-    );
-  }
-}
-
-/// Dismissible Premium early-alert strip above Business tools.
-class _EarlyAlertBanner extends StatelessWidget {
-  final String crop;
-  final int farmCount;
-  final double withinKm;
-  final VoidCallback onDismiss;
-  final VoidCallback onTap;
-
-  const _EarlyAlertBanner({
-    required this.crop,
-    required this.farmCount,
-    required this.withinKm,
-    required this.onDismiss,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-          decoration: BoxDecoration(
-            color: AppColors.premiumGoldSoft,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.premiumGold.withValues(alpha: 0.45),
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.bolt, color: AppColors.premiumGold, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '$crop is Available Now — $farmCount farms within ${withinKm.toStringAsFixed(0)} km',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.darkGreen,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onDismiss,
-                tooltip: 'Dismiss',
-                icon: const Icon(Icons.close, size: 18),
-                color: Colors.black45,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              ),
-            ],
-          ),
         ),
       ),
     );

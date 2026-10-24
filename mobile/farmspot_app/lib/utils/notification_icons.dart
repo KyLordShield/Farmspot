@@ -9,7 +9,7 @@ import '../theme.dart';
 /// completed setup may have no farm yet. Guessing a destination for those would
 /// either dead-end the tap or invent a screen that does not exist, so the row
 /// just marks itself read.
-enum NotificationTarget { listing, profile, myFarm, none }
+enum NotificationTarget { listing, profile, myFarm, buyRequests, none }
 
 /// The presentation for one NOTIF_TYPE: the leading icon, its tint, and where a
 /// tap goes.
@@ -104,11 +104,21 @@ enum NotificationTarget { listing, profile, myFarm, none }
         color: AppColors.errorTerracotta,
         target: NotificationTarget.none,
       );
+    case 'CROP_AVAILABLE':
+    case 'SAVED_FARM_NEW_LISTING':
+    case 'SAVED_FARM_AVAILABLE':
     case 'LISTING_AVAILABLE':
       return (
         icon: Icons.check_circle_outline_rounded,
         color: AppColors.primaryGreen,
         target: NotificationTarget.listing,
+      );
+
+    case 'BUY_REQUEST_MATCH':
+      return (
+        icon: Icons.campaign_outlined,
+        color: AppColors.primaryGreen,
+        target: NotificationTarget.buyRequests,
       );
 
     // Whitelist gate. Both are about the person being allowed to sell, and both

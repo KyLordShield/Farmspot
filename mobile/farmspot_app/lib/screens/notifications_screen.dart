@@ -12,6 +12,8 @@ import '../utils/notification_icons.dart';
 import 'product_detail_screen.dart';
 import 'profile_screen.dart';
 import 'seller/my_farm_screen.dart';
+import 'seller/requests_board_screen.dart';
+import 'premium/alert_settings_screen.dart';
 
 /// The notification inbox: things that happened without the user asking — a
 /// listing about to expire, a report answered, a seller application resolved.
@@ -228,6 +230,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 : const ProfileScreen(),
           ),
         );
+      case NotificationTarget.buyRequests:
+        if (!mounted) return;
+        if (!SessionState.instance.isSeller) {
+          _toast('Switch to seller mode to view buyer requests.');
+          return;
+        }
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                RequestsBoardScreen(focusRequestId: notification.refId),
+          ),
+        );
       case NotificationTarget.none:
         break;
     }
@@ -268,6 +282,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
+          IconButton(
+            tooltip: 'Alert settings',
+            icon: const Icon(Icons.tune),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AlertSettingsScreen()),
+            ),
+          ),
           // Only offered when there is something to clear: a permanently
           // visible "Mark all read" on an empty inbox is noise.
           if (_unreadCount > 0)

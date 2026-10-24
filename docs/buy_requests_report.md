@@ -20,3 +20,7 @@ GET /api/buy-request-crops supplies a canonical crop catalog with local aliases 
 Approved sellers receive the buyer's profile phone number with the request. Call buyer launches the external phone app via a tel URI; there is no in-app calling. Missing/invalid numbers disable calling while messaging remains available. The posting form explains the phone sharing.
 
 Migration 2026_10_24_000003_add_explicit_buy_request_pins.php adds BRQ_HAS_PIN and increases the two coordinate columns to seven decimal places. Existing coarse locations keep BRQ_HAS_PIN=false. No new tables are added for these enhancements. Migration applied locally.
+
+## Premium expiry visibility rule
+
+Requests have no individual expiry date and remain saved until removed. Seller-board visibility now requires an active buyer account with a future premium expiry. Expired buyers can still view/remove their own requests and continue existing conversations. Sellers cannot start new conversations from hidden requests, including from cached request IDs; existing request conversations remain usable. Renewing premium restores visibility automatically without rewriting the request. Removed requests remain removed. Matching-request notifications also require the owner to have active premium.

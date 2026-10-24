@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:farmspot_app/widgets/premium_member_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -103,6 +104,90 @@ class FakeRequests implements BuyRequestsGateway {
 }
 
 void main() {
+  testWidgets('premium buyer badge appears on the seller request board', (
+    tester,
+  ) async {
+    final api = FakeRequests()
+      ..rows = [
+        BuyRequest.fromJson({
+          ...requestJson(),
+          'buyer': {
+            'id': 'BUY001',
+            'name': 'Test Buyer',
+            'is_premium': true,
+            'premium_expires_at': DateTime.now()
+                .add(const Duration(days: 30))
+                .toIso8601String(),
+          },
+        }),
+      ];
+    await tester.pumpWidget(
+      MaterialApp(home: RequestsBoardScreen(gateway: api)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Premium'), findsOneWidget);
+    expect(find.byType(PremiumMemberBadge), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('membership badge disappears when the subscription expires', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PremiumMemberBadge(
+          isPremium: true,
+          expiresAt: DateTime.now().add(const Duration(seconds: 1)),
+        ),
+      ),
+    );
+    expect(find.text('Premium'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Premium'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PremiumMemberBadge(
+          isPremium: false,
+          expiresAt: DateTime.now().add(const Duration(days: 30)),
+        ),
+      ),
+    );
+    expect(find.text('Premium'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'notification opens the referenced request at the top of the board',
+    (tester) async {
+      final api = FakeRequests();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RequestsBoardScreen(gateway: api, focusRequestId: 'REQ001'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Request from your alert'), findsOneWidget);
+      expect(
+        find.text('The request from your alert is no longer available.'),
+        findsNothing,
+      );
+    },
+  );
+  testWidgets('notification explains when its request has been removed', (
+    tester,
+  ) async {
+    final api = FakeRequests()..rows = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RequestsBoardScreen(gateway: api, focusRequestId: 'REQ001'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('The request from your alert is no longer available.'),
+      findsOneWidget,
+    );
+  });
+
   setUp(
     () => SharedPreferences.setMockInitialValues({'auth_token': 'test-token'}),
   );

@@ -1,6 +1,8 @@
 class BuyRequest {
   final String id, crop, frequency, note, pickupLocation, buyerId, buyerName;
   final String buyerPhone;
+  final bool buyerIsPremium;
+  final DateTime? buyerPremiumExpiresAt;
   final double? latitude, longitude;
   bool get hasPin => latitude != null && longitude != null;
   final double quantityKg;
@@ -16,6 +18,8 @@ class BuyRequest {
     this.buyerId = '',
     this.buyerName = '',
     this.buyerPhone = '',
+    this.buyerIsPremium = false,
+    this.buyerPremiumExpiresAt,
     this.latitude,
     this.longitude,
     this.distanceKm,
@@ -37,6 +41,10 @@ class BuyRequest {
       buyerId: buyer?['id'] as String? ?? '',
       buyerName: buyer?['name'] as String? ?? 'Buyer',
       buyerPhone: buyer?['phone'] as String? ?? '',
+      buyerIsPremium: buyer?['is_premium'] == true,
+      buyerPremiumExpiresAt: DateTime.tryParse(
+        buyer?['premium_expires_at'] as String? ?? '',
+      ),
       latitude: (location?['latitude'] as num?)?.toDouble(),
       longitude: (location?['longitude'] as num?)?.toDouble(),
       distanceKm: (json['distance_km'] as num?)?.toDouble(),

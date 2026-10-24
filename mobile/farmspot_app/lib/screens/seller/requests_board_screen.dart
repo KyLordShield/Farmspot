@@ -7,14 +7,17 @@ import '../../services/buy_request_service.dart';
 import '../../theme.dart';
 import '../../widgets/buy_request_widgets.dart';
 import '../../widgets/premium_widgets.dart';
+import '../../widgets/premium_member_badge.dart';
 import '../in_app_messages_screen.dart';
 
 class RequestsBoardScreen extends StatefulWidget {
+  final String? focusRequestId;
   final BuyRequestsGateway? gateway;
   final Future<bool> Function(Uri)? externalCallLauncher;
   const RequestsBoardScreen({
     super.key,
     this.gateway,
+    this.focusRequestId,
     this.externalCallLauncher,
   });
   @override
@@ -47,7 +50,10 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
       final rows = await _api.fetchBoard(search: _search.text);
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _requests = rows;
+        _requests = [
+          ...rows.where((r) => r.id == widget.focusRequestId),
+          ...rows.where((r) => r.id != widget.focusRequestId),
+        ];
         _loading = false;
         _error = null;
       });
@@ -183,9 +189,20 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
           ],
         ),
         const SizedBox(height: 5),
-        Text(
-          '${r.buyerName} · ${r.frequencyLabel}',
-          style: const TextStyle(fontSize: 12, color: Colors.black54),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              '${r.buyerName} · ${r.frequencyLabel}',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            PremiumMemberBadge(
+              isPremium: r.buyerIsPremium,
+              expiresAt: r.buyerPremiumExpiresAt,
+            ),
+          ],
         ),
         if (r.note.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -277,14 +294,6 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'All requests · nearest pinned locations first · no distance limit',
-              style: TextStyle(fontSize: 12, color: AppColors.mutedGreen),
-            ),
-          ),
-          const SizedBox(height: 8),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -313,7 +322,30 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
                             message:
                                 'Requests appear here when buyers post what they need. Try another crop or check back later.',
                           ),
+                        if (widget.focusRequestId != null &&
+                            _search.text.isEmpty &&
+                            _error == null &&
+                            !_requests.any(
+                              (r) => r.id == widget.focusRequestId,
+                            ))
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              'The request from your alert is no longer available.',
+                            ),
+                          ),
                         for (final r in _requests) ...[
+                          if (r.id == widget.focusRequestId)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                'Request from your alert',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryGreen,
+                                ),
+                              ),
+                            ),
                           _requestCard(r),
                           const SizedBox(height: 12),
                         ],

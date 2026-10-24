@@ -4,6 +4,7 @@ import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/premium_widgets.dart';
+import '../widgets/premium_member_badge.dart';
 import '../premium/premium_nav.dart';
 import '../premium/premium_state.dart';
 import 'home_screen.dart';
@@ -487,14 +488,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildAccountBadge(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildAccountBadge(),
+              PremiumMemberBadge(
+                isPremium: isPremium.value,
+                expiresAt: premiumExpiresAt,
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  /// Account type chip. Sellers stay "Seller Account". Premium buyers become
-  /// "Business Account" with a premium icon; everyone else stays Buyer.
+  /// Role and membership are displayed separately for both buyers and sellers.
   Widget _buildAccountBadge() {
     if (isSellerNav) {
       return Container(
@@ -506,31 +517,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: const Text(
           'Seller Account',
           style: TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      );
-    }
-
-    if (isPremium.value) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.premiumGold.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.workspace_premium, size: 14, color: Colors.white),
-            SizedBox(width: 4),
-            Text(
-              'Business Account',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ),
       );
     }

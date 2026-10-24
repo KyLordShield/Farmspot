@@ -1,245 +1,280 @@
 import 'package:flutter/material.dart';
-import '../../premium/premium_mock_data.dart';
+import '../../models/premium_alert_settings.dart';
+import '../../services/premium_alert_service.dart';
+import '../../services/session_state.dart';
+import '../../premium/premium_state.dart';
 import '../../theme.dart';
-import '../../widgets/common_widgets.dart';
 import '../../widgets/premium_widgets.dart';
+import '../../widgets/sourcing_crop_picker.dart';
 
 class AlertSettingsScreen extends StatefulWidget {
-  const AlertSettingsScreen({super.key});
-
+  final PremiumAlertsGateway? gateway;
+  const AlertSettingsScreen({super.key, this.gateway});
   @override
   State<AlertSettingsScreen> createState() => _AlertSettingsScreenState();
 }
 
 class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
-  bool _notificationsOn = true;
-  late List<MockAlertRule> _rules;
-
+  PremiumAlertSettings? _settings;
+  String? _error;
+  bool _loading = true, _saving = false;
+  PremiumAlertsGateway get _api =>
+      widget.gateway ?? PremiumAlertService.instance;
   @override
   void initState() {
     super.initState();
-    _rules = List.of(mockAlertRules);
+    _load();
   }
 
-  Future<void> _addAlert() async {
-    String crop = kPremiumCrops.first;
-    double radius = 8;
-
-    final added = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheet) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                20 + MediaQuery.of(ctx).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.black26,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Add Available Now alert',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Get notified early when this crop becomes available near you.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Crop',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final c in kPremiumCrops)
-                        ChoiceChip(
-                          label: Text(c),
-                          selected: crop == c,
-                          selectedColor: AppColors.successSoft,
-                          onSelected: (_) => setSheet(() => crop = c),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Within ${radius.toStringAsFixed(0)} km',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Slider(
-                    value: radius,
-                    min: 1,
-                    max: 20,
-                    divisions: 19,
-                    activeColor: AppColors.primaryGreen,
-                    label: '${radius.toStringAsFixed(0)} km',
-                    onChanged: (v) => setSheet(() => radius = v),
-                  ),
-                  const SizedBox(height: 8),
-                  FarmSpotButton(
-                    label: 'Save alert',
-                    onPressed: () => Navigator.pop(ctx, true),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (added == true && mounted) {
-      setState(() {
-        _rules.add(
-          MockAlertRule(
-            id: 'a${_rules.length + 1}',
-            crop: crop,
-            radiusKm: radius,
-          ),
-        );
-      });
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final settings = await _api.fetchSettings();
+      if (mounted)
+        setState(() {
+          _settings = settings;
+          _loading = false;
+        });
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _loading = false;
+        });
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const PremiumScreenHeader(
-              title: 'Alert settings',
-              subtitle: 'Early “Available Now” rules',
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final saved = await _api.saveSettings(_settings!);
+      if (!mounted) return;
+      setState(() => _settings = saved);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Alert settings saved.')));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _chooseCrops() async {
+    final settings = _settings!;
+    final selected = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => SourcingCropPicker(
+        catalog: {...settings.availableCrops, ...settings.crops}.toList()
+          ..sort(),
+        aliases: settings.aliases,
+        selected: settings.crops.toSet(),
+      ),
+    );
+    if (mounted && selected != null)
+      setState(
+        () => _settings = _settings!.copyWith(crops: selected.toList()..sort()),
+      );
+  }
+
+  Widget _cropAlertsCard(bool premium) {
+    final editable =
+        premium && _settings!.enabled && _settings!.cropAlerts && !_saving;
+    return _settingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Crop alerts',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  PremiumCard(
-                    child: SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Push notifications',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Turn off to pause all Business alerts.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      value: _notificationsOn,
-                      activeThumbColor: AppColors.primaryGreen,
-                      onChanged: (v) => setState(() => _notificationsOn = v),
-                    ),
+            subtitle: Text(
+              premium
+                  ? 'Get notified when crops you need become Available Now at any public farm.'
+                  : 'Requires premium. Your crop choices are kept for when you subscribe.',
+            ),
+            value: _settings!.cropAlerts,
+            onChanged: !premium || !_settings!.enabled || _saving
+                ? null
+                : (v) => setState(
+                    () => _settings = _settings!.copyWith(cropAlerts: v),
                   ),
-                  const SizedBox(height: 16),
-                  const SectionHeader(title: 'YOUR ALERT RULES'),
-                  const SizedBox(height: 8),
-                  if (_rules.isEmpty)
-                    const PremiumEmptyState(
-                      icon: Icons.notifications_none,
-                      title: 'No alerts yet',
-                      message:
-                          'Add a crop and a distance. We will ping you when it becomes Available Now.',
-                    )
-                  else
-                    for (final rule in _rules) ...[
-                      PremiumCard(
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppColors.successSoft,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.eco,
-                                color: AppColors.primaryGreen,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    rule.crop,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Within ${rule.radiusKm.toStringAsFixed(0)} km',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: rule.enabled && _notificationsOn,
-                              activeThumbColor: AppColors.primaryGreen,
-                              onChanged: !_notificationsOn
-                                  ? null
-                                  : (v) => setState(() => rule.enabled = v),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                ],
+          ),
+          if (_settings!.crops.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Choose crops to start receiving alerts.',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
               ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final crop in _settings!.crops)
+                  InputChip(
+                    label: Text(crop),
+                    onDeleted: !editable
+                        ? null
+                        : () => setState(
+                            () => _settings = _settings!.copyWith(
+                              crops: _settings!.crops
+                                  .where((c) => c != crop)
+                                  .toList(),
+                            ),
+                          ),
+                  ),
+              ],
             ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: FarmSpotButton(
-                  label: 'Add alert',
-                  onPressed: _addAlert,
-                  trailingIcon: Icons.add,
-                ),
-              ),
-            ),
-          ],
-        ),
+          OutlinedButton.icon(
+            onPressed: editable ? _chooseCrops : null,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Choose crops'),
+          ),
+          const Text(
+            'All farms. No distance limit. Saving a farm is optional.',
+            style: TextStyle(fontSize: 12, color: AppColors.infoSage),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _settingsCard({required Widget child}) => PremiumCard(
+    child: Material(color: Colors.transparent, child: child),
+  );
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.white,
+    body: SafeArea(
+      child: Column(
+        children: [
+          const PremiumScreenHeader(
+            title: 'Alert settings',
+            subtitle: 'Choose what appears in your notifications',
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!, textAlign: TextAlign.center),
+                        TextButton(
+                          onPressed: _load,
+                          child: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  )
+                : ValueListenableBuilder<bool>(
+                    valueListenable: isPremium,
+                    builder: (context, premium, _) => ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _settingsCard(
+                          child: SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Business alerts',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: const Text(
+                              'Pause or enable the alerts below. Other account notifications are unaffected.',
+                            ),
+                            value: _settings!.enabled,
+                            onChanged: _saving
+                                ? null
+                                : (v) => setState(
+                                    () => _settings = _settings!.copyWith(
+                                      enabled: v,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _cropAlertsCard(premium),
+                        const SizedBox(height: 12),
+                        _settingsCard(
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Saved farm updates'),
+                                subtitle: Text(
+                                  premium
+                                      ? 'New listings and crops becoming Available Now from farms you save.'
+                                      : 'Requires premium. Your preference is kept for when you subscribe.',
+                                ),
+                                value: _settings!.savedFarms,
+                                onChanged:
+                                    _saving || !_settings!.enabled || !premium
+                                    ? null
+                                    : (v) => setState(
+                                        () => _settings = _settings!.copyWith(
+                                          savedFarms: v,
+                                        ),
+                                      ),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Matching buy requests'),
+                                subtitle: Text(
+                                  SessionState.instance.isSeller
+                                      ? 'Buyers requesting crops in your available or upcoming listings.'
+                                      : 'For sellers: buyers requesting crops in your available or upcoming listings.',
+                                ),
+                                value: _settings!.buyRequests,
+                                onChanged: _saving || !_settings!.enabled
+                                    ? null
+                                    : (v) => setState(
+                                        () => _settings = _settings!.copyWith(
+                                          buyRequests: v,
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Tap Save settings to apply your crop choices and switches. Alerts appear in Notifications for future updates; existing listings do not create past alerts.',
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          if (!_loading && _error == null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? 'Saving...' : 'Save settings'),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
 }

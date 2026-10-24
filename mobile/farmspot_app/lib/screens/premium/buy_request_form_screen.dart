@@ -289,7 +289,7 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
                 const PremiumCard(
                   background: AppColors.successSoft,
                   child: Text(
-                    'Your request stays posted until you remove it. Sellers can message you to discuss supply, price, and pickup. There is no expiry or distance limit.',
+                    'Your request stays saved until you remove it and is visible to sellers while Premium is active. If your plan expires, it is hidden until you renew. Existing conversations continue. There is no distance limit.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.4,

@@ -72,6 +72,8 @@ Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
 Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::get('/premium/alert-settings', [\App\Http\Controllers\Api\PremiumAlertSettingsController::class, 'show']);
+    Route::put('/premium/alert-settings', [\App\Http\Controllers\Api\PremiumAlertSettingsController::class, 'update']);
     Route::get('/sourcing/list', [\App\Http\Controllers\Api\SourcingController::class, 'show']);
     Route::put('/sourcing/list', [\App\Http\Controllers\Api\SourcingController::class, 'update']);
     Route::post('/sourcing/matches', [\App\Http\Controllers\Api\SourcingController::class, 'matches'])->middleware('throttle:30,1');

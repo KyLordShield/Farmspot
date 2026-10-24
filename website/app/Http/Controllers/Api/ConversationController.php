@@ -34,6 +34,7 @@ class ConversationController extends Controller
             abort_unless($owner->USR_STATUS === 'ACTIVE', 403, 'This buyer is no longer active.');
             $existing = Conversation::where('BRQ_ID', $id)->where('FMR_ID', $seller->FMR_ID)->first();
             if ($existing) return [$existing, false];
+            abort_unless($owner->USR_IS_PREMIUM, 404, 'This request is hidden while the buyer’s Premium is inactive.');
             do { $conversationId = strtoupper(Str::random(6)); } while (Conversation::whereKey($conversationId)->exists());
             return [Conversation::create([
                 'CONV_ID' => $conversationId, 'BRQ_ID' => $id,

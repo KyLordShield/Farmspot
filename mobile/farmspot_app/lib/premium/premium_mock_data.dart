@@ -102,34 +102,6 @@ class MockFarmerResponse {
   });
 }
 
-class MockBackupAlert {
-  final String id;
-  final String outOfStockFarm;
-  final String crop;
-  final String whenLabel;
-  final List<MockBackupFarm> backups;
-
-  const MockBackupAlert({
-    required this.id,
-    required this.outOfStockFarm,
-    required this.crop,
-    required this.whenLabel,
-    required this.backups,
-  });
-}
-
-class MockBackupFarm {
-  final String name;
-  final double distanceKm;
-  final String phone;
-
-  const MockBackupFarm({
-    required this.name,
-    required this.distanceKm,
-    required this.phone,
-  });
-}
-
 class MockBuyerRequestCard {
   final String id;
   final String businessName;
@@ -275,50 +247,6 @@ const List<MockFarmerResponse> mockResponsesForPechay = [
     farmName: 'Green Ridge Plot',
     distanceKm: 5.2,
     note: 'Happy to set aside pechay for you.',
-  ),
-];
-
-const List<MockBackupAlert> mockBackupAlerts = [
-  MockBackupAlert(
-    id: 'b1',
-    outOfStockFarm: 'Maraag Farm',
-    crop: 'Pechay',
-    whenLabel: 'Today, 8:12 AM',
-    backups: [
-      MockBackupFarm(
-        name: 'Upper Farm',
-        distanceKm: 6.8,
-        phone: '0917-555-0101',
-      ),
-      MockBackupFarm(
-        name: 'Sitio Hills Garden',
-        distanceKm: 7.5,
-        phone: '0918-555-0202',
-      ),
-      MockBackupFarm(
-        name: 'Sudlon Fresh Patch',
-        distanceKm: 9.1,
-        phone: '0920-555-0303',
-      ),
-    ],
-  ),
-  MockBackupAlert(
-    id: 'b2',
-    outOfStockFarm: 'Lumad Farm',
-    crop: 'Tomato',
-    whenLabel: 'Yesterday, 4:40 PM',
-    backups: [
-      MockBackupFarm(
-        name: 'Maraag Farm',
-        distanceKm: 2.4,
-        phone: '0917-555-0404',
-      ),
-      MockBackupFarm(
-        name: 'Valley Side Crops',
-        distanceKm: 5.9,
-        phone: '0919-555-0505',
-      ),
-    ],
   ),
 ];
 

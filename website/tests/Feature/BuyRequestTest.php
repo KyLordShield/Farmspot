@@ -49,6 +49,23 @@ class BuyRequestTest extends TestCase
             ->assertCreated()->assertJsonPath('request.quantity_kg', 15.5)->json('request.id');
     }
 
+    public function test_buyer_badge_uses_current_server_premium_and_expires_without_deleting_request(): void
+    {
+        $owner = $this->user(true);
+        $id = $this->postRequest($owner, ['is_premium' => true]);
+        $seller = $this->seller();
+        Sanctum::actingAs($seller);
+        $this->getJson('/api/buy-requests')->assertOk()->assertJsonPath('requests.0.buyer.is_premium', true);
+        $owner->forceFill(['USR_PREMIUM_EXPIRES_AT' => now()->subMinute()])->save();
+        $this->getJson('/api/buy-requests')->assertOk()->assertJsonCount(0, 'requests');
+        $this->postJson('/api/buy-requests/'.$id.'/conversation')->assertNotFound();
+        Sanctum::actingAs($owner->fresh());
+        $this->getJson('/api/buy-requests/mine')->assertOk()->assertJsonPath('requests.0.id', $id);
+        $owner->forceFill(['USR_PREMIUM_EXPIRES_AT' => now()->addMonth()])->save();
+        Sanctum::actingAs($seller);
+        $this->getJson('/api/buy-requests')->assertOk()->assertJsonPath('requests.0.id', $id)->assertJsonPath('requests.0.buyer.is_premium', true);
+    }
+
     public function test_only_premium_accounts_can_post_but_requests_have_no_expiry(): void
     {
         Sanctum::actingAs($this->user());
@@ -61,10 +78,27 @@ class BuyRequestTest extends TestCase
         Sanctum::actingAs($owner->fresh());
         $this->getJson('/api/buy-requests/mine')->assertOk()->assertJsonCount(1, 'requests');
         Sanctum::actingAs($this->seller());
-        $this->getJson('/api/buy-requests')->assertOk()->assertJsonPath('requests.0.id', $id);
+        $this->getJson('/api/buy-requests')->assertOk()->assertJsonCount(0, 'requests');
         Sanctum::actingAs($owner->fresh());
         $this->deleteJson('/api/buy-requests/'.$id)->assertOk();
         $this->travelBack();
+    }
+
+    public function test_expiry_preserves_existing_conversations_and_blocks_new_contacts(): void
+    {
+        $owner = $this->user(true);
+        $id = $this->postRequest($owner);
+        $seller = $this->seller();
+        Sanctum::actingAs($seller);
+        $thread = $this->postJson('/api/buy-requests/'.$id.'/conversation')->assertCreated()->json('conversation.id');
+        $owner->forceFill(['USR_PREMIUM_EXPIRES_AT' => now()->subMinute()])->save();
+        $this->postJson('/api/buy-requests/'.$id.'/conversation')->assertOk()->assertJsonPath('conversation.id', $thread);
+        $this->postJson('/api/conversations/'.$thread.'/messages', ['content' => 'Following up after subscription expiry'])->assertCreated();
+        Sanctum::actingAs($this->seller());
+        $this->postJson('/api/buy-requests/'.$id.'/conversation')->assertNotFound();
+        Sanctum::actingAs($owner->fresh());
+        $this->getJson('/api/buy-requests/'.$id.'/conversations')->assertOk()->assertJsonPath('conversations.0.id', $thread);
+        $this->postJson('/api/conversations/'.$thread.'/messages', ['content' => 'Our discussion can continue'])->assertCreated();
     }
 
     public function test_free_seller_can_open_the_existing_chat_and_both_sides_can_message(): void

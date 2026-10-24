@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../screens/premium/alert_settings_screen.dart';
-import '../screens/premium/backup_alerts_screen.dart';
 import '../screens/premium/buy_request_form_screen.dart';
 import '../screens/premium/my_requests_screen.dart';
 import '../screens/premium/premium_upgrade_screen.dart';
@@ -30,10 +29,7 @@ Future<void> openSourcingList(BuildContext context) =>
     openPremiumOrUpgrade(context, const SourcingListScreen());
 
 Future<void> openAlertSettings(BuildContext context) =>
-    openPremiumOrUpgrade(context, const AlertSettingsScreen());
-
-Future<void> openBackupAlerts(BuildContext context) =>
-    openPremiumOrUpgrade(context, const BackupAlertsScreen());
+    pushPremiumScreen(context, const AlertSettingsScreen());
 
 Future<void> openUpgrade(BuildContext context) =>
     pushPremiumScreen(context, const PremiumUpgradeScreen());

@@ -37,29 +37,7 @@ class SourcingController extends Controller
 
     private function catalog(): array
     {
-        $catalog = config('buy_request_crops');
-        $catalog['Hyacinth Beans'] = ['bataw'];
-        $catalog['Chayote'] = ['sayote'];
-        $catalog['Green Beans'] = ['baguio beans'];
-        $catalog['Beans'] = [];
-        $catalog['Chili Pepper'] = array_merge($catalog['Chili Pepper'], ['sili spada', 'chili']);
-        // Keep real listings outside the starter catalog discoverable too.
-        $known = [];
-        foreach ($catalog as $name => $aliases) {
-            foreach ([$name, ...$aliases] as $alias) {
-                $known[$this->normalize($alias)] = $name;
-            }
-        }
-        foreach ($this->activeListings()->get() as $listing) {
-            $name = trim((string) ($listing->LST_CROP_ICON ?: $listing->category?->CAT_NAME));
-            if ($name !== '' && ! isset($known[$this->normalize($name)])) {
-                $catalog[$name] = [];
-                $known[$this->normalize($name)] = $name;
-            }
-        }
-        ksort($catalog, SORT_NATURAL | SORT_FLAG_CASE);
-
-        return $catalog;
+        return app(\App\Services\CropCatalog::class)->all();
     }
 
     public function show(Request $request)

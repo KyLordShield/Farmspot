@@ -18,18 +18,13 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
   static const _features = [
     (
       Icons.bolt_outlined,
-      'Early alerts',
-      'Know first when a crop is Available Now nearby.',
+      'Crop and saved farm alerts',
+      'Choose crops and get notified when any farm has them available.',
     ),
     (
       Icons.campaign_outlined,
       'Buy Requests',
       'Tell nearby farms what you need in one shout.',
-    ),
-    (
-      Icons.swap_horiz,
-      'Backup Supplier Alerts',
-      'When a saved farm runs out, see who still has it.',
     ),
     (
       Icons.route_outlined,
@@ -38,9 +33,9 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
     ),
     (Icons.favorite_border, 'Saved Farms', 'Keep trusted farms one tap away.'),
     (
-      Icons.verified_outlined,
-      'Verified Business badge',
-      'Show farmers you are a real buyer.',
+      Icons.workspace_premium_outlined,
+      'Premium member badge',
+      'Show your active Premium membership on your profile and buy requests.',
     ),
   ];
 
@@ -169,7 +164,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Buy requests, Saved Farms, and Weekly Sourcing are available. Alerts and business verification are still previews.',
+                  'Buy requests, Saved Farms, and Weekly Sourcing are available. Crop and saved farm alerts are available in Notifications. Your Premium member badge appears automatically while your plan is active.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -296,7 +291,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Demo checkout only. Buy requests, Saved Farms, and Weekly Sourcing are available; alerts and business verification are previews.',
+                    'Demo checkout only. Buy requests, Saved Farms, and Weekly Sourcing are available; crop and saved farm alerts are available in Notifications; your Premium member badge appears automatically while your plan is active.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
@@ -376,10 +371,9 @@ class _ComparisonTable extends StatelessWidget {
     ('Basic insights', true, true),
     ('Saved Farms', false, true),
     ('Buy Requests', false, true),
-    ('Early Available Now alerts', false, true),
-    ('Backup Supplier Alerts', false, true),
+    ('Crop and saved farm alerts', false, true),
     ('Weekly Sourcing List', false, true),
-    ('Verified Business badge', false, true),
+    ('Premium member badge', false, true),
   ];
 
   @override

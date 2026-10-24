@@ -171,14 +171,14 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
         children: [
           const PremiumScreenHeader(
             title: 'My Buy Requests',
-            subtitle: 'Visible to all approved sellers until you remove them',
+            subtitle: 'Visible to approved sellers while Premium is active',
           ),
           const Padding(
             padding: EdgeInsets.all(16),
             child: PremiumCard(
               background: AppColors.successSoft,
               child: Text(
-                'Post what you need. Sellers can message you to discuss supply, price, and pickup. Requests have no expiry.',
+                'Requests stay saved until you remove them. If Premium expires, they are hidden from sellers and reappear when you renew. Existing messages remain available.',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.4,

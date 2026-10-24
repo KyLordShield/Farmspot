@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 /**
  * One row in the app's notification inbox.
@@ -78,6 +79,10 @@ class UserNotification extends Model
         'SELLER_REACTIVATED',
         'FARM_REJECTED',
         'LISTING_AVAILABLE',
+        'SAVED_FARM_NEW_LISTING',
+        'SAVED_FARM_AVAILABLE',
+        'BUY_REQUEST_MATCH',
+        'CROP_AVAILABLE',
     ];
 
     public function user()
@@ -95,7 +100,7 @@ class UserNotification extends Model
     public static function newId(): string
     {
         do {
-            $id = strtoupper(\Illuminate\Support\Str::random(6));
+            $id = strtoupper(Str::random(6));
         } while (self::where('NOTIF_ID', $id)->exists());
 
         return $id;
