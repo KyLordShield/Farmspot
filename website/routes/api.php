@@ -72,6 +72,9 @@ Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
 Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::get('/sourcing/list', [\App\Http\Controllers\Api\SourcingController::class, 'show']);
+    Route::put('/sourcing/list', [\App\Http\Controllers\Api\SourcingController::class, 'update']);
+    Route::post('/sourcing/matches', [\App\Http\Controllers\Api\SourcingController::class, 'matches'])->middleware('throttle:30,1');
     Route::get('/saved-farms', [\App\Http\Controllers\Api\SavedFarmController::class, 'index']);
     Route::put('/saved-farms/{farmId}', [\App\Http\Controllers\Api\SavedFarmController::class, 'store'])->middleware('throttle:30,1');
     Route::delete('/saved-farms/{farmId}', [\App\Http\Controllers\Api\SavedFarmController::class, 'destroy']);

@@ -169,7 +169,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Buy requests and Saved Farms are available. Alerts, sourcing, and business verification are still previews.',
+                  'Buy requests, Saved Farms, and Weekly Sourcing are available. Alerts and business verification are still previews.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -296,7 +296,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Demo checkout only. Buy requests and Saved Farms are available; alerts, sourcing, and business verification are previews.',
+                    'Demo checkout only. Buy requests, Saved Farms, and Weekly Sourcing are available; alerts and business verification are previews.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
@@ -378,7 +378,7 @@ class _ComparisonTable extends StatelessWidget {
     ('Buy Requests', false, true),
     ('Early Available Now alerts', false, true),
     ('Backup Supplier Alerts', false, true),
-    ('Weekly Sourcing Trip', false, true),
+    ('Weekly Sourcing List', false, true),
     ('Verified Business badge', false, true),
   ];
 

@@ -813,7 +813,7 @@ class BusinessToolsQuickCard extends StatelessWidget {
     final actions = [
       (Icons.campaign_outlined, 'Buy Request', onBuyRequest),
       (Icons.favorite_border, 'Saved Farms', onSavedFarms),
-      (Icons.route_outlined, 'Sourcing Trip', onSourcingTrip),
+      (Icons.route_outlined, 'Sourcing List', onSourcingTrip),
       (Icons.notifications_active_outlined, 'Alerts', onAlerts),
     ];
 
