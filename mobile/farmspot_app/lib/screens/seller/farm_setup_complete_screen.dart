@@ -9,13 +9,7 @@ import '../home_screen.dart';
 class FarmSetupCompleteScreen extends StatelessWidget {
   final FarmSetupData farmSetupData;
   final String frmStatus;
-
-  /// FRM_ID of the farm just created. Passed through to the first-crop flow so
-  /// AddCropScreen can list against the REAL farm instead of guessing one.
   final String? farmId;
-
-  /// True when this is a second or later farm, which reused the documents
-  /// already on file from the seller's first farm.
   final bool isAdditionalFarm;
 
   const FarmSetupCompleteScreen({
@@ -28,174 +22,180 @@ class FarmSetupCompleteScreen extends StatelessWidget {
 
   bool get _isPending => frmStatus == 'PENDING_REVIEW';
 
+  String get _location {
+    final address = farmSetupData.locationAddress?.trim() ?? '';
+    if (address.isNotEmpty) return address;
+    final barangay = farmSetupData.barangay.trim();
+    return barangay.isNotEmpty ? barangay : 'Map pin saved';
+  }
+
+  String get _verificationSummary {
+    final count =
+        (farmSetupData.verificationDocument != null ? 1 : 0) +
+        (farmSetupData.farmCertificate != null ? 1 : 0);
+    if (count == 2) return '2 documents provided';
+    if (count == 1) return '1 document provided';
+    return isAdditionalFarm
+        ? 'Reused from your first farm'
+        : 'No documents provided';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primaryGreen,
+      backgroundColor: AppColors.searchBackground,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: IntrinsicHeight(
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 12),
-                      Text(
-                        _isPending
-                            ? 'Farm Submitted for Review'
-                            : 'Farm is Set Up!',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        color: AppColors.successSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: AppColors.primaryGreen,
+                        size: 42,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    _isPending
+                        ? 'Thanks for submitting!'
+                        : 'Your farm is set up!',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.darkGreen,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _isPending
+                        ? 'We received your farm application. Our team will review your details and documents.'
+                        : 'Your farm is ready. Start sharing what you grow with nearby buyers.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: Color(0xFF59645B),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSummaryCard(),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          _isPending
+                              ? Icons.notifications_outlined
+                              : Icons.eco_outlined,
+                          color: AppColors.primaryGreen,
+                          size: 24,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _isPending
-                            ? 'Your application is now with our team'
-                            : 'One last thing before you go live',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _buildSummaryCard(),
-                      const Spacer(),
-                      const Center(
-                        child: Icon(Icons.eco, color: Colors.white, size: 56),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        _isPending
-                            ? 'Thanks for\nsubmitting!'
-                            : isAdditionalFarm
-                                ? 'Do you have crops\nready to sell here?'
-                                : 'Do you have crops\nready to sell?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _isPending
-                            ? "Your farm has been submitted for review. You'll be "
-                                'notified once approved. You cannot list crops until then.'
-                            : isAdditionalFarm
-                                ? 'List what this farm is harvesting. Your other farms and their '
-                                    'listings are untouched.'
-                                : 'If you have harvest available now or coming soon, you can add your first listing. '
-                                    'If not, no problem — you can add crops anytime from My Farm.',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (_isPending)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const ProfileScreen(),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _isPending
+                                    ? 'What happens next?'
+                                    : 'Have crops ready to sell?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.darkGreen,
+                                  fontSize: 14,
                                 ),
-                                (route) => false,
-                              );
-                            },
-                            icon: const Icon(Icons.person_outline),
-                            label: const Text(
-                              'Back to My Profile',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primaryGreen,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
                               ),
-                            ),
-                          ),
-                        )
-                      else ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => AddCropScreen(
-                                    isFirstCrop: true,
-                                    farmId: farmId,
-                                  ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _isPending
+                                    ? "We'll notify you once your farm is approved. You can start listing crops after approval."
+                                    : 'Add your first crop now, or come back anytime from My Farm.',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  height: 1.5,
+                                  color: Color(0xFF59645B),
                                 ),
-                              );
-                            },
-                            icon: const Icon(Icons.add_circle_outline),
-                            label: Text(
-                              isAdditionalFarm
-                                  ? 'Yes, add a crop now'
-                                  : 'Yes, add my first crop now',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primaryGreen,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const HomeScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.fast_forward,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            label: const Text(
-                              // This button goes Home, not to My Farm, so it
-                              // should not claim otherwise.
-                              'Skip for now - go to Home',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white54),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
+                            ],
                           ),
                         ),
                       ],
-                      const SizedBox(height: 8),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 28),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primaryGreen,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(52),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      if (_isPending) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) => const ProfileScreen(),
+                          ),
+                          (route) => false,
+                        );
+                      } else {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AddCropScreen(
+                              isFirstCrop: true,
+                              farmId: farmId,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: Icon(
+                      _isPending ? Icons.person_outline : Icons.add_rounded,
+                    ),
+                    label: Text(
+                      _isPending ? 'Back to My Profile' : 'Add a crop',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  if (!_isPending) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        (route) => false,
+                      ),
+                      child: const Text('Skip for now - go to Home'),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -204,60 +204,65 @@ class FarmSetupCompleteScreen extends StatelessWidget {
     );
   }
 
-  /// What the Verification row should say. On a second or later farm the
-  /// documents were inherited from the first one, so "None" would be a
-  /// misleading way to describe it.
-  String get _verificationSummary {
-    final hasBoth = farmSetupData.verificationDocument != null &&
-        farmSetupData.farmCertificate != null;
-    final hasSome = farmSetupData.verificationDocument != null ||
-        farmSetupData.farmCertificate != null;
-
-    if (hasBoth) return '2 documents provided';
-    if (hasSome) return 'Partial documents';
-    return isAdditionalFarm ? 'Reused from your first farm' : 'None';
-  }
-
-  Widget _buildSummaryCard() {    final location = farmSetupData.latitude != null &&
-            farmSetupData.longitude != null
-        ? '${farmSetupData.latitude!.toStringAsFixed(6)}, '
-            '${farmSetupData.longitude!.toStringAsFixed(6)}'
-        : '—';
+  Widget _buildSummaryCard() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE1E8DF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'FARM SUMMARY',
+            'Farm summary',
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-              color: Colors.black54,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.darkGreen,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _isPending
+                    ? AppColors.warningSoft
+                    : AppColors.successSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _isPending ? 'Pending review' : 'Ready to list crops',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _isPending
+                      ? AppColors.warningAmber
+                      : AppColors.primaryGreen,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFEDF0EB)),
           _summaryRow(
-            'Farm',
-            farmSetupData.name.isEmpty
-                ? '—'
-                : farmSetupData.name,
+            Icons.agriculture_outlined,
+            'Farm name',
+            farmSetupData.name.trim().isEmpty
+                ? 'Your farm'
+                : farmSetupData.name.trim(),
+          ),
+          _summaryRow(Icons.location_on_outlined, 'Location', _location),
+          _summaryRow(
+            Icons.photo_library_outlined,
+            'Farm photos',
+            '${farmSetupData.photos.length} ${farmSetupData.photos.length == 1 ? 'photo' : 'photos'} added',
           ),
           _summaryRow(
-            'Barangay',
-            farmSetupData.barangay.isEmpty
-                ? '—'
-                : farmSetupData.barangay,
-          ),
-          _summaryRow('Location', location),
-          _summaryRow('Photos', '${farmSetupData.photos.length}'),
-          _summaryRow(
+            Icons.verified_user_outlined,
             'Verification',
             _verificationSummary,
           ),
@@ -266,27 +271,36 @@ class FarmSetupCompleteScreen extends StatelessWidget {
     );
   }
 
-  Widget _summaryRow(String label, String value) {
+  Widget _summaryRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.only(top: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 84,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.black54,
-              ),
-            ),
-          ),
+          Icon(icon, size: 21, color: AppColors.mutedGreen),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF69746B),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF253D2A),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

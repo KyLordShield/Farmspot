@@ -67,6 +67,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   /// Human-readable address of the current pin (best-effort). When null, the
   /// screen shows the raw coordinates instead — the farmer can always continue.
   String? _address;
+  LatLng? _addressPosition;
   bool _isReverseGeocoding = false;
   Timer? _reverseDebounceTimer;
 
@@ -78,8 +79,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   @override
   void initState() {
     super.initState();
-    _geocodingService =
-        widget.geocodingService ?? GeocodingService();
+    _geocodingService = widget.geocodingService ?? GeocodingService();
     _initFromGps();
   }
 
@@ -100,7 +100,8 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _gpsFailed(
-            'Location services are off. Showing a default area — tap the map to set your farm.');
+          'Location services are off. Showing a default area — tap the map to set your farm.',
+        );
         return;
       }
 
@@ -111,13 +112,15 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
 
       if (permission == LocationPermission.denied) {
         _gpsFailed(
-            'Location permission denied. Showing a default area — tap the map to set your farm.');
+          'Location permission denied. Showing a default area — tap the map to set your farm.',
+        );
         return;
       }
 
       if (permission == LocationPermission.deniedForever) {
         _gpsFailed(
-            'Location permission is permanently denied. Enable it in Settings, or tap the map to set your farm.');
+          'Location permission is permanently denied. Enable it in Settings, or tap the map to set your farm.',
+        );
         return;
       }
 
@@ -137,7 +140,8 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       _scheduleReverseGeocode();
     } catch (_) {
       _gpsFailed(
-          'Could not get your GPS location. Showing a default area — tap the map to set your farm.');
+        'Could not get your GPS location. Showing a default area — tap the map to set your farm.',
+      );
     }
   }
 
@@ -192,7 +196,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
 
   void _reverseGeocode() async {
     final point = _markerPosition;
-    if (_isReverseGeocoding) return;
+
     setState(() => _isReverseGeocoding = true);
 
     // Best-effort: any failure leaves _address null and the screen falls back
@@ -202,6 +206,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
     if (!mounted || point != _markerPosition) return;
     setState(() {
       _address = address;
+      _addressPosition = point;
       _isReverseGeocoding = false;
     });
   }
@@ -239,7 +244,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       setState(() {
         _searchError =
             'No results for "$query". Try a different barangay or area name, '
-                'or place the pin by tapping the map.';
+            'or place the pin by tapping the map.';
       });
       return;
     }
@@ -293,6 +298,9 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    widget.farmSetupData.locationAddress = _addressPosition == _markerPosition
+        ? _address
+        : null;
     widget.farmSetupData.latitude = _markerPosition.latitude;
     widget.farmSetupData.longitude = _markerPosition.longitude;
 
@@ -362,7 +370,8 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
           children: [
             const SetupHeader(
               title: 'Pin Your Farm',
-              subtitle: 'Search, tap the map, or drag the pin to set the location',
+              subtitle:
+                  'Search, tap the map, or drag the pin to set the location',
             ),
             StepProgress(
               // Additional farms come straight here, having skipped the
@@ -444,8 +453,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                                     vertical: 8,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(
-                                        alpha: 0.94),
+                                    color: Colors.white.withValues(alpha: 0.94),
                                     borderRadius: BorderRadius.circular(10),
                                     boxShadow: const [
                                       BoxShadow(
@@ -484,8 +492,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                               right: 10,
                               top: 10,
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.stretch,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   _buildSearchField(),
                                   if (_searchError != null)
@@ -637,9 +644,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      widget.isAdditionalFarm
-                          ? 'Step 2 of 2'
-                          : 'Step 3 of 3',
+                      widget.isAdditionalFarm ? 'Step 2 of 2' : 'Step 3 of 3',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 11,
@@ -740,7 +745,9 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
               onTap: () => _selectSearchResult(place),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     const Icon(

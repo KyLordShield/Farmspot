@@ -5,6 +5,7 @@ class FarmSetupData {
   String name = '';
   String description = '';
   String barangay = '';
+  String? locationAddress;
   double? latitude;
   double? longitude;
   List<XFile> photos = [];
