@@ -158,6 +158,8 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                     title: 'Government ID',
                     subtitle: _idSubtitle,
                     buttonLabel: hasId ? 'Change' : 'Upload',
+                    isUploaded: hasId,
+                    previewFile: _idDocument,
                     onTap: () => _pickDocument(
                       (f) => widget.farmSetupData.verificationDocument = f,
                     ),
@@ -173,6 +175,8 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                     title: 'Farm Certificate/Permit',
                     subtitle: _certificateSubtitle,
                     buttonLabel: hasCert ? 'Change' : 'Upload',
+                    isUploaded: hasCert,
+                    previewFile: _certificateDocument,
                     onTap: () => _pickDocument(
                       (f) => widget.farmSetupData.farmCertificate = f,
                     ),

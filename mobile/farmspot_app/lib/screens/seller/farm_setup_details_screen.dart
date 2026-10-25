@@ -196,6 +196,7 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                       children: [
                         for (int i = 0; i < photos.length; i++) ...[
                           _PhotoThumb(
+                            key: ObjectKey(photos[i]),
                             file: photos[i],
                             onRemove: () => _removePhoto(i),
                           ),
@@ -273,14 +274,24 @@ class _PhotoThumb extends StatefulWidget {
   final XFile file;
   final VoidCallback onRemove;
 
-  const _PhotoThumb({required this.file, required this.onRemove});
+  const _PhotoThumb({super.key, required this.file, required this.onRemove});
 
   @override
   State<_PhotoThumb> createState() => _PhotoThumbState();
 }
 
 class _PhotoThumbState extends State<_PhotoThumb> {
-  late final Future<Uint8List> _bytes = widget.file.readAsBytes();
+  late Future<Uint8List> _bytes = widget.file.readAsBytes();
+
+  @override
+  void didUpdateWidget(covariant _PhotoThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Removing a photo shifts the remaining ones, so re-read whenever this
+    // tile is reused for a different file.
+    if (!identical(widget.file, oldWidget.file)) {
+      _bytes = widget.file.readAsBytes();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

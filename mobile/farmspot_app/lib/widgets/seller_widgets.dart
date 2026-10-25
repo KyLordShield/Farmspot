@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../models/listing.dart';
 import '../theme.dart';
 import 'rating_stars.dart';
@@ -167,12 +171,22 @@ class FieldLabel extends StatelessWidget {
 }
 
 /// Dashed-border upload box used for ID / farm certificate uploads.
+///
+/// Once [isUploaded] is true the box switches to a solid green border, tints
+/// its background, shows a preview thumbnail with a check badge and an
+/// "Uploaded" pill, so it is obvious at a glance that the file is attached.
 class UploadBox extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final String buttonLabel;
   final VoidCallback onTap;
+
+  /// When true the box renders its "file attached" state.
+  final bool isUploaded;
+
+  /// Optional picked image shown as a thumbnail in the uploaded state.
+  final XFile? previewFile;
 
   const UploadBox({
     super.key,
@@ -181,62 +195,339 @@ class UploadBox extends StatelessWidget {
     required this.subtitle,
     required this.buttonLabel,
     required this.onTap,
+    this.isUploaded = false,
+    this.previewFile,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _DashedBorderPainter(color: Colors.grey.shade400),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.fieldBackground,
-                borderRadius: BorderRadius.circular(8),
+    final content = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: isUploaded
+          ? BoxDecoration(
+              color: AppColors.successSoft,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.primaryGreen,
+                width: 1.5,
               ),
-              child: Icon(icon, color: AppColors.primaryGreen),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+            )
+          : null,
+      child: Row(
+        children: [
+          _buildLeading(context),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
+                    if (isUploaded) const _UploadedPill(),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                if (isUploaded)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        size: 13,
+                        color: AppColors.primaryGreen,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
                   Text(
                     subtitle,
                     style: const TextStyle(fontSize: 11, color: Colors.black45),
                   ),
+                if (isUploaded && previewFile != null) ...[
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Tap the image to preview',
+                    style: TextStyle(fontSize: 10, color: AppColors.mutedGreen),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          OutlinedButton(
+            onPressed: onTap,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primaryGreen,
+              backgroundColor: isUploaded ? Colors.white : null,
+              side: const BorderSide(color: AppColors.primaryGreen),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+
+    if (isUploaded) return content;
+
+    return CustomPaint(
+      painter: _DashedBorderPainter(color: Colors.grey.shade400),
+      child: content,
+    );
+  }
+
+  Widget _buildLeading(BuildContext context) {
+    final box = Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: isUploaded ? Colors.white : AppColors.fieldBackground,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: AppColors.primaryGreen),
+    );
+
+    if (!isUploaded) return box;
+
+    final file = previewFile;
+    final leading = SizedBox(
+      width: 44,
+      height: 44,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              // ObjectKey forces a fresh state when a different file replaces
+              // the current one, so "Change" always re-reads the new image.
+              child: file != null
+                  ? _DocumentThumbnail(key: ObjectKey(file), file: file)
+                  : box,
+            ),
+          ),
+          Positioned(
+            right: -3,
+            bottom: -3,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: const Icon(Icons.check, size: 11, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (file == null) return leading;
+
+    return GestureDetector(
+      key: const ValueKey('uploadPreviewThumbnail'),
+      onTap: () => _showPreview(context, file),
+      child: leading,
+    );
+  }
+
+  void _showPreview(BuildContext context, XFile file) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => _DocumentPreviewDialog(file: file),
+    );
+  }
+}
+
+/// Full-screen, pinch-to-zoom preview of an uploaded document image.
+class _DocumentPreviewDialog extends StatelessWidget {
+  final XFile file;
+
+  const _DocumentPreviewDialog({required this.file});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      file.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
                 ],
               ),
-            ),
-            OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryGreen,
-                side: const BorderSide(color: AppColors.primaryGreen),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+              Flexible(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 4,
+                    child: FutureBuilder<Uint8List>(
+                      future: file.readAsBytes(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Image.memory(
+                            snapshot.data!,
+                            fit: BoxFit.contain,
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Text(
+                              'Could not open this image.',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          );
+                        }
+                        return const Padding(
+                          padding: EdgeInsets.all(48),
+                          child:
+                              CircularProgressIndicator(color: Colors.white),
+                        );
+                      },
+                    ),
+                  ),
                 ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
-            ),
-          ],
+              const SizedBox(height: 12),
+              const Text(
+                'Pinch to zoom · tap outside to close',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _UploadedPill extends StatelessWidget {
+  const _UploadedPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primaryGreen,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check, size: 10, color: Colors.white),
+          SizedBox(width: 3),
+          Text(
+            'Uploaded',
+            style: TextStyle(
+              fontSize: 9.5,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reads and displays the picked document image at thumbnail size.
+class _DocumentThumbnail extends StatefulWidget {
+  final XFile file;
+
+  const _DocumentThumbnail({super.key, required this.file});
+
+  @override
+  State<_DocumentThumbnail> createState() => _DocumentThumbnailState();
+}
+
+class _DocumentThumbnailState extends State<_DocumentThumbnail> {
+  late Future<Uint8List> _bytes = widget.file.readAsBytes();
+
+  @override
+  void didUpdateWidget(covariant _DocumentThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-picking a document must replace the old preview, not keep it.
+    if (!identical(widget.file, oldWidget.file)) {
+      _bytes = widget.file.readAsBytes();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _bytes,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return Image.memory(
+            snapshot.data!,
+            cacheWidth: 150,
+            fit: BoxFit.cover,
+          );
+        }
+        return Container(
+          color: Colors.white,
+          child: const Center(
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        );
+      },
     );
   }
 }

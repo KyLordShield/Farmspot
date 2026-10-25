@@ -58,6 +58,28 @@ void main() {
     expect(find.text('(optional)'), findsNothing);
   });
 
+  testWidgets('uploaded documents show a clear "Uploaded" indicator',
+      (tester) async {
+    final data = FarmSetupData()
+      ..verificationDocument = XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'id.jpg',
+      )
+      ..farmCertificate = XFile.fromData(
+        Uint8List.fromList([4, 5, 6]),
+        name: 'cert.jpg',
+      );
+
+    await _pumpVerifyScreen(tester, data);
+
+    expect(find.text('Uploaded'), findsNWidgets(2),
+        reason: 'each attached document must show the uploaded pill');
+    expect(find.byIcon(Icons.check_circle), findsNWidgets(2),
+        reason: 'the subtitle carries a green check as a second cue');
+    expect(find.text('Change'), findsNWidgets(2));
+    expect(find.text('Upload'), findsNothing);
+  });
+
   testWidgets('Next is blocked until BOTH documents are uploaded',
       (tester) async {
     final data = FarmSetupData();
