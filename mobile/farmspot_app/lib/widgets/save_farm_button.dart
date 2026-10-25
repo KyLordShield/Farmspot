@@ -1,3 +1,4 @@
+import 'lottie_loader.dart';
 import 'package:flutter/material.dart';
 import '../premium/premium_nav.dart';
 import '../premium/premium_state.dart';
@@ -47,7 +48,13 @@ class _SaveFarmButtonState extends State<SaveFarmButton> {
       if (!mounted || !isPremium.value) return;
     }
     try {
-      final saved = await _saved.toggle(widget.farmId);
+      final saved = await withFarmLottieLoading(
+        context,
+        () => _saved.toggle(widget.farmId),
+        message: _saved.isSaved(widget.farmId)
+            ? 'Removing saved farm...'
+            : 'Saving farm...',
+      );
       if (!mounted) return;
       _showMessage(
         saved ? 'Farm saved to Saved Farms.' : 'Farm removed from Saved Farms.',

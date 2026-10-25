@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,7 +71,11 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
     if (_opening.contains(request.id)) return;
     setState(() => _opening.add(request.id));
     try {
-      final thread = await _api.contactBuyer(request.id);
+      final thread = await withFarmLottieLoading(
+        context,
+        () => _api.contactBuyer(request.id),
+        message: 'Opening conversation...',
+      );
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -296,7 +301,11 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: FarmLottieLoading(
+                      message: 'Loading buyer requests...',
+                    ),
+                  )
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView(

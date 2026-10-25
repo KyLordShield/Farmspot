@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../premium/premium_state.dart';
@@ -62,9 +63,19 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
     );
     if (confirmed != true || !mounted || _purchasing) return;
     setState(() => _purchasing = true);
-    final error = await AuthService.simulatePremiumPurchase();
+    String? error;
+    try {
+      error = await withFarmLottieLoading(
+        context,
+        AuthService.simulatePremiumPurchase,
+        message: 'Activating Premium...',
+      );
+    } catch (e) {
+      error = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => _purchasing = false);
+    }
     if (!context.mounted) return;
-    setState(() => _purchasing = false);
     if (error != null) {
       await showFarmAlert(
         context,

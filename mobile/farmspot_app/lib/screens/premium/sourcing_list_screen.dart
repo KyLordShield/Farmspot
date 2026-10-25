@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import '../../services/sourcing_service.dart';
 import '../../theme.dart';
@@ -56,7 +57,11 @@ class _SourcingListScreenState extends State<SourcingListScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await _gateway.saveList(_crops.toList()..sort());
+      await withFarmLottieLoading(
+        context,
+        () => _gateway.saveList(_crops.toList()..sort()),
+        message: 'Saving your weekly list...',
+      );
       if (!mounted) return;
       if (find) {
         pushPremiumScreen(context, SourcingTripScreen(gateway: _gateway));
@@ -130,7 +135,11 @@ class _SourcingListScreenState extends State<SourcingListScreen> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: FarmLottieLoading(
+                        message: 'Loading your weekly list...',
+                      ),
+                    )
                   : _error != null
                   ? Center(
                       child: Column(

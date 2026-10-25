@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'farmspot_loader.dart';
@@ -16,10 +17,34 @@ void showFarmLottieLoading(BuildContext context, {String? message}) {
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black45,
-    builder: (_) => Center(
-      child: FarmLottieLoading(message: message),
+    builder: (_) => Center(child: FarmLottieLoading(message: message)),
+  );
+}
+
+/// Runs one blocking action and removes only its own loading route, even if
+/// authentication or navigation replaces the surrounding screen in the meantime.
+Future<T> withFarmLottieLoading<T>(
+  BuildContext context,
+  Future<T> Function() action, {
+  required String message,
+}) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final route = DialogRoute<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black45,
+    builder: (_) => PopScope(
+      canPop: false,
+      child: Center(child: FarmLottieLoading(message: message)),
     ),
   );
+  unawaited(navigator.push(route));
+  try {
+    return await action();
+  } finally {
+    if (navigator.mounted && route.isActive) navigator.removeRoute(route);
+  }
 }
 
 /// Centered Lottie animation with a caption. If the animation asset is

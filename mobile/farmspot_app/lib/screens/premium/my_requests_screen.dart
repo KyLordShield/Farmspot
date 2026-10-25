@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'buy_request_pin_screen.dart';
@@ -87,7 +88,11 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _removing.add(request.id));
     try {
-      await _api.remove(request.id);
+      await withFarmLottieLoading(
+        context,
+        () => _api.remove(request.id),
+        message: 'Removing your request...',
+      );
       if (mounted)
         setState(() => _requests.removeWhere((r) => r.id == request.id));
     } catch (e) {
@@ -104,7 +109,11 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     if (_responsesLoading.contains(request.id)) return;
     setState(() => _responsesLoading.add(request.id));
     try {
-      final threads = await _api.fetchResponses(request.id);
+      final threads = await withFarmLottieLoading(
+        context,
+        () => _api.fetchResponses(request.id),
+        message: 'Loading seller responses...',
+      );
       if (!mounted) return;
       final selected = await showModalBottomSheet<Conversation>(
         context: context,
@@ -189,7 +198,11 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: FarmLottieLoading(
+                      message: 'Loading your requests...',
+                    ),
+                  )
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView(

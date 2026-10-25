@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/buy_request.dart';
@@ -96,14 +97,18 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
       _error = null;
     });
     try {
-      final row = await (widget.gateway ?? BuyRequestService.instance).create(
-        crop: _selectedCrop!,
-        quantityKg: quantity,
-        frequency: _frequency,
-        note: _note.text.trim(),
-        pickupLocation: _pickup.text.trim(),
-        latitude: _position?.latitude,
-        longitude: _position?.longitude,
+      final row = await withFarmLottieLoading(
+        context,
+        () => (widget.gateway ?? BuyRequestService.instance).create(
+          crop: _selectedCrop!,
+          quantityKg: quantity,
+          frequency: _frequency,
+          note: _note.text.trim(),
+          pickupLocation: _pickup.text.trim(),
+          latitude: _position?.latitude,
+          longitude: _position?.longitude,
+        ),
+        message: 'Posting your request...',
       );
       if (!mounted) return;
       Navigator.of(context).pop<BuyRequest>(row);
@@ -134,179 +139,196 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
             subtitle: 'Let all approved sellers discover what you need',
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              children: [
-                _label('What crop do you need?'),
-                TextField(
-                  controller: _crop,
-                  maxLength: 80,
-                  onChanged: (_) => setState(() {
-                    _selectedCrop = null;
-                    _error = null;
-                  }),
-                  decoration: const InputDecoration(
-                    hintText: 'Search a crop, e.g. cabbge',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const Text(
-                  'Choose the crop name below. Put business needs and other details in the note.',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-                if (_loadingCrops) const LinearProgressIndicator(),
-                if (_cropError != null)
-                  TextButton(onPressed: _loadCrops, child: Text(_cropError!)),
-                if (!_loadingCrops &&
-                    _cropError == null &&
-                    suggestCrops(_crop.text, _choices).isEmpty)
-                  const Text(
-                    'No matching crop. Try another spelling.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.errorTerracotta,
+            child: _loadingCrops
+                ? const Center(
+                    child: FarmLottieLoading(
+                      message: 'Loading crop choices...',
                     ),
-                  ),
-                Wrap(
-                  spacing: 6,
-                  children: [
-                    for (final choice in suggestCrops(_crop.text, _choices))
-                      ChoiceChip(
-                        label: Text(choice.name),
-                        selected: _selectedCrop == choice.name,
-                        onSelected: (_) => setState(() {
-                          _selectedCrop = choice.name;
-                          _crop.text = choice.name;
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    children: [
+                      _label('What crop do you need?'),
+                      TextField(
+                        controller: _crop,
+                        maxLength: 80,
+                        onChanged: (_) => setState(() {
+                          _selectedCrop = null;
                           _error = null;
                         }),
+                        decoration: const InputDecoration(
+                          hintText: 'Search a crop, e.g. cabbge',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                  ],
-                ),
-                if (_selectedCrop != null)
-                  Text(
-                    'Selected crop: $_selectedCrop',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.primaryGreen,
-                    ),
-                  ),
-                _label('Quantity (kg)'),
-                TextField(
-                  controller: _qty,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. 15',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                _label('How often?'),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final value in ['one-time', 'weekly'])
-                      ChoiceChip(
-                        label: Text(value == 'weekly' ? 'Weekly' : 'One-time'),
-                        selected: _frequency == value,
-                        onSelected: (_) => setState(() => _frequency = value),
+                      const Text(
+                        'Choose the crop name below. Put business needs and other details in the note.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
-                  ],
-                ),
-                _label('Pickup or delivery preference (optional)'),
-                TextField(
-                  controller: _pickup,
-                  maxLength: 255,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Can collect in Sudlon / delivery preferred',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const Text(
-                  'This is information for sellers, not a distance restriction.',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-                _label('Map pin (optional)'),
-                const Text(
-                  'Add a map pin only if you want sellers to see your exact location. Without a pin, sellers will see “No location shared”.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: Colors.black54,
-                  ),
-                ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _pickPin,
-                      icon: const Icon(
-                        Icons.add_location_alt_outlined,
-                        size: 18,
+                      if (_cropError != null)
+                        TextButton(
+                          onPressed: _loadCrops,
+                          child: Text(_cropError!),
+                        ),
+                      if (!_loadingCrops &&
+                          _cropError == null &&
+                          suggestCrops(_crop.text, _choices).isEmpty)
+                        const Text(
+                          'No matching crop. Try another spelling.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.errorTerracotta,
+                          ),
+                        ),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          for (final choice in suggestCrops(
+                            _crop.text,
+                            _choices,
+                          ))
+                            ChoiceChip(
+                              label: Text(choice.name),
+                              selected: _selectedCrop == choice.name,
+                              onSelected: (_) => setState(() {
+                                _selectedCrop = choice.name;
+                                _crop.text = choice.name;
+                                _error = null;
+                              }),
+                            ),
+                        ],
                       ),
-                      label: Text(
-                        _position == null
-                            ? 'Pin location on map'
-                            : 'Change map pin',
+                      if (_selectedCrop != null)
+                        Text(
+                          'Selected crop: $_selectedCrop',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      _label('Quantity (kg)'),
+                      TextField(
+                        controller: _qty,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. 15',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    if (_position != null)
-                      TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () => setState(() => _position = null),
-                        child: const Text('Remove pin'),
+                      _label('How often?'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final value in ['one-time', 'weekly'])
+                            ChoiceChip(
+                              label: Text(
+                                value == 'weekly' ? 'Weekly' : 'One-time',
+                              ),
+                              selected: _frequency == value,
+                              onSelected: (_) =>
+                                  setState(() => _frequency = value),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-                if (_position != null)
-                  const Text(
-                    'Map pin added. It will be shared when you post this request.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.primaryGreen,
-                    ),
+                      _label('Pickup or delivery preference (optional)'),
+                      TextField(
+                        controller: _pickup,
+                        maxLength: 255,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'e.g. Can collect in Sudlon / delivery preferred',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const Text(
+                        'This is information for sellers, not a distance restriction.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                      _label('Map pin (optional)'),
+                      const Text(
+                        'Add a map pin only if you want sellers to see your exact location. Without a pin, sellers will see “No location shared”.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _busy ? null : _pickPin,
+                            icon: const Icon(
+                              Icons.add_location_alt_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              _position == null
+                                  ? 'Pin location on map'
+                                  : 'Change map pin',
+                            ),
+                          ),
+                          if (_position != null)
+                            TextButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () => setState(() => _position = null),
+                              child: const Text('Remove pin'),
+                            ),
+                        ],
+                      ),
+                      if (_position != null)
+                        const Text(
+                          'Map pin added. It will be shared when you post this request.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Your profile phone number is shared with approved sellers so they can call using their phone app.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          height: 1.4,
+                        ),
+                      ),
+                      _label('Note for sellers (optional)'),
+                      TextField(
+                        controller: _note,
+                        maxLength: 1000,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. Prefer morning pickup',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const PremiumCard(
+                        background: AppColors.successSoft,
+                        child: Text(
+                          'Your request stays saved until you remove it and is visible to sellers while Premium is active. If your plan expires, it is hidden until you renew. Existing conversations continue. There is no distance limit.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: AppColors.darkGreen,
+                          ),
+                        ),
+                      ),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: AppColors.errorTerracotta,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Your profile phone number is shared with approved sellers so they can call using their phone app.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.black54,
-                    height: 1.4,
-                  ),
-                ),
-                _label('Note for sellers (optional)'),
-                TextField(
-                  controller: _note,
-                  maxLength: 1000,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Prefer morning pickup',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const PremiumCard(
-                  background: AppColors.successSoft,
-                  child: Text(
-                    'Your request stays saved until you remove it and is visible to sellers while Premium is active. If your plan expires, it is hidden until you renew. Existing conversations continue. There is no distance limit.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: AppColors.darkGreen,
-                    ),
-                  ),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: AppColors.errorTerracotta),
-                    ),
-                  ),
-              ],
-            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

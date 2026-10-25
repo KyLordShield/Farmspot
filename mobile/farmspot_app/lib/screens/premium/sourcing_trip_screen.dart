@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/sourcing.dart';
@@ -321,7 +322,11 @@ class _SourcingTripScreenState extends State<SourcingTripScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: FarmLottieLoading(
+                      message: 'Finding matching farms...',
+                    ),
+                  )
                 : _error != null
                 ? Center(
                     child: Column(

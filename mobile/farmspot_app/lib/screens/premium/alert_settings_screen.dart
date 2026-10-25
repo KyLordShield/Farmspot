@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import '../../models/premium_alert_settings.dart';
 import '../../services/premium_alert_service.dart';
@@ -53,7 +54,12 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
     setState(() => _saving = true);
     try {
       if (_settings!.pushEnabled) await PushService.requestPermissionIfNeeded();
-      final saved = await _api.saveSettings(_settings!);
+      if (!mounted) return;
+      final saved = await withFarmLottieLoading(
+        context,
+        () => _api.saveSettings(_settings!),
+        message: 'Saving alert settings...',
+      );
       if (!mounted) return;
       setState(() => _settings = saved);
       ScaffoldMessenger.of(
@@ -299,7 +305,11 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: FarmLottieLoading(
+                      message: 'Loading alert settings...',
+                    ),
+                  )
                 : _error != null
                 ? Center(
                     child: Column(

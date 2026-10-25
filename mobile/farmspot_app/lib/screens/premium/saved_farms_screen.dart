@@ -1,3 +1,4 @@
+import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/saved_farm.dart';
@@ -69,7 +70,11 @@ class _SavedFarmsScreenState extends State<SavedFarmsScreen> {
   Future<void> _remove(SavedFarm farm) async {
     if (_saved.isBusy(farm.id)) return;
     try {
-      await _saved.toggle(farm.id);
+      await withFarmLottieLoading(
+        context,
+        () => _saved.toggle(farm.id),
+        message: 'Removing saved farm...',
+      );
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -271,7 +276,9 @@ class _SavedFarmsScreenState extends State<SavedFarmsScreen> {
                     onAction: () => openUpgrade(context),
                   );
                 if (_loading)
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: FarmLottieLoading(message: 'Loading saved farms...'),
+                  );
                 return RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
