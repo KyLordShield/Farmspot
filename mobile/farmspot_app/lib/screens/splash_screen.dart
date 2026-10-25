@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import '../widgets/common_widgets.dart';
@@ -22,22 +24,60 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller;
   bool _finished = false;
+  bool _loaded = false;
+  bool _playScheduled = false;
+  Timer? _loadTimeout;
 
   @override
   void initState() {
     super.initState();
     // No duration yet: it is taken from the loaded composition so the intro
     // always runs its true length, whatever the asset happens to be.
-    _controller = AnimationController(vsync: this);
+    WidgetsBinding.instance.addObserver(this);
+    _controller = AnimationController(
+      vsync: this,
+      // This one-shot brand intro must keep its authored timing even when
+      // Android reports disabled system animations during startup.
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) _finish();
+    });
+    // Bound asset loading, rather than cutting into the playback duration.
+    _loadTimeout = Timer(const Duration(seconds: 12), _finish);
   }
 
   void _onLoaded(LottieComposition composition) {
-    if (_finished) return;
+    if (_finished || _loaded) return;
+    _loaded = true;
+    _loadTimeout?.cancel();
     _controller.duration = composition.duration;
-    _controller.forward().whenComplete(_finish);
+    _schedulePlayback();
+  }
+
+  void _schedulePlayback() {
+    if (!_loaded || _finished || _playScheduled) return;
+    _playScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _playScheduled = false;
+      if (!mounted || _finished) return;
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state != null && state != AppLifecycleState.resumed) return;
+      _controller.forward();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _schedulePlayback();
+    } else {
+      _controller.stop(canceled: false);
+    }
   }
 
   /// Fires [onFinished] once, letting the animation's final frame stay put in
@@ -45,11 +85,14 @@ class _SplashScreenState extends State<SplashScreen>
   void _finish() {
     if (!mounted || _finished) return;
     _finished = true;
+    _loadTimeout?.cancel();
     widget.onFinished?.call();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _loadTimeout?.cancel();
     _controller.dispose();
     super.dispose();
   }

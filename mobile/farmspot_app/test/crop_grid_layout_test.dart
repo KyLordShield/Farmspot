@@ -47,11 +47,11 @@ CropListing _sample({
 }
 
 List<CropListing> _mixedItems() => [
-      _sample(name: _nameForStagger, farm: 'Farm A'), // taller card
-      _sample(name: 'Cabbage', farm: 'Farm B', status: 'SOON_TO_HARVEST'),
-      _sample(name: 'Carrot', farm: _extremeName, status: 'NOT_AVAILABLE'),
-      _sample(name: 'Kangkong', farm: 'Farm D'),
-    ];
+  _sample(name: _nameForStagger, farm: 'Farm A'), // taller card
+  _sample(name: 'Cabbage', farm: 'Farm B', status: 'SOON_TO_HARVEST'),
+  _sample(name: 'Carrot', farm: _extremeName, status: 'NOT_AVAILABLE'),
+  _sample(name: 'Kangkong', farm: 'Farm D'),
+];
 
 Future<void> _pumpGrid(
   WidgetTester tester,
@@ -67,10 +67,7 @@ Future<void> _pumpGrid(
       home: Scaffold(
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: CropCardGrid(
-            listings: items,
-            onTap: (_) {},
-          ),
+          child: CropCardGrid(listings: items, onTap: (_) {}),
         ),
       ),
     ),
@@ -82,94 +79,118 @@ void main() {
   for (final width in [360.0, 1280.0]) {
     final label = width == 360 ? 'narrow phone' : 'wide desktop';
 
-    testWidgets('masonry grid: no overflow, 2 cols, tight 8px spacing ($label)',
-        (tester) async {
-      await _pumpGrid(tester, width, _mixedItems());
+    testWidgets(
+      'masonry grid: no overflow, adaptive columns, 8px spacing ($label)',
+      (tester) async {
+        await _pumpGrid(tester, width, _mixedItems());
 
-      expect(tester.takeException(), isNull,
-          reason: 'no overflow/layout error at $width');
-      expect(find.byType(MasonryGridView), findsOneWidget);
-      expect(find.byType(CropCard), findsNWidgets(4));
-
-      final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
-      final card1 = tester.getTopLeft(find.byType(CropCard).at(1));
-
-      // Two columns: first two cards sit side-by-side (same row).
-      expect(card1.dy, card0.dy);
-
-      // Tight cross-axis spacing: gap between the two top cards is exactly 8.
-      final right0 = tester.getTopRight(find.byType(CropCard).at(0)).dx;
-      final left1 = tester.getTopLeft(find.byType(CropCard).at(1)).dx;
-      expect(left1 - right0, 8);
-
-      // Staggered, not uniform rows: a 2-line-name card is taller than its
-      // 1-line neighbor, and the columns flow independently (col1 bottom lower
-      // than col0 bottom after the extra items pack into the shorter column).
-      final h0 = tester.getSize(find.byType(CropCard).at(0)).height;
-      final h1 = tester.getSize(find.byType(CropCard).at(1)).height;
-      expect(h0, greaterThan(h1),
-          reason: '2-line name must make card 0 taller than card 1');
-
-      final bottom0 =
-          tester.getBottomLeft(find.byType(CropCard).at(0)).dy;
-      final bottom3 = tester.getBottomLeft(find.byType(CropCard).at(3)).dy;
-      expect(bottom3, greaterThan(bottom0),
-          reason: 'columns must pack independently (ladder look)');
-
-      // Vertical spacing between two items stacked in the same column is 8.
-      if (tester.getTopLeft(find.byType(CropCard).at(1)).dx ==
-          tester.getTopLeft(find.byType(CropCard).at(2)).dx) {
         expect(
-          tester.getTopLeft(find.byType(CropCard).at(2)).dy -
-              tester.getBottomLeft(find.byType(CropCard).at(1)).dy,
-          8,
+          tester.takeException(),
+          isNull,
+          reason: 'no overflow/layout error at $width',
         );
-      }
+        expect(find.byType(MasonryGridView), findsOneWidget);
+        expect(find.byType(CropCard), findsNWidgets(4));
 
-      // Human labels, never the raw enum.
-      expect(find.text('Available Now'), findsWidgets);
-      expect(find.text('Soon to Harvest'), findsOneWidget);
-      expect(find.text('Not Available'), findsOneWidget);
-      expect(find.text('AVAILABLE_NOW'), findsNothing);
-      expect(find.text('SOON_TO_HARVEST'), findsNothing);
-      expect(find.text('NOT_AVAILABLE'), findsNothing);
-    });
+        final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
+        final card1 = tester.getTopLeft(find.byType(CropCard).at(1));
+
+        // Two columns: first two cards sit side-by-side (same row).
+        expect(card1.dy, card0.dy);
+
+        // Tight cross-axis spacing: gap between the two top cards is exactly 8.
+        final right0 = tester.getTopRight(find.byType(CropCard).at(0)).dx;
+        final left1 = tester.getTopLeft(find.byType(CropCard).at(1)).dx;
+        expect(left1 - right0, 8);
+
+        if (width >= 900) {
+          expect(tester.getTopLeft(find.byType(CropCard).at(3)).dy, card0.dy);
+          expect(
+            tester.getSize(find.byType(CropCard).first).width,
+            lessThan(width / 3),
+          );
+          return;
+        }
+
+        // Staggered, not uniform rows: a 2-line-name card is taller than its
+        // 1-line neighbor, and the columns flow independently (col1 bottom lower
+        // than col0 bottom after the extra items pack into the shorter column).
+        final h0 = tester.getSize(find.byType(CropCard).at(0)).height;
+        final h1 = tester.getSize(find.byType(CropCard).at(1)).height;
+        expect(
+          h0,
+          greaterThan(h1),
+          reason: '2-line name must make card 0 taller than card 1',
+        );
+
+        final bottom0 = tester.getBottomLeft(find.byType(CropCard).at(0)).dy;
+        final bottom3 = tester.getBottomLeft(find.byType(CropCard).at(3)).dy;
+        expect(
+          bottom3,
+          greaterThan(bottom0),
+          reason: 'columns must pack independently (ladder look)',
+        );
+
+        // Vertical spacing between two items stacked in the same column is 8.
+        if (tester.getTopLeft(find.byType(CropCard).at(1)).dx ==
+            tester.getTopLeft(find.byType(CropCard).at(2)).dx) {
+          expect(
+            tester.getTopLeft(find.byType(CropCard).at(2)).dy -
+                tester.getBottomLeft(find.byType(CropCard).at(1)).dy,
+            8,
+          );
+        }
+
+        // Human labels, never the raw enum.
+        expect(find.text('Available Now'), findsWidgets);
+        expect(find.text('Soon to Harvest'), findsOneWidget);
+        expect(find.text('Not Available'), findsOneWidget);
+        expect(find.text('AVAILABLE_NOW'), findsNothing);
+        expect(find.text('SOON_TO_HARVEST'), findsNothing);
+        expect(find.text('NOT_AVAILABLE'), findsNothing);
+      },
+    );
 
     testWidgets(
-        'no overflow + full 2-line names at text scale 1.0 and 1.3 ($label)',
-        (tester) async {
-      for (final scale in [1.0, 1.3]) {
-        await _pumpGrid(tester, width, [
-          _sample(name: _twoLineName, farm: 'Farm A'),
-          _sample(name: _twoLineName, farm: 'Farm B'),
-        ], textScale: scale);
+      'no overflow + full 2-line names at text scale 1.0 and 1.3 ($label)',
+      (tester) async {
+        for (final scale in [1.0, 1.3]) {
+          await _pumpGrid(tester, width, [
+            _sample(name: _twoLineName, farm: 'Farm A'),
+            _sample(name: _twoLineName, farm: 'Farm B'),
+          ], textScale: scale);
 
-        // A real renderer overflow would surface here (this is what the old
-        // fixed-ratio layout did on device fonts at scale ~1.0+).
-        expect(tester.takeException(), isNull,
-            reason: 'text scale $scale at $width must not overflow');
+          // A real renderer overflow would surface here (this is what the old
+          // fixed-ratio layout did on device fonts at scale ~1.0+).
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'text scale $scale at $width must not overflow',
+          );
 
-        // The 2-line-able name must fully render (never truncated): maxLines 2
-        // configured AND the paragraph did not exceed it.
-        final nameText = tester.widget<Text>(
-          find.text(_twoLineName).first,
-        );
-        expect(nameText.maxLines, 2);
-        expect(nameText.overflow, TextOverflow.ellipsis);
-        final para = tester.renderObject<RenderParagraph>(
-          find.text(_twoLineName).first,
-        );
-        expect(para.didExceedMaxLines, isFalse,
-            reason: '$label at scale $scale must show 2 full name lines');
+          // The 2-line-able name must fully render (never truncated): maxLines 2
+          // configured AND the paragraph did not exceed it.
+          final nameText = tester.widget<Text>(find.text(_twoLineName).first);
+          expect(nameText.maxLines, 2);
+          expect(nameText.overflow, TextOverflow.ellipsis);
+          final para = tester.renderObject<RenderParagraph>(
+            find.text(_twoLineName).first,
+          );
+          expect(
+            para.didExceedMaxLines,
+            isFalse,
+            reason: '$label at scale $scale must show 2 full name lines',
+          );
 
-        // An extreme name still truncates (no hard overflow), so long names can
-        // never explode the card edge.
-        await _pumpGrid(tester, width, [
-          _sample(name: _extremeName, farm: 'Farm A'),
-        ], textScale: scale);
-        expect(tester.takeException(), isNull);
-      }
-    });
+          // An extreme name still truncates (no hard overflow), so long names can
+          // never explode the card edge.
+          await _pumpGrid(tester, width, [
+            _sample(name: _extremeName, farm: 'Farm A'),
+          ], textScale: scale);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
 
     testWidgets('status badge uses the status color ($label)', (tester) async {
       await _pumpGrid(tester, width, [

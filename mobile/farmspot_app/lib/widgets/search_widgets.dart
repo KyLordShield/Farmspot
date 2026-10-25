@@ -3,6 +3,7 @@ import '../models/listing_review.dart';
 import '../theme.dart';
 import 'home_widgets.dart' show cropStatusData;
 import 'rating_stars.dart';
+import 'listing_grid_layout.dart';
 
 /// How many farm/seller rows a search preview shows before "See all". Shared by
 /// the typeahead and the results screen so both cap at the same number.
@@ -135,9 +136,7 @@ extension SearchSortModeLabel on SearchSortMode {
   };
 }
 
-/// Uniform, evenly-aligned 2x2 grid of result cards. Deliberately NOT the
-/// staggered/masonry feel of Home — a more "visual browsing" mode with a
-/// dominant image per card and minimal text underneath.
+/// Uniform result cards with two to four columns based on available width.
 class SearchResultGrid extends StatelessWidget {
   final List<SearchResultItem> items;
   final void Function(SearchResultItem)? onTap;
@@ -160,24 +159,26 @@ class SearchResultGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: gap,
-        crossAxisSpacing: gap,
-        childAspectRatio: cardAspectRatio,
+    return LayoutBuilder(
+      builder: (context, constraints) => GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: listingGridColumns(constraints.maxWidth),
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+          childAspectRatio: cardAspectRatio,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return SearchResultCard(
+            item: item,
+            onTap: onTap == null ? null : () => onTap!(item),
+          );
+        },
       ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return SearchResultCard(
-          item: item,
-          onTap: onTap == null ? null : () => onTap!(item),
-        );
-      },
     );
   }
 }

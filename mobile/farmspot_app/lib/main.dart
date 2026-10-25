@@ -175,15 +175,8 @@ class _AuthGateState extends State<AuthGate> {
     // and a valid session never waits on the check to start.
     unawaited(_checkSession());
 
-    // Safety net: if the splash animation somehow never fires its completion,
-    // release the splash once the intro has had more than its full length to
-    // play so the app is never stranded on a permanent white screen. Normally
-    // `_splashDone` gets set first and this becomes a no-op.
-    Future<void>.delayed(const Duration(seconds: 9), () {
-      if (!mounted || _ready) return;
-      _splashDone = true;
-      _maybeReady();
-    });
+    // SplashScreen bounds asset loading itself. A separate wall-clock timeout
+    // here would skip playback on a slow launch or while the app is backgrounded.
   }
 
   /// Re-validates the stored token. On rejection the session has already been

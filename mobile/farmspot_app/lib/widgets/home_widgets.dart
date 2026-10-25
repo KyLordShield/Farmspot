@@ -4,6 +4,7 @@ import '../models/listing_review.dart';
 import '../theme.dart';
 import 'rating_stars.dart';
 import 'seller_widgets.dart';
+import 'listing_grid_layout.dart';
 
 /// Data model for a crop listing shown in the Home feed.
 class CropListing {
@@ -557,8 +558,7 @@ class CropCard extends StatelessWidget {
 
 /// Ladder layout for the Home feed: the first two cards sit side by side,
 /// then every following card steps diagonally to the right like ladder rungs
-/// before wrapping back to the left margin. Capped at a phone-like max width
-/// so the cascade stays bounded on wide (Chrome) screens.
+/// before wrapping back to the left margin. Tablets use additional columns.
 class CropLadderGrid extends StatelessWidget {
   final List<CropListing> listings;
   final ValueChanged<CropListing> onTap;
@@ -571,27 +571,34 @@ class CropLadderGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 430),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < listings.length; i += 2)
-                  buildLadderRung(
-                    left: listings[i],
-                    right: i + 1 < listings.length ? listings[i + 1] : null,
-                    width: constraints.maxWidth,
-                    isFirstRung: i == 0,
-                    onTap: onTap,
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (listingGridColumns(constraints.maxWidth) > 2) {
+          return CropCardGrid(listings: listings, onTap: onTap);
+        }
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < listings.length; i += 2)
+                      buildLadderRung(
+                        left: listings[i],
+                        right: i + 1 < listings.length ? listings[i + 1] : null,
+                        width: constraints.maxWidth,
+                        isFirstRung: i == 0,
+                        onTap: onTap,
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -670,32 +677,66 @@ class CropLadderSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverPadding(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      sliver: SliverList.builder(
-        itemCount: (listings.length / 2).ceil(),
-        itemBuilder: (context, index) {
-          final first = index * 2;
-          final second = first + 1;
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 430),
-              // Per-rung rather than once for the list: a rung's card width
-              // depends on the width it was actually given, which is only known
-              // here.
-              child: LayoutBuilder(
-                builder: (context, constraints) => buildLadderRung(
-                  left: listings[first],
-                  right: second < listings.length ? listings[second] : null,
-                  width: constraints.maxWidth,
-                  isFirstRung: index == 0,
-                  onTap: onTap,
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.crossAxisExtent - horizontalPadding * 2;
+        final columns = listingGridColumns(width);
+        if (columns > 2) {
+          return SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            sliver: SliverList.builder(
+              itemCount: (listings.length / columns).ceil(),
+              itemBuilder: (context, row) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var column = 0; column < columns; column++) ...[
+                      if (column > 0) const SizedBox(width: 8),
+                      Expanded(
+                        child: row * columns + column < listings.length
+                            ? CropCard(
+                                listing: listings[row * columns + column],
+                                onTap: () =>
+                                    onTap(listings[row * columns + column]),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
           );
-        },
-      ),
+        }
+        return SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          sliver: SliverList.builder(
+            itemCount: (listings.length / 2).ceil(),
+            itemBuilder: (context, index) {
+              final first = index * 2;
+              final second = first + 1;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 430),
+                  // Per-rung rather than once for the list: a rung's card width
+                  // depends on the width it was actually given, which is only known
+                  // here.
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => buildLadderRung(
+                      left: listings[first],
+                      right: second < listings.length ? listings[second] : null,
+                      width: constraints.maxWidth,
+                      isFirstRung: index == 0,
+                      onTap: onTap,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -761,35 +802,64 @@ class CropLadderSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
-          child: LayoutBuilder(
-            builder: (context, constraints) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = listingGridColumns(
+          constraints.maxWidth - horizontalPadding * 2,
+        );
+        if (columns > 2) {
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Column(
               children: [
-                for (var i = 0; i < rungCount; i++)
+                for (var row = 0; row < rungCount; row++)
                   Padding(
-                    padding: EdgeInsets.only(
-                      left: i == 0 ? 0 : _kLadderRowShift,
-                      top: i == 0 ? 0 : _kLadderRowGap,
-                    ),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: const CropCardSkeleton()),
-                        const SizedBox(width: 8),
-                        Expanded(child: const CropCardSkeleton()),
+                        for (var column = 0; column < columns; column++) ...[
+                          if (column > 0) const SizedBox(width: 8),
+                          const Expanded(child: CropCardSkeleton()),
+                        ],
                       ],
                     ),
                   ),
               ],
             ),
+          );
+        }
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < rungCount; i++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: i == 0 ? 0 : _kLadderRowShift,
+                          top: i == 0 ? 0 : _kLadderRowGap,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: const CropCardSkeleton()),
+                            const SizedBox(width: 8),
+                            Expanded(child: const CropCardSkeleton()),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -818,8 +888,7 @@ class _SkeletonBar extends StatelessWidget {
   }
 }
 
-/// Two-column responsive grid of [CropCard]s. Capped at a phone-like max width
-/// so the same 2-column layout stays clean on wide (Chrome) screens.
+/// Content-sized cards with additional columns on wider layouts.
 class CropCardGrid extends StatelessWidget {
   final List<CropListing> listings;
   final ValueChanged<CropListing> onTap;
@@ -828,23 +897,29 @@ class CropCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 430),
-        // Masonry (staggered) grid: each card sizes to its own content, so a
-        // 2-line name in one column never forces a fixed cell height that would
-        // overflow on device fonts the way a childAspectRatio grid did.
-        child: MasonryGridView.count(
-          crossAxisCount: 2,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          itemCount: listings.length,
-          itemBuilder: (context, index) {
-            final listing = listings[index];
-            return CropCard(listing: listing, onTap: () => onTap(listing));
-          },
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: listingGridColumns(constraints.maxWidth) == 2
+                ? 430
+                : double.infinity,
+          ),
+          // Masonry (staggered) grid: each card sizes to its own content, so a
+          // 2-line name in one column never forces a fixed cell height that would
+          // overflow on device fonts the way a childAspectRatio grid did.
+          child: MasonryGridView.count(
+            crossAxisCount: listingGridColumns(constraints.maxWidth),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            itemCount: listings.length,
+            itemBuilder: (context, index) {
+              final listing = listings[index];
+              return CropCard(listing: listing, onTap: () => onTap(listing));
+            },
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+          ),
         ),
       ),
     );
