@@ -118,6 +118,49 @@ RoutingService _routing({bool fail = false, bool ferry = false}) {
   );
 }
 
+/// Routing double that records every request. The initial foot + car pair
+/// returns the standard three-point route; later (reroute) calls return a
+/// fresh two-point route from wherever the traveller currently is.
+class _TrackingRouting extends RoutingService {
+  _TrackingRouting() : super(minInterval: Duration.zero);
+
+  final List<String> calls = <String>[];
+
+  @override
+  Future<RoutePlan?> getRoute({
+    required LatLng from,
+    required LatLng to,
+    required String profile,
+  }) async {
+    calls.add(
+      '$profile:${from.latitude.toStringAsFixed(4)},'
+      '${from.longitude.toStringAsFixed(4)}',
+    );
+    if (calls.length <= 2) {
+      return RoutingService.parseRouteResponse(
+        jsonDecode(_osrmBody(foot: profile == 'foot')),
+      );
+    }
+    return RoutePlan(
+      distanceMeters: _distance.as(LengthUnit.Meter, from, to),
+      durationSeconds: 600,
+      geometry: [from, to],
+      steps: [
+        RouteStep(
+          instruction: 'Head to the farm',
+          distanceMeters: 0,
+          position: from,
+        ),
+        RouteStep(
+          instruction: 'Arrive at Sitio Maraag',
+          distanceMeters: 1,
+          position: to,
+        ),
+      ],
+    );
+  }
+}
+
 FarmProfileData _profile({List<CropListing> listings = const []}) {
   return FarmProfileData(
     id: 'F1',
@@ -148,45 +191,47 @@ class _FakeMessagesGateway implements MessagesGateway {
   Future<List<Conversation>> fetchConversations() async => [];
 
   @override
-  Future<List<ChatMessage>> fetchMessages(String conversationId,
-          {String? after}) async =>
-      [];
+  Future<List<ChatMessage>> fetchMessages(
+    String conversationId, {
+    String? after,
+  }) async => [];
 
   @override
-  Future<ChatMessage> sendMessage(String conversationId, String content,
-          {XFile? image}) async =>
-      throw UnimplementedError();
+  Future<ChatMessage> sendMessage(
+    String conversationId,
+    String content, {
+    XFile? image,
+  }) async => throw UnimplementedError();
 
   @override
   Future<ChatMessage> sendFarmLocation(
     String conversationId,
     String farmId, {
     String? label,
-  }) async =>
-        throw UnimplementedError();
+  }) async => throw UnimplementedError();
 }
 
 Conversation _conversation(String listingId) => Conversation.fromJson({
-      'id': 'CNV0001',
-      'listing_id': listingId,
-      'buyer_id': 'BUY0001',
-      'seller_farmer_id': 'FMR0001',
-      'farm_id': 'F1',
-      'last_message': null,
-      'last_message_at': null,
-      'created_at': DateTime.now().toIso8601String(),
-      'unread_count': 0,
-      'my_role': 'BUYER',
-      'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
-      'other_party': {'id': 'USR0002', 'name': 'Juan Dela Cruz', 'photo': null},
-      'listing': {
-        'id': listingId,
-        'crop_icon': 'Cabbage',
-        'image': null,
-        'category': {'id': 'CAT0001', 'name': 'Vegetable'},
-        'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
-      },
-    });
+  'id': 'CNV0001',
+  'listing_id': listingId,
+  'buyer_id': 'BUY0001',
+  'seller_farmer_id': 'FMR0001',
+  'farm_id': 'F1',
+  'last_message': null,
+  'last_message_at': null,
+  'created_at': DateTime.now().toIso8601String(),
+  'unread_count': 0,
+  'my_role': 'BUYER',
+  'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
+  'other_party': {'id': 'USR0002', 'name': 'Juan Dela Cruz', 'photo': null},
+  'listing': {
+    'id': listingId,
+    'crop_icon': 'Cabbage',
+    'image': null,
+    'category': {'id': 'CAT0001', 'name': 'Vegetable'},
+    'farm': {'id': 'F1', 'name': 'Sitio Maraag Farm', 'barangay': 'Sudlon'},
+  },
+});
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -291,7 +336,8 @@ void main() {
       expect(
         find.textContaining('Use the riding route'),
         findsOneWidget,
-        reason: 'the car plan crosses by bridge, so offer it as the alternative',
+        reason:
+            'the car plan crosses by bridge, so offer it as the alternative',
       );
 
       await tester.tap(find.textContaining('Use the riding route'));
@@ -302,8 +348,11 @@ void main() {
         findsNothing,
         reason: 'after switching to riding the selected plan has no ferry',
       );
-      expect(find.text('17 min'), findsOneWidget,
-          reason: 'riding ETA is still shown');
+      expect(
+        find.text('17 min'),
+        findsOneWidget,
+        reason: 'riding ETA is still shown',
+      );
     },
   );
 
@@ -386,6 +435,246 @@ void main() {
     },
   );
 
+  testWidgets('going off route recalculates from the live position', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>();
+    final routing = _TrackingRouting();
+    await _pump(tester, stream: stream, routing: routing);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+
+    expect(
+      routing.calls.length,
+      2,
+      reason: 'navigation starts with the planned foot + car routes',
+    );
+
+    // Staying on the polyline must not trigger a new request.
+    stream.add(_mid);
+    await tester.pump();
+    stream.add(_mid);
+    await tester.pump();
+    expect(routing.calls.length, 2, reason: 'on-route fixes never reroute');
+
+    // Two consecutive fixes well away from the route trigger a reroute.
+    const offRoute = LatLng(10.3178, 123.8900);
+    stream.add(offRoute);
+    await tester.pump();
+    stream.add(offRoute);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      routing.calls.length,
+      3,
+      reason: 'a sustained departure must request a new route',
+    );
+    expect(
+      routing.calls.last,
+      'foot:10.3178,123.8900',
+      reason:
+          'the reroute uses the active mode and the live position as '
+          'its start, not the original origin',
+    );
+  });
+
+  testWidgets('a large miss reroutes on the first off-route fix', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>();
+    final routing = _TrackingRouting();
+    await _pump(tester, stream: stream, routing: routing);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    expect(routing.calls.length, 2);
+
+    // Far beyond drift range: waiting for a confirmation fix would leave the
+    // traveller driving on a stale line.
+    stream.add(const LatLng(10.3000, 123.8600));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      routing.calls.length,
+      3,
+      reason: 'a clear wrong turn reroutes immediately',
+    );
+    expect(routing.calls.last, startsWith('foot:'));
+  });
+
+  testWidgets(
+    'the green line starts at the live position and drops the walked part',
+    (tester) async {
+      final stream = StreamController<LatLng>();
+      await _pump(tester, stream: stream);
+
+      await tester.tap(find.text('Start Navigation'));
+      await tester.pump();
+
+      // Reach the turn vertex: everything before it has been walked.
+      stream.add(_mid);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final layer = tester.widget<PolylineLayer>(find.byType(PolylineLayer));
+      final points = layer.polylines.first.points;
+      expect(
+        _distance(points.first, _mid) < 5,
+        isTrue,
+        reason: 'the drawn route must begin at the traveller',
+      );
+      expect(
+        points.any((p) => _distance(p, _start) < 5),
+        isFalse,
+        reason: 'the already-walked first leg is trimmed away',
+      );
+      expect(_distance(points.last, _farm) < 5, isTrue);
+    },
+  );
+
+  testWidgets('real GPS keeps the camera centred on the traveller', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>();
+    await _pump(tester, stream: stream);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+
+    var map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+    expect(
+      map.mapController!.camera.zoom,
+      16,
+      reason: 'the journey opens in the same zoomed view as the simulation',
+    );
+
+    final fix = LatLng(_start.latitude + 0.0005, _start.longitude + 0.0005);
+    stream.add(fix);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+
+    map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+    expect(
+      _distance(map.mapController!.camera.center, fix) < 5,
+      isTrue,
+      reason: 'a real fix recentres the camera, even on a straight road',
+    );
+  });
+
+  testWidgets('debug wrong-turn button triggers the reroute pipeline', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>();
+    final routing = _TrackingRouting();
+    await _pump(tester, stream: stream, routing: routing);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    expect(routing.calls.length, 2);
+
+    await tester.tap(find.text('Debug: simulate wrong turn from here'));
+    await tester.pump();
+    // The hook walks on-route then off-route in ~120 ms steps.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 120));
+    }
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      routing.calls.length,
+      3,
+      reason:
+          'the debug hook feeds two off-route fixes, so the real reroute '
+          'request must fire',
+    );
+    expect(routing.calls.last, startsWith('foot:'));
+  });
+
+  testWidgets('manual GPS mode lets the arrow pad drive an off-route reroute', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>.broadcast();
+    final routing = _TrackingRouting();
+    await _pump(tester, stream: stream, routing: routing);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    expect(routing.calls.length, 2);
+
+    await tester.tap(find.text('Debug: manual GPS (drag or arrows)'));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('manualGpsMarker')),
+      findsOneWidget,
+      reason: 'manual mode replaces the GPS dot with a draggable pin',
+    );
+    expect(find.text('Manual GPS · drag or arrows'), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
+
+    // Walk north in five 10 m steps. The route heads east-northeast, so this
+    // leaves the line by >35 m and must request a reroute.
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
+      await tester.pump();
+    }
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      routing.calls.length,
+      3,
+      reason: 'manual movement off the line reuses the real reroute pipeline',
+    );
+
+    await tester.tap(find.text('Exit manual GPS'));
+    await tester.pump();
+    expect(find.text('Manual GPS · drag or arrows'), findsNothing);
+    expect(find.byKey(const ValueKey('manualGpsMarker')), findsNothing);
+  });
+
+  testWidgets('manual GPS mode lets the pin be dragged off the route', (
+    tester,
+  ) async {
+    final stream = StreamController<LatLng>.broadcast();
+    final routing = _TrackingRouting();
+    await _pump(tester, stream: stream, routing: routing);
+
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
+    await tester.tap(find.text('Debug: manual GPS (drag or arrows)'));
+    await tester.pump();
+
+    final marker = find.byKey(const ValueKey('manualGpsMarker'));
+    expect(marker, findsOneWidget);
+
+    // Incremental gesture: the pin's pan recognizer is accepted on the
+    // second move (the first accepted move emits no update), and the route
+    // heads east-northeast, so moving north leaves the line.
+    final start = tester.getCenter(marker);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 20));
+    for (var i = 0; i < 8; i++) {
+      await gesture.moveBy(const Offset(0, -30));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      routing.calls.length,
+      3,
+      reason:
+          'dragging the manual pin off the line reuses the reroute '
+          'pipeline',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'simulate glides the route without GPS and advances the turn banner',
     (tester) async {
@@ -401,15 +690,21 @@ void main() {
         findsOneWidget,
         reason: 'the journey must state it is replaying fake positions',
       );
-      expect(find.text(_fmtDistance(_footTotal)), findsOneWidget,
-          reason: 'remaining distance starts at the full walking route');
+      expect(
+        find.text(_fmtDistance(_footTotal)),
+        findsOneWidget,
+        reason: 'remaining distance starts at the full walking route',
+      );
       expect(
         find.text('Turn left onto Sudlon Road'),
         findsOneWidget,
         reason: 'the first real maneuver shows as the current instruction',
       );
-      expect(find.textContaining('Turn in'), findsOneWidget,
-          reason: 'the banner says how far the turn is');
+      expect(
+        find.textContaining('Turn in'),
+        findsOneWidget,
+        reason: 'the banner says how far the turn is',
+      );
 
       // ~150 interpolated 8m hops (~12s fake time) reaches past the mid turn
       // point (~700m into the ~2800m path), which must advance the banner.
@@ -419,7 +714,8 @@ void main() {
       expect(
         find.text('Arrive at Sitio Maraag'),
         findsOneWidget,
-        reason: 'the turn instruction must advance once crossed (was stuck '
+        reason:
+            'the turn instruction must advance once crossed (was stuck '
             'before, because the old simulation jumped over it)',
       );
 
@@ -481,73 +777,25 @@ void main() {
     },
   );
 
-  testWidgets(
-    'navigating straight from the map never guesses a pickup crop',
-    (tester) async {
-      final stream = StreamController<LatLng>();
-      await _pump(
-        tester,
-        stream: stream,
-        // The farm profile has an available listing, but navigation did not
-        // start from it, so it must NOT be shown as the pickup.
-        loadFarmProfile: (_) async => _profile(
-          listings: const [
-            CropListing(
-              cropName: 'Cabbage',
-              farmName: 'Sitio Maraag Farm',
-              status: 'AVAILABLE_NOW',
-              contactNumber: '0917-000-0000',
-            ),
-          ],
-        ),
-      );
-
-      await tester.tap(find.text('Start Navigation'));
-      await tester.pump();
-      await tester.tap(find.text('Mark as Arrived'));
-      await tester.pump();
-
-      expect(find.text("You've Arrived!"), findsOneWidget);
-      expect(
-        find.text('Cabbage'),
-        findsNothing,
-        reason: 'no crop is picked up when navigation did not start from one',
-      );
-      expect(find.text("YOU'RE HERE TO PICK UP"), findsNothing);
-      expect(find.textContaining('no specific crop'), findsOneWidget);
-      expect(
-        find.text('0917-000-0000'),
-        findsOneWidget,
-        reason: 'the farm contact must still be reachable on a map-first trip',
-      );
-    },
-  );
-
-  testWidgets('Call dials the seller and logs contact against the real listing',
-      (tester) async {
+  testWidgets('navigating straight from the map never guesses a pickup crop', (
+    tester,
+  ) async {
     final stream = StreamController<LatLng>();
-    final logs = <String>[];
-    final actions = <String>[];
-    final listing = Listing(
-      id: 'L9',
-      cropIcon: 'Cabbage',
-      status: 'AVAILABLE_NOW',
-      farmerName: 'Juan Dela Cruz',
-      farmerMobileNumber: '0917-000-0000',
-      categoryName: 'Vegetable',
-    );
     await _pump(
       tester,
       stream: stream,
-      listingId: 'L9',
-      loadListing: (_) async => listing,
-      contactLogger:
-          ({required String listingId, required String method}) async {
-            logs.add('$listingId:$method');
-          },
-      contactAction: ({required String number, required String method}) async {
-        actions.add('$number:$method');
-      },
+      // The farm profile has an available listing, but navigation did not
+      // start from it, so it must NOT be shown as the pickup.
+      loadFarmProfile: (_) async => _profile(
+        listings: const [
+          CropListing(
+            cropName: 'Cabbage',
+            farmName: 'Sitio Maraag Farm',
+            status: 'AVAILABLE_NOW',
+            contactNumber: '0917-000-0000',
+          ),
+        ],
+      ),
     );
 
     await tester.tap(find.text('Start Navigation'));
@@ -555,19 +803,70 @@ void main() {
     await tester.tap(find.text('Mark as Arrived'));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.phone));
-    await tester.pump();
-
-    expect(logs, [
-      'L9:CALL',
-    ], reason: 'the call must be logged against the real listing');
-    expect(actions, [
-      '0917-000-0000:CALL',
-    ], reason: 'the real phone number is passed to the launcher');
+    expect(find.text("You've Arrived!"), findsOneWidget);
+    expect(
+      find.text('Cabbage'),
+      findsNothing,
+      reason: 'no crop is picked up when navigation did not start from one',
+    );
+    expect(find.text("YOU'RE HERE TO PICK UP"), findsNothing);
+    expect(find.textContaining('no specific crop'), findsOneWidget);
+    expect(
+      find.text('0917-000-0000'),
+      findsOneWidget,
+      reason: 'the farm contact must still be reachable on a map-first trip',
+    );
   });
 
-  testWidgets('Message opens the real in-app thread for the listing',
-      (tester) async {
+  testWidgets(
+    'Call dials the seller and logs contact against the real listing',
+    (tester) async {
+      final stream = StreamController<LatLng>();
+      final logs = <String>[];
+      final actions = <String>[];
+      final listing = Listing(
+        id: 'L9',
+        cropIcon: 'Cabbage',
+        status: 'AVAILABLE_NOW',
+        farmerName: 'Juan Dela Cruz',
+        farmerMobileNumber: '0917-000-0000',
+        categoryName: 'Vegetable',
+      );
+      await _pump(
+        tester,
+        stream: stream,
+        listingId: 'L9',
+        loadListing: (_) async => listing,
+        contactLogger:
+            ({required String listingId, required String method}) async {
+              logs.add('$listingId:$method');
+            },
+        contactAction:
+            ({required String number, required String method}) async {
+              actions.add('$number:$method');
+            },
+      );
+
+      await tester.tap(find.text('Start Navigation'));
+      await tester.pump();
+      await tester.tap(find.text('Mark as Arrived'));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.phone));
+      await tester.pump();
+
+      expect(logs, [
+        'L9:CALL',
+      ], reason: 'the call must be logged against the real listing');
+      expect(actions, [
+        '0917-000-0000:CALL',
+      ], reason: 'the real phone number is passed to the launcher');
+    },
+  );
+
+  testWidgets('Message opens the real in-app thread for the listing', (
+    tester,
+  ) async {
     final stream = StreamController<LatLng>();
     final gateway = _FakeMessagesGateway(_conversation('L9'));
     final listing = Listing(
@@ -595,11 +894,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(gateway.lastListingId, 'L9',
-        reason: 'the thread is opened for the listing being picked up');
+    expect(
+      gateway.lastListingId,
+      'L9',
+      reason: 'the thread is opened for the listing being picked up',
+    );
     expect(find.byType(InAppMessagesScreen), findsOneWidget);
-    expect(find.text('Juan Dela Cruz'), findsWidgets,
-        reason: 'the chat screen shows the seller from the server');
+    expect(
+      find.text('Juan Dela Cruz'),
+      findsWidgets,
+      reason: 'the chat screen shows the seller from the server',
+    );
   });
 
   testWidgets('GPS failure falls back to the default area without crashing', (
@@ -709,8 +1014,11 @@ void main() {
     );
 
     expect(profileCalls, 0, reason: 'a pin has no farm record to fetch');
-    expect(find.text('Start Navigation'), findsOneWidget,
-        reason: 'opening directions must not auto-start the journey');
+    expect(
+      find.text('Start Navigation'),
+      findsOneWidget,
+      reason: 'opening directions must not auto-start the journey',
+    );
     await tester.tap(find.text('Start Navigation'));
     await tester.pump();
     expect(find.text('Walking'), findsOneWidget);

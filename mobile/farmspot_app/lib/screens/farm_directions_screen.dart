@@ -129,6 +129,26 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   static const LatLng _fallback = LatLng(10.3178, 123.8742);
   static final Distance _distance = const Distance();
 
+  /// How far off the planned polyline counts as "off route". Tight enough to
+  /// catch a wrong turn, loose enough to ignore normal GPS drift.
+  double get _offRouteThreshold => _mode == 'foot' ? 30 : 45;
+
+  /// A miss this many times the threshold cannot be GPS drift: reroute on the
+  /// first fix instead of waiting for a second confirmation.
+  static const double _offRouteSnapFactor = 1.75;
+
+  /// Consecutive off-route fixes required before asking the router again, so a
+  /// single bad GPS reading cannot trigger a reroute.
+  static const int _offRouteFixesBeforeReroute = 2;
+
+  /// Minimum gap between reroute requests, protecting the public OSRM router
+  /// (and avoiding request loops while the GPS settles). Short enough that a
+  /// second wrong turn does not leave the traveller on a stale line.
+  static const Duration _rerouteCooldown = Duration(seconds: 4);
+
+  /// Within this distance of the farm, rerouting adds no value.
+  static const double _nearDestinationMeters = 70;
+
   final MapController _mapController = MapController();
 
   _Step _step = _Step.direction;
@@ -155,6 +175,20 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   int _nextStepIndex = 0;
   List<double>? _cumulative;
   double? _cachedRemaining;
+
+  /// Rerouting state: true while a replacement route is being fetched, and the
+  /// guards that debounce off-route fixes and requests.
+  bool _isRerouting = false;
+  bool _rerouteInFlight = false;
+  int _offRouteStreak = 0;
+  DateTime? _lastRerouteAt;
+
+  /// Debug-only manual GPS: real GPS is detached and the traveller position is
+  /// driven by dragging the map pin or holding the on-screen arrow pad.
+  bool _manualGps = false;
+  Timer? _dpadTimer;
+  static const double _manualStepMeters = 10;
+  static const double _manualDragMinMeters = 5;
 
   /// Current travel bearing in degrees (0 = north, 90 = east, clockwise).
   /// Updates as the journey advances so the map can swing to a Google-Maps
@@ -209,7 +243,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   }
 
   void _applyHeading() {
-    if (!mounted) return;
+    if (!mounted || _manualGps) return;
     final t = _headingController.value;
     final curve = Curves.easeOutCubic.transform(t);
     _heading = _headingFrom + _headingDelta * curve;
@@ -253,6 +287,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   void dispose() {
     _positionSub?.cancel();
     _simTimer?.cancel();
+    _dpadTimer?.cancel();
     _headingController.dispose();
     if (widget.routing == null) _routing.close();
     super.dispose();
@@ -356,11 +391,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     final destination = _farmPos;
     if (destination == null) return;
 
-    final points = <LatLng>[
-      _current,
-      destination,
-      ...?_plan?.geometry,
-    ];
+    final points = <LatLng>[_current, destination, ...?_plan?.geometry];
     if (points.length < 2) return;
 
     try {
@@ -380,15 +411,31 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     _heading = 0;
     _liveAvailable = true;
     _cachedRemaining = null;
+    _offRouteStreak = 0;
+    _rerouteInFlight = false;
+    _isRerouting = false;
+    _lastRerouteAt = null;
     final plan = _plan;
     _nextStepIndex = _firstUpcomingStep(plan);
     _cumulative = _buildCumulative(plan);
     setState(() => _step = _Step.journey);
+    // Enter the same zoomed, traveller-centred view the simulation uses instead
+    // of staying on the zoomed-out overview until the first GPS fix arrives.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _step == _Step.journey) _applyHeading();
+    });
 
     if (_simulateOn) {
       _startSimulation(plan);
       return;
     }
+    _listenToLivePosition();
+  }
+
+  /// (Re)subscribes to real GPS. Used at journey start and when leaving the
+  /// debug manual-GPS mode.
+  void _listenToLivePosition() {
+    _positionSub?.cancel();
     _positionSub = widget.positionStream().listen(
       _onLiveFix,
       onError: (Object _) {
@@ -492,10 +539,17 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     _positionSub = null;
     _simTimer?.cancel();
     _simTimer = null;
+    _dpadTimer?.cancel();
+    _dpadTimer = null;
+    _rerouteInFlight = false;
+    _isRerouting = false;
+    _offRouteStreak = 0;
+    _manualGps = false;
   }
 
-  int _firstUpcomingStep(RoutePlan? plan) {
+  int _firstUpcomingStep(RoutePlan? plan, [LatLng? origin]) {
     if (plan == null || plan.steps.isEmpty) return 0;
+    final from = origin ?? _live;
     var idx = plan.steps.length > 1 ? 1 : 0;
     while (idx < plan.steps.length - 1) {
       final p = plan.steps[idx].position;
@@ -503,7 +557,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
         idx++;
         continue;
       }
-      if (_distance(_live, p) <= _arriveThreshold) {
+      if (_distance(from, p) <= _arriveThreshold) {
         idx++;
         continue;
       }
@@ -533,13 +587,19 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       _cachedRemaining = null;
     });
     _advanceInstructions(pos);
+    if (!_simulateOn) unawaited(_maybeReroute(pos));
     // Steer by actual movement direction (this fix -> last fix), so the
     // camera turns exactly when the user turns — no route look-ahead (which
     // rotated early) and no long trailing ease (which lagged the turn). The
     // distance gate keeps standing-still GPS jitter from spinning the map,
     // even though the rotation itself eases smoothly.
-    if (_simulateOn || _distance(from, pos) > 2) {
-      _turnToward(_bearingFrom(from, pos));
+    if (!_manualGps) {
+      if (_simulateOn || _distance(from, pos) > 2) {
+        _turnToward(_bearingFrom(from, pos));
+      }
+      // Recentre on every fix, even when the heading did not change: walking
+      // a straight road must still scroll the map with the traveller.
+      _applyHeading();
     }
   }
 
@@ -549,7 +609,8 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     final lat2 = b.latitude * math.pi / 180;
     final dLon = (b.longitude - a.longitude) * math.pi / 180;
     final y = math.sin(dLon) * math.cos(lat2);
-    final x = math.cos(lat1) * math.sin(lat2) -
+    final x =
+        math.cos(lat1) * math.sin(lat2) -
         math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
     final bearing = math.atan2(y, x) * 180 / math.pi;
     return (bearing + 360) % 360;
@@ -571,6 +632,340 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       }
       break;
     }
+  }
+
+  /// Debug-only: detaches real GPS and lets the traveller position be driven
+  /// manually (drag the pin, or hold the arrow pad) so off-route detection and
+  /// rerouting can be exercised indoors.
+  void _enterManualGps() {
+    if (!kDebugMode || _step != _Step.journey) return;
+    _positionSub?.cancel();
+    _positionSub = null;
+    _simTimer?.cancel();
+    _simTimer = null;
+    _dpadTimer?.cancel();
+    setState(() {
+      _manualGps = true;
+      _simulateOn = false;
+      _liveAvailable = true;
+    });
+    try {
+      _mapController.moveAndRotate(_live, _mapController.camera.zoom, 0);
+    } catch (_) {}
+  }
+
+  void _exitManualGps() {
+    if (!_manualGps) return;
+    _dpadTimer?.cancel();
+    _dpadTimer = null;
+    setState(() {
+      _manualGps = false;
+    });
+    _listenToLivePosition();
+  }
+
+  void _onManualDragUpdate(DragUpdateDetails details) {
+    final camera = _mapController.camera;
+    final currentScreen = camera.latLngToScreenOffset(_live);
+    final newScreen = currentScreen + details.delta;
+    final next = camera.screenOffsetToLatLng(newScreen);
+    if (_distance(_live, next) < _manualDragMinMeters) return;
+    _onLiveFix(next);
+  }
+
+  void _onManualDragEnd(DragEndDetails details) {
+    try {
+      _mapController.move(_live, _mapController.camera.zoom);
+    } catch (_) {}
+  }
+
+  void _startManualMove(double bearing) {
+    if (!_manualGps) return;
+    _moveManual(bearing);
+    _dpadTimer?.cancel();
+    _dpadTimer = Timer.periodic(
+      const Duration(milliseconds: 180),
+      (_) => _moveManual(bearing),
+    );
+  }
+
+  void _stopManualMove() {
+    _dpadTimer?.cancel();
+    _dpadTimer = null;
+  }
+
+  void _moveManual(double bearing) {
+    if (!_manualGps || _step != _Step.journey) return;
+    final next = _offsetPoint(_live, _manualStepMeters, bearing);
+    _onLiveFix(next);
+    try {
+      _mapController.move(next, _mapController.camera.zoom);
+    } catch (_) {}
+  }
+
+  /// Debug-only: walks the traveller a short distance forward from where they
+  /// currently are, then steps sideways off the route — a fake wrong turn.
+  ///
+  /// This feeds the exact same [_onLiveFix] path real GPS uses, so the
+  /// off-route detector and the real reroute request are exercised without
+  /// leaving the desk. Needs SIM off; live GPS is left running, so the next
+  /// real fix simply resumes normal navigation.
+  Future<void> _simulateWrongTurn() async {
+    if (!kDebugMode || _step != _Step.journey) return;
+    if (_simulateOn) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Turn SIM off to test off-route rerouting.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+    final plan = _plan;
+    if (plan == null || plan.geometry.length < 2) return;
+
+    final cumulative = _cumulative ?? _buildCumulative(plan);
+    final total = cumulative.isEmpty ? 0.0 : cumulative.last;
+    if (total <= 0) return;
+
+    // Stay relative to the current position so this reads as a wrong turn from
+    // here, not a teleport to an unrelated part of the route.
+    final here = _nearestDistanceAlong(plan.geometry, cumulative, _live);
+    final turnAt = (here + 40).clamp(0.0, total);
+    final midpoint = _pointAlong(
+      plan.geometry,
+      cumulative,
+      (here + turnAt) / 2,
+    );
+    final turnPoint = _pointAlong(plan.geometry, cumulative, turnAt);
+    final ahead = _pointAlong(
+      plan.geometry,
+      cumulative,
+      (turnAt + 30).clamp(0.0, total),
+    );
+    final heading = _bearingFrom(turnPoint, ahead);
+    final offRoute = _offsetPoint(
+      turnPoint,
+      _offRouteThreshold + 20,
+      heading + 90,
+    );
+    final furtherOff = _offsetPoint(offRoute, 25, heading + 90);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Debug: simulating a wrong turn from here…'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+    // Approach the turn on-route, then step off it in two fixes. The first
+    // off-route fix primes the streak; the second fires the reroute.
+    _onLiveFix(_live);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted || _step != _Step.journey) return;
+    _onLiveFix(midpoint);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted || _step != _Step.journey) return;
+    _onLiveFix(turnPoint);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted || _step != _Step.journey) return;
+    _onLiveFix(offRoute);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted || _step != _Step.journey) return;
+    _onLiveFix(furtherOff);
+  }
+
+  /// Cumulative distance along [geometry] of the vertex nearest to [pos].
+  double _nearestDistanceAlong(
+    List<LatLng> geometry,
+    List<double> cumulative,
+    LatLng pos,
+  ) {
+    if (geometry.isEmpty || cumulative.isEmpty) return 0;
+    var best = double.infinity;
+    var bestDistance = 0.0;
+    for (var i = 0; i < geometry.length; i++) {
+      final d = _distance(pos, geometry[i]);
+      if (d < best) {
+        best = d;
+        bestDistance = cumulative[i];
+      }
+    }
+    return bestDistance;
+  }
+
+  /// Offsets [from] by [meters] along [bearingDegrees] (0 = north, clockwise).
+  LatLng _offsetPoint(LatLng from, double meters, double bearingDegrees) {
+    const metersPerDegree = 111320.0;
+    final radians = bearingDegrees * math.pi / 180;
+    final dLat = meters * math.cos(radians) / metersPerDegree;
+    final dLon =
+        meters *
+        math.sin(radians) /
+        (metersPerDegree *
+            math.cos(from.latitude * math.pi / 180).clamp(0.01, 1.0));
+    return LatLng(from.latitude + dLat, from.longitude + dLon);
+  }
+
+  /// Detects a sustained departure from the planned polyline and asks the
+  /// router for a fresh route from the live position, replacing the active plan
+  /// so the polyline, turn list, distance and ETA all follow the new path.
+  ///
+  /// Deliberately debounced: one rogue GPS fix is ignored, requests are spaced
+  /// by [_rerouteCooldown], and nothing happens near the destination.
+  Future<void> _maybeReroute(LatLng pos) async {
+    if (_step != _Step.journey) return;
+    final plan = _plan;
+    final destination = _farmPos;
+    if (plan == null || destination == null || plan.geometry.length < 2) {
+      return;
+    }
+
+    final offRouteMeters = _matchRoute(pos, plan.geometry).distance;
+    if (offRouteMeters <= _offRouteThreshold) {
+      _offRouteStreak = 0;
+      return;
+    }
+
+    // Close to the farm, snapping to the old line is fine — don't ask again.
+    if (_distance(pos, destination) <= _nearDestinationMeters) {
+      _offRouteStreak = 0;
+      return;
+    }
+
+    _offRouteStreak++;
+    // A miss this large is a wrong turn, not drift: skip the confirmation fix
+    // so the new line appears as soon as the traveller leaves the road.
+    if (offRouteMeters >= _offRouteThreshold * _offRouteSnapFactor) {
+      _offRouteStreak = math.max(_offRouteStreak, _offRouteFixesBeforeReroute);
+    }
+    if (_rerouteInFlight || _offRouteStreak < _offRouteFixesBeforeReroute) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final last = _lastRerouteAt;
+    if (last != null && now.difference(last) < _rerouteCooldown) return;
+
+    _lastRerouteAt = now;
+    _rerouteInFlight = true;
+    final profile = _mode;
+    if (mounted) setState(() => _isRerouting = true);
+
+    final fresh = await _routing.getRoute(
+      from: pos,
+      to: destination,
+      profile: profile,
+    );
+
+    _rerouteInFlight = false;
+    if (!mounted || _step != _Step.journey || profile != _mode) {
+      if (mounted) setState(() => _isRerouting = false);
+      return;
+    }
+
+    if (fresh == null || fresh.geometry.length < 2) {
+      setState(() => _isRerouting = false);
+      return;
+    }
+
+    final cumulative = _buildCumulative(fresh);
+    // The request may have taken a few seconds; advance turns from where the
+    // traveller is now, not where they were when the request started.
+    final nextStep = _firstUpcomingStep(fresh, _live);
+    setState(() {
+      if (profile == 'foot') {
+        _footPlan = fresh;
+      } else {
+        _carPlan = fresh;
+      }
+      _cumulative = cumulative;
+      _nextStepIndex = nextStep;
+      _cachedRemaining = null;
+      _offRouteStreak = 0;
+      _isRerouting = false;
+    });
+  }
+
+  /// Nearest segment of [geometry] to [pos]: its perpendicular distance, the
+  /// projected point on the line, and the segment's start index. Vertex-only
+  /// distance would overstate the miss on long straight legs.
+  ({double distance, LatLng point, int segment}) _matchRoute(
+    LatLng pos,
+    List<LatLng> geometry,
+  ) {
+    if (geometry.isEmpty) {
+      return (distance: double.infinity, point: pos, segment: 0);
+    }
+    if (geometry.length == 1) {
+      return (
+        distance: _distance(pos, geometry.first),
+        point: geometry.first,
+        segment: 0,
+      );
+    }
+    var bestDistance = double.infinity;
+    var bestPoint = geometry.first;
+    var bestSegment = 0;
+    for (var i = 1; i < geometry.length; i++) {
+      final match = _projectOnSegment(pos, geometry[i - 1], geometry[i]);
+      if (match.distance < bestDistance) {
+        bestDistance = match.distance;
+        bestPoint = match.point;
+        bestSegment = i - 1;
+      }
+    }
+    return (distance: bestDistance, point: bestPoint, segment: bestSegment);
+  }
+
+  /// Local flat-earth projection around [a]; accurate enough at the tens of
+  /// meters scale this decision is made at.
+  ({double distance, LatLng point}) _projectOnSegment(
+    LatLng p,
+    LatLng a,
+    LatLng b,
+  ) {
+    const metersPerDegree = 111320.0;
+    final cosLat = math.cos(a.latitude * math.pi / 180);
+    double projectX(LatLng q) =>
+        (q.longitude - a.longitude) * metersPerDegree * cosLat;
+    double projectY(LatLng q) => (q.latitude - a.latitude) * metersPerDegree;
+
+    final px = projectX(p);
+    final py = projectY(p);
+    final bx = projectX(b);
+    final by = projectY(b);
+    final lengthSquared = bx * bx + by * by;
+    if (lengthSquared == 0) {
+      return (distance: _distance(p, a), point: a);
+    }
+
+    final t = ((px * bx + py * by) / lengthSquared).clamp(0.0, 1.0);
+    final dx = px - bx * t;
+    final dy = py - by * t;
+    final point = LatLng(
+      a.latitude + (by * t) / metersPerDegree,
+      a.longitude + (bx * t) / (metersPerDegree * cosLat),
+    );
+    return (distance: math.sqrt(dx * dx + dy * dy), point: point);
+  }
+
+  /// The part of the route still ahead of [pos]. Shows the green line starting
+  /// at the traveller and removes the part already walked behind them.
+  List<LatLng> _routeAhead(List<LatLng> geometry, LatLng pos) {
+    if (geometry.length < 2) return geometry;
+    final match = _matchRoute(pos, geometry);
+    final points = <LatLng>[pos];
+    if (_distance(pos, match.point) > 4) points.add(match.point);
+    for (var i = match.segment + 1; i < geometry.length; i++) {
+      points.add(geometry[i]);
+    }
+    return points.length < 2 ? geometry : points;
   }
 
   double? get _remainingDistance {
@@ -969,14 +1364,31 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
           child: MapLoadingBackground(
             child: FlutterMap(
               mapController: _mapController,
-              options: MapOptions(initialCenter: _current, initialZoom: 14),
+              options: MapOptions(
+                initialCenter: _current,
+                initialZoom: 14,
+                interactionOptions: InteractionOptions(
+                  // In manual GPS mode the map must not pan: the drag belongs to
+                  // the debug pin, and a competing map pan would win the gesture
+                  // arena and move the pin away instead.
+                  flags: _manualGps
+                      ? (InteractiveFlag.pinchZoom |
+                            InteractiveFlag.doubleTapZoom)
+                      : InteractiveFlag.all,
+                ),
+              ),
               children: [
                 const MapTileLayer(),
                 if (plan != null && plan.geometry.length >= 2)
                   PolylineLayer(
                     polylines: [
                       Polyline(
-                        points: plan.geometry,
+                        // In the journey the line is trimmed behind the
+                        // traveller, so its start follows them instead of
+                        // staying at the original departure point.
+                        points: _step == _Step.journey
+                            ? _routeAhead(plan.geometry, _live)
+                            : plan.geometry,
                         strokeWidth: 5,
                         color: AppColors.primaryGreen,
                       ),
@@ -987,7 +1399,9 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                   // travel direction, since the camera is rotated heading-up.
                   rotate: true,
                   markers: [
-                    if (_step == _Step.journey)
+                    if (_manualGps)
+                      _manualUserMarker(_live)
+                    else if (_step == _Step.journey)
                       _userMarker(_live)
                     else
                       _userMarker(_current),
@@ -1013,11 +1427,135 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
             left: 12,
             right: 12,
             child: _instructionBanner(
-              main: _bannerInstruction,
-              sub: _bannerSub,
+              main: _isRerouting ? 'Recalculating route…' : _bannerInstruction,
+              sub: _isRerouting ? 'You went off the route' : _bannerSub,
             ),
           ),
+        if (_manualGps) Positioned(left: 12, top: 84, child: _manualGpsBadge()),
+        if (_manualGps) Positioned(right: 12, bottom: 12, child: _debugDpad()),
       ],
+    );
+  }
+
+  Marker _manualUserMarker(LatLng point) {
+    return Marker(
+      width: 52,
+      height: 52,
+      point: point,
+      child: GestureDetector(
+        key: const ValueKey('manualGpsMarker'),
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: _onManualDragUpdate,
+        onPanEnd: _onManualDragEnd,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.blue, width: 3),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.open_with, color: Colors.blue, size: 22),
+        ),
+      ),
+    );
+  }
+
+  Widget _manualGpsBadge() {
+    return Material(
+      color: Colors.black87,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: _exitManualGps,
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.touch_app, size: 14, color: Colors.white),
+              SizedBox(width: 6),
+              Text(
+                'Manual GPS · drag or arrows',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(width: 6),
+              Icon(Icons.close, size: 14, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _debugDpad() {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
+      child: SizedBox(
+        width: 108,
+        height: 108,
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: 36,
+              child: _dpadButton(Icons.keyboard_arrow_up, 0),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 36,
+              child: _dpadButton(Icons.keyboard_arrow_down, 180),
+            ),
+            Positioned(
+              left: 0,
+              top: 36,
+              child: _dpadButton(Icons.keyboard_arrow_left, 270),
+            ),
+            Positioned(
+              right: 0,
+              top: 36,
+              child: _dpadButton(Icons.keyboard_arrow_right, 90),
+            ),
+            const Center(
+              child: Icon(Icons.my_location, size: 16, color: Colors.black38),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dpadButton(IconData icon, double bearing) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _startManualMove(bearing),
+      onTapUp: (_) => _stopManualMove(),
+      onTapCancel: _stopManualMove,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(
+          color: AppColors.primaryGreen,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 22),
+      ),
     );
   }
 
@@ -1178,6 +1716,38 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                       style: TextStyle(color: Colors.redAccent),
                     ),
                   ),
+                  if (kDebugMode) ...[
+                    TextButton.icon(
+                      onPressed: _manualGps ? _exitManualGps : _enterManualGps,
+                      icon: Icon(
+                        _manualGps ? Icons.gps_fixed : Icons.touch_app,
+                        size: 18,
+                        color: Colors.black45,
+                      ),
+                      label: Text(
+                        _manualGps
+                            ? 'Exit manual GPS'
+                            : 'Debug: manual GPS (drag or arrows)',
+                        style: const TextStyle(
+                          color: Colors.black45,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    if (!_manualGps)
+                      TextButton.icon(
+                        onPressed: _simulateWrongTurn,
+                        icon: const Icon(
+                          Icons.alt_route,
+                          size: 18,
+                          color: Colors.black45,
+                        ),
+                        label: const Text(
+                          'Debug: simulate wrong turn from here',
+                          style: TextStyle(color: Colors.black45, fontSize: 12),
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -1210,10 +1780,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                   ],
                   _sectionLabel('CONTACT FARMERS'),
                   const SizedBox(height: 8),
-                  if (canContact)
-                    _contactCard()
-                  else
-                    _emptyContactCard(),
+                  if (canContact) _contactCard() else _emptyContactCard(),
                 ],
               ),
             ),
@@ -1356,7 +1923,11 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
               color: AppColors.successSoft,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 28),
+            child: const Icon(
+              Icons.eco,
+              color: AppColors.primaryGreen,
+              size: 28,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1441,7 +2012,11 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
             child: Text(
               'You navigated straight to this farm, so no specific crop is '
               'selected for pickup.',
-              style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.35),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black54,
+                height: 1.35,
+              ),
             ),
           ),
         ],
