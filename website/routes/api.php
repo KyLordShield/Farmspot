@@ -23,6 +23,9 @@ use App\Http\Controllers\Api\Admin\SellerRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/paymongo/return', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'returned']);
+Route::post('/paymongo/webhook', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'webhook'])->middleware('throttle:60,1');
+
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -87,6 +90,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::delete('/buy-requests/{id}', [\App\Http\Controllers\Api\BuyRequestController::class, 'destroy']);
     Route::post('/buy-requests/{id}/conversation', [ConversationController::class, 'storeForBuyRequest'])->middleware('throttle:20,1');
     Route::get('/buy-requests/{id}/conversations', [ConversationController::class, 'requestResponses']);
+    Route::post('/premium/checkouts', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'store'])->middleware('throttle:5,1');
+    Route::get('/premium/checkouts/{id}', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'show']);
+    Route::post('/premium/checkouts/{id}/verify', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'verify'])->middleware('throttle:20,1');
     Route::get('/premium', [\App\Http\Controllers\Api\PremiumController::class, 'show']);
     Route::post('/premium/simulate-purchase', [\App\Http\Controllers\Api\PremiumController::class, 'simulatePurchase'])
         ->middleware('throttle:5,1');

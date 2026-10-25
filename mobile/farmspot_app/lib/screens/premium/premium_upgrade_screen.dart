@@ -1,6 +1,5 @@
-import '../../widgets/lottie_loader.dart';
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
+import 'premium_checkout_screen.dart';
 import '../../premium/premium_state.dart';
 import '../../theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -42,58 +41,14 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
 
   Future<void> _startPremium(BuildContext context) async {
     if (_purchasing || isPremium.value) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Simulate Premium purchase?'),
-        content: const Text(
-          'Activate one month of FarmSpot Business on your account. This is a demo purchase. No money will be charged and it will not renew automatically.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Simulate purchase'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted || _purchasing) return;
     setState(() => _purchasing = true);
-    String? error;
     try {
-      error = await withFarmLottieLoading(
-        context,
-        AuthService.simulatePremiumPurchase,
-        message: 'Activating Premium...',
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const PremiumCheckoutScreen()),
       );
-    } catch (e) {
-      error = e.toString().replaceFirst('Exception: ', '');
     } finally {
       if (mounted) setState(() => _purchasing = false);
     }
-    if (!context.mounted) return;
-    if (error != null) {
-      await showFarmAlert(
-        context,
-        type: FarmAlertType.warning,
-        title: 'Premium not activated',
-        message: error,
-      );
-      return;
-    }
-    await showFarmAlert(
-      context,
-      type: FarmAlertType.success,
-      title: 'Premium activated',
-      message:
-          'Your simulated purchase is complete. No money was charged. Premium is active until $premiumExpiryLabel. Your Business shortcuts are now available on Home.',
-      buttonLabel: 'Done',
-    );
-    if (context.mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -158,7 +113,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Simulated purchase · no charge · no automatic renewal',
+                        'Monthly membership · no automatic renewal',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.mutedGreen,
@@ -250,7 +205,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                     child: Column(
                       children: [
                         const Text(
-                          'Simulated purchase',
+                          'Monthly Premium plan',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -259,7 +214,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'One month of access. No charge. No automatic renewal.',
+                          'One month of Premium access. Renew when you need it.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
@@ -287,8 +242,8 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                                   label: active
                                       ? 'Back to Profile'
                                       : (_purchasing
-                                            ? 'Activating...'
-                                            : 'Simulate purchase'),
+                                            ? 'Opening...'
+                                            : 'Continue to checkout'),
                                   onPressed: active
                                       ? () => Navigator.of(context).pop()
                                       : () => _startPremium(context),
@@ -302,7 +257,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Demo checkout only. Buy requests, Saved Farms, and Weekly Sourcing are available; crop and saved farm alerts are available in Notifications; your Premium member badge appears automatically while your plan is active.',
+                    'Your membership includes Buy Requests, Saved Farms, Weekly Sourcing, crop alerts and a Premium member badge.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),

@@ -553,13 +553,16 @@ class AuthService {
     if (token == null) return null;
 
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/user'),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/user'),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+      if (await getToken() != token) return null;
       // A revoked token must sign the user out, not just fail silently. This is
       // the most-called authenticated read, so most screens that refresh on
       // open hit it — making it the natural place to notice a dead session.
