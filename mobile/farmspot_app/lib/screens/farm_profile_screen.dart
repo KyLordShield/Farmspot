@@ -306,7 +306,6 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
           ),
           Positioned(
             left: 16,
-            right: 16,
             top: 12,
             child: GestureDetector(
               onTap: () => Navigator.of(context).pop(),

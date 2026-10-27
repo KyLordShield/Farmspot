@@ -13,10 +13,18 @@ The package and model retain their MIT and BSD notices in the dependency.
 Each photo is checked sequentially using the package's background-isolate API.
 The package loads and closes a native interpreter per check. It resizes input
 internally; original upload files are retained. The modal blocks navigation and
-form interaction while checking. A score >= 0.70 rejects the image. Decode,
+form interaction while checking. A score >= 0.30 rejects the image. Decode,
 unsupported-platform, model, and invalid-score failures also reject it. Safe
 photos in a mixed selection remain available. No review queue or external
-moderation request is involved. No scores or image bytes are logged by this code.
+moderation request is involved. Debug builds log scores, the allow/block decision,
+and elapsed time to the local development console. They do not log image bytes,
+filenames, or user identifiers. Release builds do not emit these diagnostics.
+Debug builds also show a results dialog after every selection batch, with photos
+numbered in selection order, scores, allow/block decisions, and elapsed times.
+`Copy results` copies this text without image data or filenames. `Done` closes
+the dialog; it cannot override a rejection. Failed checks show an unavailable
+score and remain blocked. This dialog is guarded by `kDebugMode` and is excluded
+from release/profile behavior. No history is saved after the dialog is dismissed.
 
 Android minimum SDK is 26 (Android 8). Android is the build target of this trial;
 the Android build aligns tflite_flutter's Kotlin target with its Java 11 target
@@ -28,7 +36,7 @@ native inference is not supported by this integration and fails closed.
 
 ## Verification
 
-Trial validation: 24 relevant widget tests passed, including the moderation gate,
+Initial trial validation: 24 relevant widget tests passed, including the moderation gate,
 photo limits/renewal, category suggestions, farm verification, and input limits.
 The new screening files passed static analysis. The connected screens have one
 pre-existing braces-style lint in AddCropScreen. The Android debug APK built
@@ -38,16 +46,26 @@ for the optional non-Latin OCR modules and was copied to `apk/FarmspotV4.apk`.
 The release uses the project's existing signing setup.
 
 User testing subsequently confirmed blocking of some obvious adult images, but
-also reported exposed-breast and partial-nudity images passing. The threshold is
-still 0.70; no stricter threshold or replacement model has been implemented.
+also reported exposed-breast and partial-nudity images passing. The threshold was
+subsequently lowered from 0.70 to 0.40 for stricter debug testing, with local score
+diagnostics added. This rejects borderline scores previously allowed but cannot
+correct images that the model confidently misclassifies. No replacement model has
+been implemented. The previously built V4 APK still uses the original 0.70 cutoff.
+Further user testing reported scores of 0.0831 and 0.3260 for images described as
+explicit. At the user's request, the debug trial cutoff was lowered again to
+0.30. This blocks the 0.3260 example but still allows the 0.0831 example. It is a
+trial setting, not a validated safety boundary, and may reject harmless photos.
 Accuracy and performance have not been systematically measured. Development
 continues in debug mode; build another release only when requested.
+The stricter cutoff passed 15 targeted tests covering score boundaries, invalid
+scores, inference failures, the moderation gate, photo limits, and renewal flows.
+These use injected model results and do not establish accuracy on real photos.
 
 Run from `mobile/farmspot_app`:
 
 ```
-flutter test test/photo_moderation_gate_test.dart test/photo_limits_test.dart test/renew_listing_sheet_test.dart
-flutter build apk --debug
+flutter test test/photo_moderation_test.dart test/photo_moderation_gate_test.dart test/photo_limits_test.dart test/renew_listing_sheet_test.dart
+flutter run
 ```
 
 Widget tests use injected decisions, not native inference. They verify rejection,
