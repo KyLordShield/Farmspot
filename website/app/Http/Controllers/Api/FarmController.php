@@ -12,6 +12,7 @@ use App\Models\Listing;
 use App\Models\ListingReview;
 use App\Support\CloudinaryImage;
 use App\Support\InputLimits;
+use App\Support\PhotoLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -84,7 +85,7 @@ class FarmController extends Controller
             'barangay' => ['required', 'string', 'max:'.InputLimits::BARANGAY],
             'latitude' => ['required', 'numeric'],
             'longitude' => ['required', 'numeric'],
-            'photos' => ['required', 'array', 'min:1'],
+            'photos' => ['required', 'array', 'min:1', 'max:'.PhotoLimits::FARM],
             'photos.*' => ['image', 'max:5120'],
             // Required only for the first farm. Afterwards they are inherited,
             // so omitting them is the expected path rather than an error.
@@ -472,28 +473,33 @@ class FarmController extends Controller
         }
 
         $validated = $request->validate([
-            'photos' => ['required', 'array', 'min:1'],
+            'photos' => ['required', 'array', 'min:1', 'max:'.PhotoLimits::FARM],
             'photos.*' => ['image', 'max:5120'],
         ]);
 
-        // A farm with no photos yet gets its first new upload as the cover,
-        // mirroring the create flow.
-        $hasAnyPhoto = FarmPhoto::where('FRM_ID', $farm->FRM_ID)->exists();
+        DB::transaction(function () use ($validated, $farm) {
+            // A farm with no photos yet gets its first new upload as the cover,
+            // mirroring the create flow.
+            Farm::whereKey($farm->FRM_ID)->lockForUpdate()->firstOrFail();
+            $count = FarmPhoto::where('FRM_ID', $farm->FRM_ID)->count();
+            PhotoLimits::ensure($count, count($validated['photos']), PhotoLimits::FARM, 'farm');
+            $hasAnyPhoto = $count > 0;
 
-        foreach ($validated['photos'] as $index => $photo) {
-            $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-            $path = "farm-photos/{$farm->FRM_ID}/".uniqid().".{$extension}";
+            foreach ($validated['photos'] as $index => $photo) {
+                $extension = $photo->getClientOriginalExtension() ?: 'jpg';
+                $path = "farm-photos/{$farm->FRM_ID}/".uniqid().".{$extension}";
 
-            Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+                Storage::disk('cloudinary')->put($path, $photo->getRealPath());
 
-            FarmPhoto::create([
-                'FPHOTO_ID' => $this->uniqueId('farm_photo', 'FPHOTO_ID'),
-                'FPHOTO_FILE_PATH' => Storage::disk('cloudinary')->url($path),
-                'FPHOTO_UPLOADED_AT' => now(),
-                'FPHOTO_IS_PRIMARY' => (! $hasAnyPhoto && $index === 0) ? 1 : 0,
-                'FRM_ID' => $farm->FRM_ID,
-            ]);
-        }
+                FarmPhoto::create([
+                    'FPHOTO_ID' => $this->uniqueId('farm_photo', 'FPHOTO_ID'),
+                    'FPHOTO_FILE_PATH' => Storage::disk('cloudinary')->url($path),
+                    'FPHOTO_UPLOADED_AT' => now(),
+                    'FPHOTO_IS_PRIMARY' => (! $hasAnyPhoto && $index === 0) ? 1 : 0,
+                    'FRM_ID' => $farm->FRM_ID,
+                ]);
+            }
+        });
 
         return response()->json([
             'message' => 'Farm photos added successfully.',

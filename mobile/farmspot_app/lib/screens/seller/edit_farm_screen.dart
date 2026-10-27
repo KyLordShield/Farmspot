@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
+import 'package:farmspot_app/utils/photo_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/farm_profile.dart';
@@ -32,8 +33,15 @@ import '../../widgets/farmspot_loader.dart';
 /// "Saving changes..." layer reads as progress rather than a hang.
 class EditFarmScreen extends StatefulWidget {
   final String farmId;
+  final Future<FarmProfileData> Function(String) loadFarm;
+  final Future<List<XFile>> Function(int)? selectPhotos;
 
-  const EditFarmScreen({super.key, required this.farmId});
+  const EditFarmScreen({
+    super.key,
+    required this.farmId,
+    this.loadFarm = FarmService.fetchFarmProfile,
+    this.selectPhotos,
+  });
 
   @override
   State<EditFarmScreen> createState() => _EditFarmScreenState();
@@ -50,6 +58,19 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   late final TextEditingController _descriptionCtrl;
 
   final List<XFile> _newPhotos = [];
+  int get _photoCount =>
+      (_farm?.photos.length ?? 0) - _removedPhotoIds.length + _newPhotos.length;
+  void _addPickedPhotos(List<XFile> picked, int remaining) {
+    if (!mounted || picked.isEmpty) return;
+    remaining = (PhotoLimits.farm - _photoCount).clamp(0, PhotoLimits.farm);
+    setState(() {
+      _newPhotos.addAll(picked.take(remaining));
+      _submitError = picked.length > remaining
+          ? 'Only the first $remaining photos were added. Maximum 4 photos per farm.'
+          : null;
+    });
+  }
+
   final Set<String> _removedPhotoIds = {};
 
   /// The seller's explicit cover choice. Null until they tap a photo's star —
@@ -89,7 +110,7 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
       _loadError = null;
     });
     try {
-      final farm = await FarmService.fetchFarmProfile(widget.farmId);
+      final farm = await widget.loadFarm(widget.farmId);
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -118,6 +139,18 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   }
 
   Future<void> _pickPhotos() async {
+    final remaining = PhotoLimits.farm - _photoCount;
+    if (remaining <= 0) {
+      setState(
+        () => _submitError =
+            'Maximum 4 photos per farm. Remove a photo before adding more.',
+      );
+      return;
+    }
+    if (widget.selectPhotos != null) {
+      _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
+      return;
+    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -142,17 +175,24 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
 
     final List<XFile> picked;
     if (source == ImageSource.gallery) {
-      picked = await _picker.pickMultiImage();
+      picked = await _picker.pickMultiImage(
+        limit: remaining,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
     } else {
-      final single = await _picker.pickImage(source: ImageSource.camera);
+      final single = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
       picked = single == null ? <XFile>[] : [single];
     }
     if (picked.isEmpty || !mounted) return;
 
-    setState(() {
-      _newPhotos.addAll(picked);
-      _submitError = null;
-    });
+    _addPickedPhotos(picked, remaining);
   }
 
   void _removeNewPhoto(int index) {
@@ -173,6 +213,13 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   /// the chosen cover clears the choice — the server then auto-promotes the
   /// oldest remaining photo, which is the least surprising outcome.
   void _toggleRemove(String photoId) {
+    if (_removedPhotoIds.contains(photoId) && _photoCount >= PhotoLimits.farm) {
+      setState(
+        () => _submitError =
+            'Remove a new photo before restoring this one. Maximum 4 photos per farm.',
+      );
+      return;
+    }
     setState(() {
       if (!_removedPhotoIds.add(photoId)) {
         _removedPhotoIds.remove(photoId);
@@ -196,6 +243,10 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
 
   Future<void> _submit() async {
     if (_isSubmitting || _farm == null) return;
+    if (_newPhotos.isNotEmpty && _photoCount > PhotoLimits.farm) {
+      setState(() => _submitError = 'Maximum 4 photos per farm.');
+      return;
+    }
     // At least one field must actually change for the save to mean anything.
     if (!_nameChanged &&
         !_descriptionChanged &&
@@ -337,6 +388,10 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
         // cover, and new ones are added alongside.
         const FieldLabel('FARM PHOTOS'),
         Text(
+          '$_photoCount/4 photos',
+          style: const TextStyle(fontSize: 12, color: Colors.black54),
+        ),
+        Text(
           'Tap a photo to set it as the cover. Use ✕ to remove a photo.',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
         ),
@@ -365,7 +420,8 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
               ],
               if (keptPhotos.isNotEmpty || _newPhotos.isNotEmpty)
                 const SizedBox(width: 4),
-              PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
+              if (_photoCount < PhotoLimits.farm)
+                PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
             ],
           ),
         ),

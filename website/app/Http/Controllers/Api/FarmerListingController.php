@@ -14,6 +14,7 @@ use App\Services\CropCategorySuggestion;
 use App\Support\CloudinaryImage;
 use App\Support\InputLimits;
 use App\Support\ListingName;
+use App\Support\PhotoLimits;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -579,7 +580,7 @@ class FarmerListingController extends Controller
             // New clients send a photos[] gallery; the legacy single `photo`
             // field is still accepted so an older APK can renew after an
             // upgrade. At least one image is required either way.
-            'photos' => ['nullable', 'array', 'min:1'],
+            'photos' => ['nullable', 'array', 'min:1', 'max:'.PhotoLimits::LISTING],
             'photos.*' => ['image', 'max:5120'],
             'photo' => ['nullable', 'image', 'max:5120'],
             'primary_index' => ['nullable', 'integer', 'min:0'],
@@ -640,6 +641,7 @@ class FarmerListingController extends Controller
 
         try {
             DB::transaction(function () use ($listing, $validated, $newUrls, $primaryIndex) {
+                Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
                 ListingPhoto::where('LST_ID', $listing->LST_ID)->delete();
 
                 foreach ($newUrls as $index => $url) {
@@ -728,37 +730,29 @@ class FarmerListingController extends Controller
             'photo' => ['required', 'image', 'max:5120'],
         ]);
 
-        $photo = $request->file('photo');
-        $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-        $path = "listing-photos/{$listing->LST_ID}/".uniqid().".{$extension}";
-
-        Storage::disk('cloudinary')->put($path, $photo->getRealPath());
-        $newUrl = Storage::disk('cloudinary')->url($path);
-
-        // Capture the outgoing primary (or the plain LST_IMAGE for an
-        // un-backfilled legacy row) before it is replaced.
-        $previousPrimary = ListingPhoto::where('LST_ID', $listing->LST_ID)
-            ->where('LPHOTO_IS_PRIMARY', 1)
-            ->first();
-        $oldImage = $previousPrimary?->LPHOTO_FILE_PATH ?? $listing->LST_IMAGE;
-
-        DB::transaction(function () use ($listing, $newUrl, $previousPrimary) {
-            ListingPhoto::where('LST_ID', $listing->LST_ID)
-                ->update(['LPHOTO_IS_PRIMARY' => 0]);
-
+        [$newUrl, $oldImage] = DB::transaction(function () use ($request, $listing) {
+            $listing = Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+            $previousPrimary = ListingPhoto::where('LST_ID', $listing->LST_ID)->where('LPHOTO_IS_PRIMARY', 1)->first();
+            $count = ListingPhoto::where('LST_ID', $listing->LST_ID)->count();
+            PhotoLimits::ensure($count - ($previousPrimary ? 1 : 0), 1, PhotoLimits::LISTING, 'listing');
+            $oldImage = $previousPrimary?->LPHOTO_FILE_PATH ?? $listing->LST_IMAGE;
+            $photo = $request->file('photo');
+            $extension = $photo->getClientOriginalExtension() ?: 'jpg';
+            $path = "listing-photos/{$listing->LST_ID}/".uniqid().".{$extension}";
+            Storage::disk('cloudinary')->put($path, $photo->getRealPath());
+            $newUrl = Storage::disk('cloudinary')->url($path);
+            ListingPhoto::where('LST_ID', $listing->LST_ID)->update(['LPHOTO_IS_PRIMARY' => 0]);
             ListingPhoto::create([
                 'LPHOTO_ID' => $this->uniqueId('listing_photo', 'LPHOTO_ID'),
                 'LPHOTO_FILE_PATH' => $newUrl,
-                'LPHOTO_UPLOADED_AT' => now(),
-                'LPHOTO_IS_PRIMARY' => 1,
-                'LST_ID' => $listing->LST_ID,
+                'LPHOTO_UPLOADED_AT' => now(), 'LPHOTO_IS_PRIMARY' => 1, 'LST_ID' => $listing->LST_ID,
             ]);
-
             $listing->LST_IMAGE = $newUrl;
             $listing->LST_UPDATED_AT = now();
             $listing->save();
-
             $previousPrimary?->delete();
+
+            return [$newUrl, $oldImage];
         });
 
         // Destroy the old asset only AFTER the new one was uploaded and the row

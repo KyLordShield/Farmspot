@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/listing.dart';
 import '../services/listing_service.dart';
 import '../theme.dart';
+import '../utils/photo_limits.dart';
 
 /// Opens the renewal sheet and returns the renewed listing, or null if the
 /// seller backed out.
@@ -91,12 +92,16 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
   String _status = 'AVAILABLE_NOW';
   DateTime? _harvestDate;
   bool _submitting = false;
+  bool _capturing = false;
   String? _error;
 
   bool get _isSoon => _status == 'SOON_TO_HARVEST';
 
   bool get _canSubmit =>
-      _photos.isNotEmpty && (!_isSoon || _harvestDate != null) && !_submitting;
+      _photos.isNotEmpty &&
+      (!_isSoon || _harvestDate != null) &&
+      !_submitting &&
+      !_capturing;
 
   String get _cropLabel =>
       widget.listing.cropIcon ?? widget.listing.categoryName ?? 'crop';
@@ -126,7 +131,18 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
   }
 
   Future<void> _capture() async {
-    setState(() => _error = null);
+    if (_submitting || _capturing) return;
+    if (_photos.length >= PhotoLimits.listing) {
+      setState(
+        () => _error =
+            'Maximum 5 photos per listing. Remove a photo before adding more.',
+      );
+      return;
+    }
+    setState(() {
+      _error = null;
+      _capturing = true;
+    });
 
     try {
       final captured = widget.capturePhoto != null
@@ -153,6 +169,8 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
         _error =
             'Could not open the camera. Allow camera access and try again.';
       });
+    } finally {
+      if (mounted) setState(() => _capturing = false);
     }
   }
 
@@ -428,12 +446,16 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          '${_photos.length}/5 photos',
+          style: const TextStyle(fontSize: 12, color: Colors.black54),
+        ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             for (var i = 0; i < _photos.length; i++) _buildPhotoTile(i),
-            _buildAddPhotoTile(),
+            if (_photos.length < PhotoLimits.listing) _buildAddPhotoTile(),
           ],
         ),
         const SizedBox(height: 8),

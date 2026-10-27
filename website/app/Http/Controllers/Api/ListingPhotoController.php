@@ -7,10 +7,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Listing;
 use App\Models\ListingPhoto;
 use App\Support\CloudinaryImage;
+use App\Support\PhotoLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Multi-photo gallery management for a listing. listing_photo is the source of
@@ -36,17 +38,19 @@ class ListingPhotoController extends Controller
         }
 
         $validated = $request->validate([
-            'photos' => ['required', 'array', 'min:1'],
+            'photos' => ['required', 'array', 'min:1', 'max:'.PhotoLimits::LISTING],
             'photos.*' => ['image', 'max:5120'],
         ]);
 
-        $isFirstEver = ! ListingPhoto::where('LST_ID', $listing->LST_ID)->exists();
-
         try {
-            DB::transaction(function () use ($validated, $listing, $isFirstEver) {
+            DB::transaction(function () use ($validated, $listing) {
+                Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+                $count = ListingPhoto::where('LST_ID', $listing->LST_ID)->count();
+                PhotoLimits::ensure($count, count($validated['photos']), PhotoLimits::LISTING, 'listing');
+                $isFirstEver = $count === 0;
                 foreach ($validated['photos'] as $index => $photo) {
                     $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-                    $path = "listing-photos/{$listing->LST_ID}/" . uniqid() . ".{$extension}";
+                    $path = "listing-photos/{$listing->LST_ID}/".uniqid().".{$extension}";
 
                     Storage::disk('cloudinary')->put($path, $photo->getRealPath());
                     $url = Storage::disk('cloudinary')->url($path);
@@ -66,6 +70,8 @@ class ListingPhotoController extends Controller
                     }
                 }
             });
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Failed to upload listing photos.',

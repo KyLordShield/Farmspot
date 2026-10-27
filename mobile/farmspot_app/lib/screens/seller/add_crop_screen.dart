@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
+import 'package:farmspot_app/utils/photo_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/crop_category.dart';
@@ -44,6 +45,7 @@ class AddCropScreen extends StatefulWidget {
   /// updateListing() (+ updateListingPhoto() when a new photo was picked)
   /// instead of createListing(). Pops true after a successful edit.
   final Listing? existingListing;
+  final Future<List<XFile>> Function(int remaining)? selectPhotos;
   final Future<List<CropCategory>> Function() loadCategories;
 
   const AddCropScreen({
@@ -51,6 +53,7 @@ class AddCropScreen extends StatefulWidget {
     this.isFirstCrop = false,
     this.farmId,
     this.existingListing,
+    this.selectPhotos,
     this.loadCategories = ListingService.fetchCropCategories,
   });
 
@@ -90,6 +93,27 @@ class _AddCropScreenState extends State<AddCropScreen> {
   /// Net: a new-upload always auto-promotes one to primary on the backend, so
   /// create-with-photos needs no explicit setPrimaryPhoto call for index 0.
   final List<XFile> _newPhotos = [];
+  final Set<String> _removedPhotoIds = {};
+  int get _photoCount =>
+      (widget.existingListing?.photos.length ?? 0) -
+      _removedPhotoIds.length +
+      _newPhotos.length;
+
+  void _addPickedPhotos(List<XFile> picked, int remaining) {
+    if (!mounted || picked.isEmpty) return;
+    remaining = (PhotoLimits.listing - _photoCount).clamp(
+      0,
+      PhotoLimits.listing,
+    );
+    setState(() {
+      _newPhotos.addAll(picked.take(remaining));
+      _markedNewIndex ??= 0;
+      _submitError = picked.length > remaining
+          ? 'Only the first $remaining photos were added. Maximum 5 photos per listing.'
+          : null;
+    });
+  }
+
   int? _markedNewIndex;
 
   /// Edit mode only: the generated photo id (LPHOTO_ID) currently starred as
@@ -255,6 +279,18 @@ class _AddCropScreenState extends State<AddCropScreen> {
   }
 
   Future<void> _pickPhotos() async {
+    final remaining = PhotoLimits.listing - _photoCount;
+    if (remaining <= 0) {
+      setState(
+        () => _submitError =
+            'Maximum 5 photos per listing. Remove a photo before adding more.',
+      );
+      return;
+    }
+    if (widget.selectPhotos != null) {
+      _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
+      return;
+    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -279,24 +315,22 @@ class _AddCropScreenState extends State<AddCropScreen> {
     if (source == null || !mounted) return;
 
     if (source == ImageSource.camera) {
-      final picked = await _picker.pickImage(source: source);
-      if (picked != null && mounted) {
-        setState(() {
-          _newPhotos.add(picked);
-          _markedNewIndex ??= 0;
-          _submitError = null;
-        });
-      }
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
+      if (picked != null) _addPickedPhotos([picked], remaining);
       return;
     }
-
-    final picked = await _picker.pickMultiImage();
-    if (picked.isEmpty || !mounted) return;
-    setState(() {
-      _newPhotos.addAll(picked);
-      _markedNewIndex ??= 0;
-      _submitError = null;
-    });
+    final picked = await _picker.pickMultiImage(
+      limit: remaining,
+      imageQuality: 80,
+      maxWidth: 1920,
+      maxHeight: 1920,
+    );
+    _addPickedPhotos(picked, remaining);
   }
 
   /// Removes a newly picked photo (not yet on the server) and fixes up the
@@ -377,6 +411,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   Future<void> _submit() async {
     if (_isSubmitting) return;
+    if (_newPhotos.isNotEmpty && _photoCount > PhotoLimits.listing) {
+      setState(() => _submitError = 'Maximum 5 photos per listing.');
+      return;
+    }
 
     if (_isEditing) {
       await _submitEdit();
@@ -503,6 +541,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
           _status != baselineStatus ||
           dateStr != baselineDateStr ||
           _newPhotos.isNotEmpty ||
+          _removedPhotoIds.isNotEmpty ||
           _descCtrl.text.trim() != (existing.description ?? '') ||
           _selectedCategoryIndex != _baselineCategoryIndex;
     }
@@ -575,6 +614,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
     showFarmLottieLoading(context, message: 'Saving your crop...');
 
     try {
+      for (final photoId in _removedPhotoIds) {
+        await ListingService.deleteListingPhoto(
+          listingId: existing.id,
+          photoId: photoId,
+        );
+      }
       await ListingService.updateListing(
         listingId: existing.id,
         categoryId: category.id,
@@ -926,13 +971,20 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         // index maths on save line up.
                         if (_isEditing)
                           for (final photo
-                              in widget.existingListing!.photos) ...[
+                              in widget.existingListing!.photos.where(
+                                (photo) => !_removedPhotoIds.contains(photo.id),
+                              )) ...[
                             _ExistingPhotoTile(
-                              key: ObjectKey(photo.id),
+                              key: ValueKey('listing_photo_edit_${photo.id}'),
                               url: photo.url,
                               primary: _editPrimaryId == photo.id,
                               busy: _primaryBusy && _editPrimaryId == photo.id,
                               onPrimaryTap: () => _setExistingPrimary(photo.id),
+                              onRemove: () => setState(() {
+                                _removedPhotoIds.add(photo.id);
+                                if (_editPrimaryId == photo.id)
+                                  _editPrimaryId = null;
+                              }),
                             ),
                             const SizedBox(width: 12),
                           ],
@@ -949,13 +1001,17 @@ class _AddCropScreenState extends State<AddCropScreen> {
                           ),
                           const SizedBox(width: 12),
                         ],
-                        PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
+                        if (_photoCount < PhotoLimits.listing)
+                          PhotoPlaceholder(
+                            isAddButton: true,
+                            onTap: _pickPhotos,
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _photoCaption,
+                    '$_photoCount/5 photos. $_photoCaption',
                     style: const TextStyle(color: Colors.black45, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
@@ -1020,6 +1076,7 @@ class _ExistingPhotoTile extends StatelessWidget {
   final bool primary;
   final bool busy;
   final VoidCallback onPrimaryTap;
+  final VoidCallback onRemove;
 
   const _ExistingPhotoTile({
     super.key,
@@ -1027,6 +1084,7 @@ class _ExistingPhotoTile extends StatelessWidget {
     required this.primary,
     required this.busy,
     required this.onPrimaryTap,
+    required this.onRemove,
   });
 
   @override
@@ -1067,6 +1125,16 @@ class _ExistingPhotoTile extends StatelessWidget {
                 },
               ),
               _photoBorder(primary: primary),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  tooltip: 'Remove photo',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: busy ? null : onRemove,
+                  icon: const Icon(Icons.cancel, color: Colors.white, size: 22),
+                ),
+              ),
               if (primary)
                 const Positioned(top: 0, left: 0, child: _PrimaryBadge()),
               if (busy)

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
+import 'package:farmspot_app/utils/photo_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../models/farm_setup_data.dart';
@@ -31,7 +32,7 @@ class FarmSetupDetailsScreen extends StatefulWidget {
 }
 
 class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
-  static const int _maxPhotos = 4;
+  static const int _maxPhotos = PhotoLimits.farm;
 
   final _picker = ImagePicker();
   late final TextEditingController _farmNameCtrl = TextEditingController(
