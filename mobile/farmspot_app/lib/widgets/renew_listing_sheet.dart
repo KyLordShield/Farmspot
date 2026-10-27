@@ -1,3 +1,4 @@
+import 'photo_moderation_gate.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,8 @@ Future<Listing?> showRenewListingSheet(
     int primaryIndex,
   })?
   renew,
+  Future<List<XFile>> Function(BuildContext, List<XFile>) moderatePhotos =
+      screenPhotos,
   Future<XFile?> Function()? capturePhoto,
 }) {
   return showModalBottomSheet<Listing>(
@@ -34,6 +37,7 @@ Future<Listing?> showRenewListingSheet(
       listing: listing,
       renew: renew,
       capturePhoto: capturePhoto,
+      moderatePhotos: moderatePhotos,
     ),
   );
 }
@@ -48,6 +52,8 @@ Future<Listing?> showRenewListingSheet(
 /// stale produce beside today's. The seller can take several photos and star
 /// the one that should be the thumbnail.
 class RenewListingSheet extends StatefulWidget {
+  final Future<List<XFile>> Function(BuildContext, List<XFile>) moderatePhotos;
+
   final Listing listing;
 
   /// Injectable for tests; defaults to the real API.
@@ -65,6 +71,7 @@ class RenewListingSheet extends StatefulWidget {
 
   const RenewListingSheet({
     super.key,
+    this.moderatePhotos = screenPhotos,
     required this.listing,
     this.renew,
     this.capturePhoto,
@@ -156,6 +163,8 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
 
       if (captured == null || !mounted) return;
 
+      final accepted = await widget.moderatePhotos(context, [captured]);
+      if (!mounted || accepted.isEmpty) return;
       final bytes = await captured.readAsBytes();
       if (!mounted) return;
 

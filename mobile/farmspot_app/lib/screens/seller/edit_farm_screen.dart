@@ -1,3 +1,4 @@
+import 'package:farmspot_app/widgets/photo_moderation_gate.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -32,12 +33,15 @@ import '../../widgets/farmspot_loader.dart';
 /// instead of a button spinner — photo uploads can take seconds, and a locked
 /// "Saving changes..." layer reads as progress rather than a hang.
 class EditFarmScreen extends StatefulWidget {
+  final Future<List<XFile>> Function(BuildContext, List<XFile>) moderatePhotos;
+
   final String farmId;
   final Future<FarmProfileData> Function(String) loadFarm;
   final Future<List<XFile>> Function(int)? selectPhotos;
 
   const EditFarmScreen({
     super.key,
+    this.moderatePhotos = screenPhotos,
     required this.farmId,
     this.loadFarm = FarmService.fetchFarmProfile,
     this.selectPhotos,
@@ -60,7 +64,12 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
   final List<XFile> _newPhotos = [];
   int get _photoCount =>
       (_farm?.photos.length ?? 0) - _removedPhotoIds.length + _newPhotos.length;
-  void _addPickedPhotos(List<XFile> picked, int remaining) {
+  Future<void> _addPickedPhotos(List<XFile> picked, int remaining) async {
+    if (!mounted || picked.isEmpty) return;
+    picked = await widget.moderatePhotos(
+      context,
+      picked.take(remaining).toList(),
+    );
     if (!mounted || picked.isEmpty) return;
     remaining = (PhotoLimits.farm - _photoCount).clamp(0, PhotoLimits.farm);
     setState(() {
@@ -148,7 +157,7 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
       return;
     }
     if (widget.selectPhotos != null) {
-      _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
+      await _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
       return;
     }
     final source = await showModalBottomSheet<ImageSource>(
@@ -192,7 +201,7 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
     }
     if (picked.isEmpty || !mounted) return;
 
-    _addPickedPhotos(picked, remaining);
+    await _addPickedPhotos(picked, remaining);
   }
 
   void _removeNewPhoto(int index) {

@@ -1,3 +1,4 @@
+import 'package:farmspot_app/widgets/photo_moderation_gate.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -29,6 +30,8 @@ enum AvailabilityStatus {
 }
 
 class AddCropScreen extends StatefulWidget {
+  final Future<List<XFile>> Function(BuildContext, List<XFile>) moderatePhotos;
+
   /// True when this is the very first crop added right after farm setup —
   /// shows a simpler header and skips the "Which Farm?" picker, and finishes
   /// by navigating to the "Farm is Live" celebration screen instead of
@@ -50,6 +53,7 @@ class AddCropScreen extends StatefulWidget {
 
   const AddCropScreen({
     super.key,
+    this.moderatePhotos = screenPhotos,
     this.isFirstCrop = false,
     this.farmId,
     this.existingListing,
@@ -99,7 +103,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _removedPhotoIds.length +
       _newPhotos.length;
 
-  void _addPickedPhotos(List<XFile> picked, int remaining) {
+  Future<void> _addPickedPhotos(List<XFile> picked, int remaining) async {
+    if (!mounted || picked.isEmpty) return;
+    picked = await widget.moderatePhotos(
+      context,
+      picked.take(remaining).toList(),
+    );
     if (!mounted || picked.isEmpty) return;
     remaining = (PhotoLimits.listing - _photoCount).clamp(
       0,
@@ -288,7 +297,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       return;
     }
     if (widget.selectPhotos != null) {
-      _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
+      await _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
       return;
     }
     final source = await showModalBottomSheet<ImageSource>(
@@ -321,7 +330,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
         maxWidth: 1920,
         maxHeight: 1920,
       );
-      if (picked != null) _addPickedPhotos([picked], remaining);
+      if (picked != null) await _addPickedPhotos([picked], remaining);
       return;
     }
     final picked = await _picker.pickMultiImage(
@@ -330,7 +339,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       maxWidth: 1920,
       maxHeight: 1920,
     );
-    _addPickedPhotos(picked, remaining);
+    await _addPickedPhotos(picked, remaining);
   }
 
   /// Removes a newly picked photo (not yet on the server) and fixes up the

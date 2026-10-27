@@ -1,3 +1,4 @@
+import 'package:farmspot_app/widgets/photo_moderation_gate.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import 'farm_setup_location_screen.dart';
 import 'farm_setup_verify_screen.dart';
 
 class FarmSetupDetailsScreen extends StatefulWidget {
+  final Future<List<XFile>> Function(BuildContext, List<XFile>) moderatePhotos;
+
   final FarmSetupData farmSetupData;
 
   /// True when the seller already has at least one farm. It only changes the
@@ -23,6 +26,7 @@ class FarmSetupDetailsScreen extends StatefulWidget {
 
   const FarmSetupDetailsScreen({
     super.key,
+    this.moderatePhotos = screenPhotos,
     required this.farmSetupData,
     this.isAdditionalFarm = false,
   });
@@ -78,6 +82,7 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
     if (source == null) return;
 
     final remaining = _maxPhotos - widget.farmSetupData.photos.length;
+    if (remaining <= 0) return;
     final List<XFile> picked;
     if (source == ImageSource.gallery) {
       picked = await _picker.pickMultiImage(
@@ -97,8 +102,13 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
     }
     if (picked.isEmpty || !mounted) return;
 
+    final accepted = await widget.moderatePhotos(
+      context,
+      picked.take(remaining).toList(),
+    );
+    if (!mounted) return;
     setState(() {
-      widget.farmSetupData.photos.addAll(picked.take(remaining));
+      widget.farmSetupData.photos.addAll(accepted);
       _errorMessage = null;
     });
   }

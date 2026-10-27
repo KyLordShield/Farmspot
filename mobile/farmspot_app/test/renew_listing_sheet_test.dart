@@ -59,6 +59,7 @@ void main() {
                 renewed = await showRenewListingSheet(
                   context,
                   listing: _expiredListing(),
+                  moderatePhotos: (_, photos) async => photos,
                   capturePhoto: _freshPhoto,
                   renew:
                       ({
@@ -88,7 +89,10 @@ void main() {
     await tester.tap(find.text('Open renewal'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Take at least one fresh photo to continue.'), findsOneWidget);
+    expect(
+      find.text('Take at least one fresh photo to continue.'),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<ElevatedButton>(find.byKey(RenewListingSheet.submitKey))
@@ -130,6 +134,7 @@ void main() {
                 await showRenewListingSheet(
                   context,
                   listing: _expiredListing(status: 'NOT_AVAILABLE'),
+                  moderatePhotos: (_, photos) async => photos,
                   capturePhoto: _freshPhoto,
                   renew:
                       ({
@@ -205,6 +210,7 @@ void main() {
                 await showRenewListingSheet(
                   context,
                   listing: _expiredListing(),
+                  moderatePhotos: (_, photos) async => photos,
                   capturePhoto: _freshPhoto,
                   renew:
                       ({

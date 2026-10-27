@@ -26,6 +26,35 @@ Future<void> showPicker(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('rejected listing photos never enter the upload gallery', (
+    tester,
+  ) async {
+    var checked = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AddCropScreen(
+          isFirstCrop: true,
+          farmId: 'FARM01',
+          loadCategories: () async => [
+            CropCategory(id: 'LEAFVG', name: 'Vegetables'),
+          ],
+          selectPhotos: (_) async => [photo(1)],
+          moderatePhotos: (_, photos) async {
+            checked += photos.length;
+            return [];
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await showPicker(tester);
+    await tester.tap(find.byType(PhotoPlaceholder));
+    await tester.pumpAndSettle();
+    expect(checked, 1);
+    expect(find.textContaining('0/5 photos'), findsOneWidget);
+    expect(find.byType(PhotoPlaceholder), findsOneWidget);
+  });
+
   testWidgets(
     'new listing clamps selections to five photos and frees a slot on removal',
     (tester) async {
@@ -33,6 +62,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: AddCropScreen(
+            moderatePhotos: (_, photos) async => photos,
             isFirstCrop: true,
             farmId: 'FARM01',
             loadCategories: () async => [
@@ -80,6 +110,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: AddCropScreen(
+            moderatePhotos: (_, photos) async => photos,
             existingListing: listing,
             loadCategories: () async => [
               CropCategory(id: 'LEAFVG', name: 'Vegetables'),
@@ -134,6 +165,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: EditFarmScreen(
+          moderatePhotos: (_, photos) async => photos,
           farmId: farm.id,
           loadFarm: (_) async => farm,
           selectPhotos: (remaining) async {
@@ -171,6 +203,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: RenewListingSheet(
+            moderatePhotos: (_, photos) async => photos,
             listing: Listing(id: 'LST001', status: 'NOT_AVAILABLE'),
             capturePhoto: () async => photo(captures++),
           ),
