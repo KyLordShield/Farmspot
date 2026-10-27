@@ -12,6 +12,10 @@ class FarmSetupData {
   XFile? verificationDocument;
   XFile? farmCertificate;
 
+  // Screening text stays in wizard memory. Admins review the original photos.
+  String verificationDocumentText = '';
+  String farmCertificateText = '';
+
   bool get hasDetails =>
       name.trim().isNotEmpty &&
       description.trim().isNotEmpty &&

@@ -269,10 +269,10 @@ class AuthService {
     required String passwordConfirmation,
     required String mobileNumber,
     String? address,
+    http.Client? client,
   }) async {
     try {
-      final response = await http
-          .post(
+      final response = await (client?.post ?? http.post)(
             Uri.parse('$baseUrl/register'),
             headers: {'Accept': 'application/json'},
             body: {
@@ -304,7 +304,7 @@ class AuthService {
         fieldErrors = <String, List<String>>{
           for (final entry in (data['errors'] as Map).entries)
             entry.key.toString(): entry.value is List
-                ? entry.value.map((e) => e.toString()).toList()
+                ? (entry.value as List).map<String>((e) => e.toString()).toList()
                 : [entry.value.toString()],
         };
       }

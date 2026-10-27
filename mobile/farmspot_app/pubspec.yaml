@@ -29,6 +29,7 @@ dependencies:
   lottie: ^3.3.1
   camera: ^0.12.1
   photo_manager: ^3.12.0
+  google_mlkit_text_recognition: ^0.17.1
 
 dev_dependencies:
   flutter_test:

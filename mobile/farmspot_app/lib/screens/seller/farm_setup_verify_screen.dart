@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:cross_file/cross_file.dart';
 
 import '../../../models/farm_setup_data.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/document_text_check.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
 import 'farm_setup_location_screen.dart';
+import 'document_capture_screen.dart';
 
 class FarmSetupVerifyScreen extends StatefulWidget {
   final FarmSetupData farmSetupData;
+  final Future<String> Function(XFile) readDocument;
+  final Future<XFile?> Function()? captureDocument;
 
   /// Only reached on a seller's first farm. Additional farms skip this step
   /// because the server copies their ID and permit from the first farm, so
@@ -16,6 +20,8 @@ class FarmSetupVerifyScreen extends StatefulWidget {
   const FarmSetupVerifyScreen({
     super.key,
     required this.farmSetupData,
+    this.readDocument = DocumentTextCheck.read,
+    this.captureDocument,
   });
 
   @override
@@ -23,8 +29,8 @@ class FarmSetupVerifyScreen extends StatefulWidget {
 }
 
 class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
-  final _picker = ImagePicker();
   final _fullNameCtrl = TextEditingController();
+  bool _checking = false;
 
   @override
   void initState() {
@@ -56,71 +62,112 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
   String get _idSubtitle {
     final doc = _idDocument;
     if (doc == null) {
-      return 'Upload a valid government-issued ID';
+      return 'Take a clear photo of your government-issued ID';
     }
-    return 'Uploaded ${doc.name}';
+    return 'Photo captured: ${doc.name}';
   }
 
   String get _certificateSubtitle {
     final doc = _certificateDocument;
     if (doc == null) {
-      return 'Upload your farm permit or certificate';
+      return 'Take a clear photo of your farm permit or certificate';
     }
-    return 'Uploaded ${doc.name}';
+    return 'Photo captured: ${doc.name}';
   }
 
-  Future<void> _pickDocument(void Function(XFile) assign) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Photo Library'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Camera'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-          ],
-        ),
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.errorTerracotta,
       ),
     );
-    if (source == null) return;
+  }
 
-    final picked = await _picker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1920,
-      maxHeight: 1920,
-    );
-    if (picked != null && mounted) {
-      setState(() => assign(picked));
+  Future<void> _pickDocument({required bool isId}) async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      final picked = widget.captureDocument != null
+          ? await widget.captureDocument!()
+          : await Navigator.of(context).push<XFile>(
+              MaterialPageRoute(builder: (_) => const DocumentCaptureScreen()),
+            );
+      if (picked == null || !mounted) return;
+      final text = await widget.readDocument(picked);
+      if (!mounted) return;
+      if (!DocumentTextCheck.looksLikeDocument(text, isId: isId)) {
+        _showError(
+          isId
+              ? 'Could not read a supported government ID. Retake with all text visible and no glare.'
+              : 'Could not read a permit or certificate. Retake with the title and details visible.',
+        );
+        return;
+      }
+      if (isId && !DocumentTextCheck.matchesName(_fullNameCtrl.text, text)) {
+        _showError(
+          'The ID name must match your seller full name. Check your account name and retake a clear photo.',
+        );
+        return;
+      }
+      setState(() {
+        if (isId) {
+          widget.farmSetupData.verificationDocument = picked;
+          widget.farmSetupData.verificationDocumentText = text;
+        } else {
+          widget.farmSetupData.farmCertificate = picked;
+          widget.farmSetupData.farmCertificateText = text;
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        _showError(
+          'Unable to capture or read the document. Allow camera access and try again on an Android or iOS phone.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
   void _next() {
+    if (_checking) return;
     // Documents are always required here: this step is only reached on a
     // seller's first farm, where there is nothing to inherit them from.
     if (_idDocument == null || _certificateDocument == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please upload both your valid ID and farm '
-              'permit/certificate to continue.'),
+          content: Text(
+            'Please photograph both your valid ID and farm '
+            'permit/certificate to continue.',
+          ),
           backgroundColor: AppColors.errorTerracotta,
         ),
       );
       return;
     }
+    final data = widget.farmSetupData;
+    if (!DocumentTextCheck.looksLikeDocument(
+          data.verificationDocumentText,
+          isId: true,
+        ) ||
+        !DocumentTextCheck.looksLikeDocument(
+          data.farmCertificateText,
+          isId: false,
+        ) ||
+        !DocumentTextCheck.matchesName(
+          _fullNameCtrl.text,
+          data.verificationDocumentText,
+        )) {
+      _showError(
+        'Please retake your documents and make sure the ID matches your seller full name.',
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => FarmSetupLocationScreen(
-          farmSetupData: widget.farmSetupData,
-        ),
+        builder: (_) =>
+            FarmSetupLocationScreen(farmSetupData: widget.farmSetupData),
       ),
     );
   }
@@ -157,12 +204,10 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                     icon: Icons.badge_outlined,
                     title: 'Government ID',
                     subtitle: _idSubtitle,
-                    buttonLabel: hasId ? 'Change' : 'Upload',
+                    buttonLabel: hasId ? 'Retake photo' : 'Take photo',
                     isUploaded: hasId,
                     previewFile: _idDocument,
-                    onTap: () => _pickDocument(
-                      (f) => widget.farmSetupData.verificationDocument = f,
-                    ),
+                    onTap: () => _pickDocument(isId: true),
                   ),
                   const SizedBox(height: 20),
                   const FieldLabel(
@@ -174,12 +219,10 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                     icon: Icons.description_outlined,
                     title: 'Farm Certificate/Permit',
                     subtitle: _certificateSubtitle,
-                    buttonLabel: hasCert ? 'Change' : 'Upload',
+                    buttonLabel: hasCert ? 'Retake photo' : 'Take photo',
                     isUploaded: hasCert,
                     previewFile: _certificateDocument,
-                    onTap: () => _pickDocument(
-                      (f) => widget.farmSetupData.farmCertificate = f,
-                    ),
+                    onTap: () => _pickDocument(isId: false),
                   ),
                   const SizedBox(height: 20),
                   const FieldLabel('SELLER FULL NAME'),
@@ -212,9 +255,17 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Your seller full name must match your ID. An admin will review and approve your documents.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  if (_checking) const LinearProgressIndicator(),
                   const SizedBox(height: 28),
                   WizardNextButton(
-                    label: 'Next: Pin Farm Location',
+                    label: _checking
+                        ? 'Checking document...'
+                        : 'Next: Pin Farm Location',
                     onPressed: _next,
                   ),
                   const SizedBox(height: 10),

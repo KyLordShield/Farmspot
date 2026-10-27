@@ -158,31 +158,79 @@ class _SignUpScreenState extends State<SignUpScreen> {
         type: FarmAlertType.error,
         icon: Icons.wifi_off_rounded,
         title: 'No Connection',
-        message: "We couldn't reach FarmSpot. Please check your internet "
+        message:
+            "We couldn't reach FarmSpot. Please check your internet "
             'connection and try again.',
         buttonLabel: 'Try Again',
       );
       return;
     }
 
-    if (result.statusCode == 422 && result.fieldErrors.isNotEmpty) {
+    if (result.fieldErrors.isNotEmpty) {
       setState(() {
         _firstNameError = _friendlyFieldError(
-            result.fieldErrors, 'USR_NAME', 'first name');
+          result.fieldErrors,
+          'USR_NAME',
+          'first name',
+        );
         _emailError = _friendlyFieldError(
-            result.fieldErrors, 'USR_EMAIL', 'email');
+          result.fieldErrors,
+          'USR_EMAIL',
+          'email',
+        );
         _mobileError = _friendlyFieldError(
-            result.fieldErrors, 'USR_MOBILE_NUMBER', 'mobile number');
+          result.fieldErrors,
+          'USR_MOBILE_NUMBER',
+          'mobile number',
+        );
         _addressError = _friendlyFieldError(
-            result.fieldErrors, 'address', 'address');
+          result.fieldErrors,
+          'address',
+          'address',
+        );
         _passwordError = _friendlyFieldError(
-            result.fieldErrors, 'USR_PASSWORD', 'password');
-        _confirmPasswordError = result.fieldErrors['USR_PASSWORD_confirmation']
-                ?.isNotEmpty ??
-            false
+          result.fieldErrors,
+          'USR_PASSWORD',
+          'password',
+        );
+        _confirmPasswordError =
+            result.fieldErrors['USR_PASSWORD_confirmation']?.isNotEmpty ?? false
             ? 'Passwords do not match.'
             : null;
       });
+      final messages = <String?>[
+        _firstNameError,
+        _emailError,
+        _mobileError,
+        _addressError,
+        _passwordError,
+        _confirmPasswordError,
+      ].whereType<String>().toSet().toList();
+      showFarmAlert(
+        context,
+        type: FarmAlertType.error,
+        title: 'Check Your Details',
+        message: messages.isEmpty
+            ? 'Please check your registration details and try again.'
+            : messages.join('\n'),
+        buttonLabel: 'Review Details',
+      );
+      return;
+    }
+
+    if (result.statusCode == 422 ||
+        result.statusCode == 409 ||
+        result.statusCode == 429) {
+      showFarmAlert(
+        context,
+        type: FarmAlertType.error,
+        title: result.statusCode == 429 ? 'Please Wait' : 'Check Your Details',
+        message: result.statusCode == 429
+            ? 'Too many attempts. Please wait a moment before trying again.'
+            : result.statusCode == 409
+            ? 'An account with these details already exists. Check your email and mobile number, or try logging in.'
+            : 'Please check your registration details and try again.',
+      );
       return;
     }
 
@@ -190,7 +238,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       context,
       type: FarmAlertType.error,
       title: 'Something Went Wrong',
-      message: 'Something went wrong on our side. Please try again in a moment.',
+      message:
+          'Something went wrong on our side. Please try again in a moment.',
     );
   }
 
