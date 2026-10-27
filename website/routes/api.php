@@ -87,6 +87,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/buy-requests/mine', [\App\Http\Controllers\Api\BuyRequestController::class, 'mine']);
     Route::get('/buy-requests', [\App\Http\Controllers\Api\BuyRequestController::class, 'index']);
     Route::post('/buy-requests', [\App\Http\Controllers\Api\BuyRequestController::class, 'store'])->middleware('throttle:10,1');
+    Route::patch('/buy-requests/{id}', [\App\Http\Controllers\Api\BuyRequestController::class, 'update'])->middleware('throttle:10,1');
     Route::delete('/buy-requests/{id}', [\App\Http\Controllers\Api\BuyRequestController::class, 'destroy']);
     Route::post('/buy-requests/{id}/conversation', [ConversationController::class, 'storeForBuyRequest'])->middleware('throttle:20,1');
     Route::get('/buy-requests/{id}/conversations', [ConversationController::class, 'requestResponses']);

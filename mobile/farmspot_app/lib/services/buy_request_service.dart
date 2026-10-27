@@ -20,6 +20,16 @@ abstract class BuyRequestsGateway {
     double? latitude,
     double? longitude,
   });
+  Future<BuyRequest> update({
+    required String id,
+    required String crop,
+    required double quantityKg,
+    required String frequency,
+    String? note,
+    String? pickupLocation,
+    double? latitude,
+    double? longitude,
+  });
   Future<void> remove(String id);
   Future<Conversation> contactBuyer(String id);
   Future<List<Conversation>> fetchResponses(String id);
@@ -69,6 +79,33 @@ class BuyRequestService implements BuyRequestsGateway {
           'latitude': latitude,
           'longitude': longitude,
         },
+      },
+    );
+    return BuyRequest.fromJson(data['request'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<BuyRequest> update({
+    required String id,
+    required String crop,
+    required double quantityKg,
+    required String frequency,
+    String? note,
+    String? pickupLocation,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final data = await _request(
+      'PATCH',
+      '/buy-requests/$id',
+      body: {
+        'crop': crop,
+        'quantity_kg': quantityKg,
+        'frequency': frequency,
+        'note': note,
+        'pickup_location': pickupLocation,
+        'latitude': latitude,
+        'longitude': longitude,
       },
     );
     return BuyRequest.fromJson(data['request'] as Map<String, dynamic>);

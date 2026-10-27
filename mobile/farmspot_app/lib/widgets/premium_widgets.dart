@@ -484,6 +484,8 @@ class _WatchChip extends StatelessWidget {
 class RequestCard extends StatelessWidget {
   final String crop, quantityLabel, frequencyLabel, pickupLabel, note;
   final VoidCallback onRemove;
+  final VoidCallback? onEdit;
+  final DateTime? updatedAt;
   final int responseCount;
   final VoidCallback? onViewResponses, onViewPin;
   final bool hasPin, busy;
@@ -495,6 +497,8 @@ class RequestCard extends StatelessWidget {
     required this.pickupLabel,
     this.note = '',
     required this.onRemove,
+    this.onEdit,
+    this.updatedAt,
     required this.responseCount,
     this.onViewResponses,
     this.hasPin = false,
@@ -519,6 +523,13 @@ class RequestCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (onEdit != null)
+              IconButton(
+                onPressed: onEdit,
+                tooltip: 'Edit request',
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                color: AppColors.primaryGreen,
+              ),
             IconButton(
               onPressed: onRemove,
               tooltip: 'Remove request',
@@ -542,6 +553,7 @@ class RequestCard extends StatelessWidget {
             ),
           ],
         ),
+        if (updatedAt != null) RequestUpdatedLabel(updatedAt!),
         const SizedBox(height: 8),
         RequestNote(pickupLabel),
         if (note.isNotEmpty) ...[const SizedBox(height: 5), RequestNote(note)],

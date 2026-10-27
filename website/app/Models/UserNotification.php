@@ -39,6 +39,7 @@ class UserNotification extends Model
 
     protected $fillable = [
         'NOTIF_ID',
+        'NOTIF_DEDUP_KEY',
         'USR_ID',
         'NOTIF_TYPE',
         'NOTIF_TITLE',
@@ -84,6 +85,7 @@ class UserNotification extends Model
         'BUY_REQUEST_MATCH',
         'CROP_AVAILABLE',
         'CALENDAR_EVENT',
+        'BUY_REQUEST_UPDATED',
     ];
 
     public function user()

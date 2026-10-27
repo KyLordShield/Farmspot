@@ -35,3 +35,6 @@ Schedule::command('premium:send-push')->everyMinute()->withoutOverlapping(10);
 // Durable event announcements: up to 200 farmers per minute, with bounded
 // network timeouts. One scheduler subprocess, never one process per farmer.
 Schedule::command('events:send-notifications')->everyMinute()->withoutOverlapping(2)->runInBackground();
+
+// Two bounded notification jobs per minute; no separate queue hosting needed.
+Schedule::command('queue:work database --queue=request-updates --stop-when-empty --max-jobs=2 --max-time=20 --timeout=20 --tries=3')->everyMinute()->withoutOverlapping(2)->runInBackground();

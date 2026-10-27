@@ -11,7 +11,8 @@ import '../../widgets/premium_widgets.dart';
 
 class BuyRequestFormScreen extends StatefulWidget {
   final BuyRequestsGateway? gateway;
-  const BuyRequestFormScreen({super.key, this.gateway});
+  final BuyRequest? request;
+  const BuyRequestFormScreen({super.key, this.gateway, this.request});
   @override
   State<BuyRequestFormScreen> createState() => _BuyRequestFormScreenState();
 }
@@ -27,9 +28,22 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
   String? _selectedCrop, _cropError;
   LatLng? _position;
   String? _error;
+  bool get _editing => widget.request != null;
+  bool get _cropLocked => (widget.request?.responseCount ?? 0) > 0;
   @override
   void initState() {
     super.initState();
+    final request = widget.request;
+    if (request != null) {
+      _crop.text = request.crop;
+      _selectedCrop = request.crop;
+      _qty.text = request.quantityKg.toString();
+      _frequency = request.frequency;
+      _note.text = request.note;
+      _pickup.text = request.pickupLocation;
+      if (request.hasPin)
+        _position = LatLng(request.latitude!, request.longitude!);
+    }
     _loadCrops();
   }
 
@@ -99,16 +113,32 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
     try {
       final row = await withFarmLottieLoading(
         context,
-        () => (widget.gateway ?? BuyRequestService.instance).create(
-          crop: _selectedCrop!,
-          quantityKg: quantity,
-          frequency: _frequency,
-          note: _note.text.trim(),
-          pickupLocation: _pickup.text.trim(),
-          latitude: _position?.latitude,
-          longitude: _position?.longitude,
-        ),
-        message: 'Posting your request...',
+        () {
+          final api = widget.gateway ?? BuyRequestService.instance;
+          return _editing
+              ? api.update(
+                  id: widget.request!.id,
+                  crop: _selectedCrop!,
+                  quantityKg: quantity,
+                  frequency: _frequency,
+                  note: _note.text.trim(),
+                  pickupLocation: _pickup.text.trim(),
+                  latitude: _position?.latitude,
+                  longitude: _position?.longitude,
+                )
+              : api.create(
+                  crop: _selectedCrop!,
+                  quantityKg: quantity,
+                  frequency: _frequency,
+                  note: _note.text.trim(),
+                  pickupLocation: _pickup.text.trim(),
+                  latitude: _position?.latitude,
+                  longitude: _position?.longitude,
+                );
+        },
+        message: _editing
+            ? 'Saving your changes...'
+            : 'Posting your request...',
       );
       if (!mounted) return;
       Navigator.of(context).pop<BuyRequest>(row);
@@ -134,9 +164,11 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
     body: SafeArea(
       child: Column(
         children: [
-          const PremiumScreenHeader(
-            title: 'New Buy Request',
-            subtitle: 'Let all approved sellers discover what you need',
+          PremiumScreenHeader(
+            title: _editing ? 'Edit Buy Request' : 'New Buy Request',
+            subtitle: _editing
+                ? 'Update the details shared with sellers'
+                : 'Let all approved sellers discover what you need',
           ),
           Expanded(
             child: _loadingCrops
@@ -151,6 +183,7 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
                       _label('What crop do you need?'),
                       TextField(
                         controller: _crop,
+                        readOnly: _cropLocked,
                         maxLength: 80,
                         onChanged: (_) => setState(() {
                           _selectedCrop = null;
@@ -161,9 +194,14 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const Text(
-                        'Choose the crop name below. Put business needs and other details in the note.',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      Text(
+                        _cropLocked
+                            ? 'A farmer has responded, so the crop cannot change. Create a new request for a different crop.'
+                            : 'Choose the crop name below. Put business needs and other details in the note.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
                       ),
                       if (_cropError != null)
                         TextButton(
@@ -180,24 +218,25 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
                             color: AppColors.errorTerracotta,
                           ),
                         ),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          for (final choice in suggestCrops(
-                            _crop.text,
-                            _choices,
-                          ))
-                            ChoiceChip(
-                              label: Text(choice.name),
-                              selected: _selectedCrop == choice.name,
-                              onSelected: (_) => setState(() {
-                                _selectedCrop = choice.name;
-                                _crop.text = choice.name;
-                                _error = null;
-                              }),
-                            ),
-                        ],
-                      ),
+                      if (!_cropLocked)
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            for (final choice in suggestCrops(
+                              _crop.text,
+                              _choices,
+                            ))
+                              ChoiceChip(
+                                label: Text(choice.name),
+                                selected: _selectedCrop == choice.name,
+                                onSelected: (_) => setState(() {
+                                  _selectedCrop = choice.name;
+                                  _crop.text = choice.name;
+                                  _error = null;
+                                }),
+                              ),
+                          ],
+                        ),
                       if (_selectedCrop != null)
                         Text(
                           'Selected crop: $_selectedCrop',
@@ -306,6 +345,17 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      if (_editing)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Farmers who responded will be notified when quantity, frequency or location changes. Existing conversations stay available.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
                       const PremiumCard(
                         background: AppColors.successSoft,
                         child: Text(
@@ -335,7 +385,9 @@ class _BuyRequestFormScreenState extends State<BuyRequestFormScreen> {
             child: IgnorePointer(
               ignoring: _busy || _loadingCrops,
               child: FarmSpotButton(
-                label: _busy ? 'Posting...' : 'Post request',
+                label: _editing
+                    ? (_busy ? 'Saving...' : 'Save changes')
+                    : (_busy ? 'Posting...' : 'Post request'),
                 onPressed: _post,
               ),
             ),

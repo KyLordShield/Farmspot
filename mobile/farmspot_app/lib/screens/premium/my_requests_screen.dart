@@ -61,6 +61,19 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     if (created != null && mounted) await _load();
   }
 
+  Future<void> _editRequest(BuyRequest request) async {
+    if (!isPremium.value) {
+      await openUpgrade(context);
+      if (!mounted || !isPremium.value) return;
+    }
+    final saved = await Navigator.of(context).push<BuyRequest>(
+      MaterialPageRoute(
+        builder: (_) => BuyRequestFormScreen(gateway: _api, request: request),
+      ),
+    );
+    if (saved != null && mounted) await _load();
+  }
+
   Future<void> _removeRequest(BuyRequest request) async {
     if (_removing.contains(request.id)) return;
     final confirmed = await showDialog<bool>(
@@ -241,6 +254,8 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
                                   ? 'Pickup arrangements discussed in Messages'
                                   : r.pickupLocation,
                               note: r.note,
+                              updatedAt: r.updatedAt,
+                              onEdit: () => _editRequest(r),
                               onRemove: () => _removeRequest(r),
                               responseCount: r.responseCount,
                               busy: _responsesLoading.contains(r.id),

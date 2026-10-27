@@ -85,3 +85,16 @@ class _RequestNoteState extends State<RequestNote> {
     ],
   );
 }
+
+class RequestUpdatedLabel extends StatelessWidget {
+  final DateTime date;
+  const RequestUpdatedLabel(this.date, {super.key});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Text(
+      'Updated ${MaterialLocalizations.of(context).formatMediumDate(date.toLocal())}',
+      style: const TextStyle(fontSize: 11, color: Colors.black54),
+    ),
+  );
+}

@@ -209,6 +209,7 @@ class _RequestsBoardScreenState extends State<RequestsBoardScreen> {
             ),
           ],
         ),
+        if (r.updatedAt != null) RequestUpdatedLabel(r.updatedAt!),
         if (r.note.isNotEmpty) ...[
           const SizedBox(height: 8),
           RequestNote(r.note),

@@ -8,6 +8,7 @@ class BuyRequest {
   final double quantityKg;
   final double? distanceKm;
   final int responseCount;
+  final DateTime? updatedAt;
   const BuyRequest({
     required this.id,
     required this.crop,
@@ -24,6 +25,7 @@ class BuyRequest {
     this.longitude,
     this.distanceKm,
     this.responseCount = 0,
+    this.updatedAt,
   });
   String get quantityLabel =>
       '${quantityKg.toStringAsFixed(quantityKg == quantityKg.roundToDouble() ? 0 : 2)} kg';
@@ -32,6 +34,7 @@ class BuyRequest {
     final buyer = json['buyer'] as Map?;
     final location = json['location'] as Map?;
     return BuyRequest(
+      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
       id: json['id'] as String,
       crop: json['crop'] as String,
       quantityKg: (json['quantity_kg'] as num).toDouble(),

@@ -49,6 +49,7 @@ class FakeRequests implements BuyRequestsGateway {
   String? contacted, removed, search;
   Map<String, dynamic>? posted;
   bool failRemove = false;
+  String? updatedId;
   @override
   Future<List<CropChoice>> fetchCrops() async => const [
     CropChoice('Cabbage', ['repolyo']),
@@ -87,6 +88,29 @@ class FakeRequests implements BuyRequestsGateway {
   }
 
   @override
+  Future<BuyRequest> update({
+    required String id,
+    required String crop,
+    required double quantityKg,
+    required String frequency,
+    String? note,
+    String? pickupLocation,
+    double? latitude,
+    double? longitude,
+  }) async {
+    updatedId = id;
+    return create(
+      crop: crop,
+      quantityKg: quantityKg,
+      frequency: frequency,
+      note: note,
+      pickupLocation: pickupLocation,
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
+  @override
   Future<void> remove(String id) async {
     if (failRemove) throw Exception('Removal failed');
     removed = id;
@@ -104,6 +128,93 @@ class FakeRequests implements BuyRequestsGateway {
 }
 
 void main() {
+  test(
+    'service updates existing request and explicitly clears removed pin',
+    () async {
+      final api = BuyRequestService(
+        client: MockClient((request) async {
+          expect(request.method, 'PATCH');
+          expect(request.url.path.endsWith('/buy-requests/REQ001'), isTrue);
+          final body = jsonDecode(request.body) as Map;
+          expect(body.containsKey('latitude'), isTrue);
+          expect(body['latitude'], isNull);
+          expect(body['longitude'], isNull);
+          return http.Response(
+            jsonEncode({
+              'request': {
+                ...requestJson(),
+                'updated_at': '2026-10-28T10:00:00Z',
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      final saved = await api.update(
+        id: 'REQ001',
+        crop: 'Pechay',
+        quantityKg: 15.5,
+        frequency: 'weekly',
+      );
+      expect(saved.updatedAt, DateTime.utc(2026, 10, 28, 10));
+    },
+  );
+
+  testWidgets(
+    'edit prefills request, locks responded crop and saves changed quantity',
+    (tester) async {
+      final api = FakeRequests();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BuyRequestFormScreen(
+            gateway: api,
+            request: const BuyRequest(
+              id: 'REQ001',
+              crop: 'Pechay',
+              quantityKg: 15.5,
+              frequency: 'weekly',
+              responseCount: 1,
+              latitude: 10,
+              longitude: 123,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Buy Request'), findsOneWidget);
+      final fields = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .toList();
+      expect(fields.first.controller!.text, 'Pechay');
+      expect(fields.first.readOnly, isTrue);
+      expect(find.widgetWithText(ChoiceChip, 'Pechay'), findsNothing);
+      await tester.enterText(find.byType(TextField).at(1), '23.75');
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(api.updatedId, 'REQ001');
+      expect(api.posted?['quantity_kg'], 23.75);
+      expect(api.posted?['latitude'], 10);
+    },
+  );
+
+  testWidgets('crop remains editable before any seller responds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BuyRequestFormScreen(gateway: FakeRequests(), request: row),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).readOnly,
+      isFalse,
+    );
+    await tester.enterText(find.byType(TextField).first, 'Tomato');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ChoiceChip, 'Tomato'), findsOneWidget);
+  });
+
   testWidgets('premium buyer badge appears on the seller request board', (
     tester,
   ) async {

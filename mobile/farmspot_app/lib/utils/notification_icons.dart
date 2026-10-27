@@ -121,6 +121,7 @@ enum NotificationTarget { listing, profile, myFarm, buyRequests, none }
         target: NotificationTarget.listing,
       );
 
+    case 'BUY_REQUEST_UPDATED':
     case 'BUY_REQUEST_MATCH':
       return (
         icon: Icons.campaign_outlined,
