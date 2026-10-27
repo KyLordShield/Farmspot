@@ -80,6 +80,13 @@ enum NotificationTarget { listing, profile, myFarm, buyRequests, none }
         target: NotificationTarget.none,
       );
 
+    case 'CALENDAR_EVENT':
+      return (
+        icon: Icons.event_outlined,
+        color: AppColors.primaryGreen,
+        target: NotificationTarget.none,
+      );
+
     case 'HARVEST_REMINDER':
       return (
         icon: Icons.agriculture_rounded,

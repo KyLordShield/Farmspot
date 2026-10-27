@@ -83,6 +83,7 @@ class UserNotification extends Model
         'SAVED_FARM_AVAILABLE',
         'BUY_REQUEST_MATCH',
         'CROP_AVAILABLE',
+        'CALENDAR_EVENT',
     ];
 
     public function user()

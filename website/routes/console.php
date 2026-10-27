@@ -31,3 +31,7 @@ Schedule::command('listings:harvest')->hourly();
 
 // Premium pushes are collected into due summaries; settings and entitlement are checked at send time.
 Schedule::command('premium:send-push')->everyMinute()->withoutOverlapping(10);
+
+// Durable event announcements: up to 200 farmers per minute, with bounded
+// network timeouts. One scheduler subprocess, never one process per farmer.
+Schedule::command('events:send-notifications')->everyMinute()->withoutOverlapping(2)->runInBackground();

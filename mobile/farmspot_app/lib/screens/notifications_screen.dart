@@ -205,6 +205,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _open(AppNotification notification) async {
     if (!notification.isRead) _markRead(notification);
 
+    if (notification.type == 'CALENDAR_EVENT') {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(notification.title),
+          content: SingleChildScrollView(child: Text(notification.body)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final style = notificationStyleFor(notification.type);
     if (style.target == NotificationTarget.none || !notification.hasTarget) {
       return;

@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdminPlanner;
+use App\Services\EventNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -36,6 +38,7 @@ class AdminPlannerController extends Controller
 
         $rules = [
             'APL_TYPE' => ['required', 'in:NOTE,EVENT'],
+            'APL_NOTIFY_FARMERS' => ['sometimes', 'boolean'],
             'APL_TITLE' => ['required', 'string', 'max:150'],
             'APL_BODY' => ['nullable', 'string', 'max:2000'],
             // An event without a date cannot be placed on the calendar, so it
@@ -48,22 +51,29 @@ class AdminPlannerController extends Controller
             'APL_DATETIME.required' => 'Pick a date for the event.',
         ]);
 
-        AdminPlanner::create([
-            'APL_ID' => AdminPlanner::newId(),
-            'USR_ID' => Auth::user()->USR_ID,
-            'APL_TYPE' => $type,
-            'APL_TITLE' => $validated['APL_TITLE'],
-            'APL_BODY' => $validated['APL_BODY'] ?? null,
-            'APL_DATETIME' => isset($validated['APL_DATETIME'])
-                ? Carbon::parse($validated['APL_DATETIME'])
-                : null,
-            'APL_IS_DONE' => 0,
-            'APL_CREATED_AT' => now(),
-            'APL_UPDATED_AT' => null,
-        ]);
+        $notify = $type === AdminPlanner::TYPE_EVENT && $request->boolean('APL_NOTIFY_FARMERS');
+        $event = DB::transaction(function () use ($validated, $type, $notify) {
+            $event = AdminPlanner::create([
+                'APL_ID' => AdminPlanner::newId(),
+                'USR_ID' => Auth::user()->USR_ID,
+                'APL_TYPE' => $type,
+                'APL_TITLE' => $validated['APL_TITLE'],
+                'APL_BODY' => $validated['APL_BODY'] ?? null,
+                'APL_DATETIME' => isset($validated['APL_DATETIME'])
+                    ? Carbon::parse($validated['APL_DATETIME'])
+                    : null,
+                'APL_IS_DONE' => 0,
+                'APL_NOTIFY_FARMERS' => $notify,
+                'APL_CREATED_AT' => now(),
+                'APL_UPDATED_AT' => null,
+            ]);
+            app(EventNotificationService::class)->enqueue($event);
+
+            return $event;
+        });
 
         return redirect()->route('dashboard')
-            ->with('success', $type === AdminPlanner::TYPE_EVENT ? 'Event added to your calendar.' : 'Note added.');
+            ->with('success', $notify ? 'Event saved. Farmer notifications are queued for background delivery.' : ($type === AdminPlanner::TYPE_EVENT ? 'Event added to your calendar.' : 'Note added.'));
     }
 
     /**
@@ -123,7 +133,12 @@ class AdminPlannerController extends Controller
         $item = $this->ownedOrFail($id);
         $wasEvent = $item->APL_TYPE === AdminPlanner::TYPE_EVENT;
 
-        $item->delete();
+        DB::transaction(function () use ($item) {
+            if ($item->APL_TYPE === AdminPlanner::TYPE_EVENT) {
+                app(EventNotificationService::class)->cancel($item->APL_ID);
+            }
+            $item->delete();
+        });
 
         return redirect()->route('dashboard')
             ->with('success', $wasEvent ? 'Event removed.' : 'Note deleted.');

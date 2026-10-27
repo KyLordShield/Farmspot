@@ -128,6 +128,13 @@
                                 <input type="text" name="APL_BODY" class="form-control form-control-sm"
                                        placeholder="Details (optional)" maxlength="2000">
                             </div>
+                            <div class="col-12">
+                                <label class="form-check">
+                                    <input type="checkbox" name="APL_NOTIFY_FARMERS" value="1" class="form-check-input" checked>
+                                    <span class="form-check-label">Notify farmers about this event</span>
+                                </label>
+                                <small class="text-muted">Times are Philippine time. Farmers receive one announcement, delivered in background batches. Uncheck for a private event.</small>
+                            </div>
                             <div class="col-12 d-flex gap-2">
                                 <button type="submit" class="btn btn-farm btn-sm">
                                     <i class="bi bi-plus-lg me-1"></i> Save Event

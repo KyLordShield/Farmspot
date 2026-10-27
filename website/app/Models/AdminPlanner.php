@@ -40,12 +40,14 @@ class AdminPlanner extends Model
         'APL_BODY',
         'APL_DATETIME',
         'APL_IS_DONE',
+        'APL_NOTIFY_FARMERS',
         'APL_CREATED_AT',
         'APL_UPDATED_AT',
     ];
 
     protected $casts = [
         'APL_IS_DONE' => 'boolean',
+        'APL_NOTIFY_FARMERS' => 'boolean',
         'APL_DATETIME' => 'datetime',
         'APL_CREATED_AT' => 'datetime',
         'APL_UPDATED_AT' => 'datetime',

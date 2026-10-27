@@ -107,6 +107,39 @@ Future<void> _pumpInbox(WidgetTester tester, _FakeNotifications api) async {
 }
 
 void main() {
+  testWidgets(
+    'calendar event opens its details and marks the announcement read',
+    (tester) async {
+      final api = _FakeNotifications()
+        ..addPage(1, [
+          _row(
+            type: 'CALENDAR_EVENT',
+            title: 'Farmers meeting',
+            body:
+                'Nov 5, 2026, 9:00 AM (Philippine time). At the barangay hall.',
+            refId: 'EVENT1',
+          ),
+        ])
+        ..unread = 1;
+      await _pumpInbox(tester, api);
+      expect(find.byIcon(Icons.event_outlined), findsOneWidget);
+      await tester.tap(find.text('Farmers meeting'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining('Philippine time'),
+        ),
+        findsOneWidget,
+      );
+      expect(api.markedRead, ['NOT001']);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    },
+  );
+
   testWidgets('an empty inbox renders the honest empty state', (tester) async {
     await _pumpInbox(tester, _FakeNotifications());
 
