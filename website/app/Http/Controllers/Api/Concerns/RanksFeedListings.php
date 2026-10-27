@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api\Concerns;
 use App\Models\CropCategory;
 use App\Models\Listing;
 use App\Models\SearchLog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Ranking and paging for the buyer feed.
@@ -108,6 +111,11 @@ trait RanksFeedListings
      */
     protected const FEED_FRESHNESS_DAYS = 7;
 
+    // A small nudge within the existing ranking, below history and quality.
+    protected const FEED_EXPIRY_BOOST = 0.05;
+
+    protected const FEED_EXPIRY_DAYS = 3;
+
     /**
      * How many listings in a page are reserved for under-exposed listings.
      *
@@ -209,6 +217,7 @@ trait RanksFeedListings
 
             if ($filteredCategory !== null && in_array($filteredCategory, $knownIds, true)) {
                 $hits[$filteredCategory] = ($hits[$filteredCategory] ?? 0) + 1;
+
                 continue;
             }
 
@@ -287,6 +296,16 @@ trait RanksFeedListings
             + self::FEED_WEIGHT_FRESHNESS * $freshness
             + self::FEED_WEIGHT_AFFINITY * ($affinity ?? 0.0);
 
+        if ($listing->LST_AVAILABILITY === 'ACTIVE'
+            && $listing->LST_STATUS === 'AVAILABLE_NOW'
+            && $listing->LST_EXPIRY_DATE !== null) {
+            $now = now();
+            $expiry = Carbon::parse($listing->LST_EXPIRY_DATE);
+            if ($expiry->gt($now) && $expiry->lte($now->copy()->addDays(self::FEED_EXPIRY_DAYS))) {
+                $score += self::FEED_EXPIRY_BOOST;
+            }
+        }
+
         return $score;
     }
 
@@ -303,9 +322,9 @@ trait RanksFeedListings
      * table's full matching count alongside a pool-derived last_page would give
      * the caller a page count it can never reach.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      * @param  array<string, float>  $affinities
-     * @return array{0: \Illuminate\Support\Collection, 1: int, 2: int}
+     * @return array{0: Collection, 1: int, 2: int}
      */
     protected function rankAndSliceFeed($query, array $affinities, ?int $page, ?int $perPage)
     {
@@ -410,9 +429,9 @@ trait RanksFeedListings
     /**
      * Swaps the tail of the first page for reserved discovery listings.
      *
-     * @param  \Illuminate\Support\Collection  $window
-     * @param  \Illuminate\Support\Collection  $underExposed
-     * @return \Illuminate\Support\Collection
+     * @param  Collection  $window
+     * @param  Collection  $underExposed
+     * @return Collection
      */
     protected function injectDiscoverySlots($window, $underExposed, int $perPage)
     {

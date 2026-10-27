@@ -469,4 +469,17 @@ class FeedPagingRankingTest extends TestCase
         $response->assertOk();
         $this->assertSame(['LST012'], $this->idsFrom($response->json()));
     }
+
+    public function test_near_expiry_gives_a_small_boost_only_to_the_ranked_feed(): void
+    {
+        $this->freezeTime();
+        $regular = $this->makeListing('LST001', 'LEAFVG', daysAgo: 1);
+        $regular->update(['LST_EXPIRY_DATE' => now()->addDays(7)]);
+        $ending = $this->makeListing('LST002', 'LEAFVG', daysAgo: 2);
+        $ending->update(['LST_EXPIRY_DATE' => now()->addDay()]);
+        $ranked = $this->getJson('/api/listings?page=1&per_page=10&personalized=1')->assertOk();
+        $this->assertSame(['LST002', 'LST001'], $this->idsFrom($ranked->json()));
+        $latest = $this->getJson('/api/listings?page=1&per_page=10&sort=latest')->assertOk();
+        $this->assertSame(['LST001', 'LST002'], $this->idsFrom($latest->json()));
+    }
 }

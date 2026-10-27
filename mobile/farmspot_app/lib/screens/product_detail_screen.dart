@@ -775,6 +775,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// Big single header/cover photo (the primary/thumbnail image). Tapping it
   /// opens the full-screen viewer.
   Widget _buildHeader() {
+    final status = cropStatusData(listing.displayStatus);
     final url = _headerUrl;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -828,13 +829,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryGreen,
+                    color: status.color,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    listing.status == 'P_status'
+                    listing.displayStatus == 'P_status'
                         ? 'Product Status'
-                        : listing.status,
+                        : status.label,
                     style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),

@@ -75,6 +75,62 @@ class _RecordingGateway implements MessagesGateway {
 // CropListing shape via toCropListing), this verifies the full path:
 // real listing -> toggle -> detail renders name + photo; photo-less -> icon.
 void main() {
+  testWidgets('home card asks buyers to check freshness after listing expiry', (
+    tester,
+  ) async {
+    final listing = CropListing(
+      cropName: 'Cabbage',
+      farmName: 'Test Farm',
+      status: 'AVAILABLE_NOW',
+      expiresAt: DateTime.now().subtract(const Duration(days: 1)),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 190,
+            height: 300,
+            child: CropCard(listing: listing, onTap: () {}),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Check freshness'), findsOneWidget);
+    expect(find.text('Available Now'), findsNothing);
+  });
+
+  test('display status respects renewal and upcoming harvest', () {
+    final past = DateTime.now().subtract(const Duration(days: 1));
+    final future = DateTime.now().add(const Duration(days: 3));
+    expect(
+      CropListing(
+        cropName: 'Crop',
+        farmName: 'Farm',
+        status: 'AVAILABLE_NOW',
+        expiresAt: past,
+      ).displayStatus,
+      'EXPIRED',
+    );
+    expect(
+      CropListing(
+        cropName: 'Crop',
+        farmName: 'Farm',
+        status: 'AVAILABLE_NOW',
+        expiresAt: future,
+      ).displayStatus,
+      'AVAILABLE_NOW',
+    );
+    expect(
+      CropListing(
+        cropName: 'Crop',
+        farmName: 'Farm',
+        status: 'SOON_TO_HARVEST',
+        expiresAt: past,
+      ).displayStatus,
+      'SOON_TO_HARVEST',
+    );
+  });
+
   testWidgets(
     'detail screen shows real crop name + photo, other fields intact',
     (tester) async {
@@ -328,6 +384,9 @@ void main() {
 
     expect(find.textContaining('expires in expired'), findsNothing);
     expect(find.text('expired '), findsOneWidget);
+    expect(find.text('Check freshness'), findsOneWidget);
+    expect(find.text('Available Now'), findsNothing);
+    expect(find.text('AVAILABLE_NOW'), findsNothing);
     expect(
       find.byKey(const Key('product-detail-expiry-warning')),
       findsOneWidget,

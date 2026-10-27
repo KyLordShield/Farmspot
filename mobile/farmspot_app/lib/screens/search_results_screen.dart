@@ -444,7 +444,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       crop: crop.cropName,
       seller: crop.farmName,
       distance: km.isFinite ? _formatDistanceKm(km) : 'Distance unavailable',
-      status: crop.status,
+      status: crop.displayStatus,
       icon: cropIconForCrop(crop.cropName, crop.cropType),
       imageUrl: crop.imageUrl,
       listingId: crop.listingId,
@@ -1003,7 +1003,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           distance: showDistance && _imageKm(result).isFinite
               ? _formatDistanceKm(_imageKm(result))
               : 'Distance unavailable',
-          status: result.listing.status,
+          status: result.listing.displayStatus,
           icon: cropIconForCrop(
             result.listing.cropName,
             result.listing.cropType,

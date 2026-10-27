@@ -86,6 +86,9 @@ class CropListing {
 
   bool get wasRenewed => renewedAt != null;
 
+  /// Expiry takes precedence over the seller's saved availability label.
+  String get displayStatus => isExpired ? 'EXPIRED' : status;
+
   bool get isExpired {
     if (status == 'SOON_TO_HARVEST') return false;
     final expiry = expiresAt;
@@ -236,6 +239,7 @@ class CropImagePlaceholder extends StatelessWidget {
 /// convention used across the seller flow (MyFarmScreen status sheet).
 ({String label, Color color}) cropStatusData(String status) {
   return switch (status) {
+    'EXPIRED' => (label: 'Check freshness', color: AppColors.warningAmber),
     'AVAILABLE_NOW' => (label: 'Available Now', color: AppColors.primaryGreen),
     'SOON_TO_HARVEST' => (label: 'Soon to Harvest', color: Colors.orange),
     _ => (label: 'Not Available', color: Colors.grey),
@@ -389,7 +393,7 @@ class CropCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = cropStatusData(listing.status);
+    final status = cropStatusData(listing.displayStatus);
     return GestureDetector(
       onTap: onTap,
       child: Container(
