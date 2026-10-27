@@ -28,9 +28,7 @@ class FarmSpotHeader extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
-      decoration: const BoxDecoration(
-        color: AppColors.primaryGreen,
-      ),
+      decoration: const BoxDecoration(color: AppColors.primaryGreen),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
@@ -60,6 +58,7 @@ class FarmSpotHeader extends StatelessWidget {
 /// Rounded outlined text field used across the forms.
 class FarmSpotTextField extends StatelessWidget {
   final String hint;
+  final int? maxLength;
   final bool obscureText;
   final TextEditingController? controller;
   final TextInputType keyboardType;
@@ -73,6 +72,7 @@ class FarmSpotTextField extends StatelessWidget {
   const FarmSpotTextField({
     super.key,
     required this.hint,
+    this.maxLength,
     this.obscureText = false,
     this.controller,
     this.keyboardType = TextInputType.text,
@@ -88,6 +88,7 @@ class FarmSpotTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      maxLength: maxLength,
       focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,
@@ -101,8 +102,10 @@ class FarmSpotTextField extends StatelessWidget {
         filled: true,
         fillColor: AppColors.fieldBackground,
         errorText: errorText,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.fieldBorder),
@@ -113,7 +116,10 @@ class FarmSpotTextField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppColors.primaryGreen,
+            width: 1.5,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -121,8 +127,10 @@ class FarmSpotTextField extends StatelessWidget {
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide:
-              const BorderSide(color: AppColors.errorTerracotta, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppColors.errorTerracotta,
+            width: 1.5,
+          ),
         ),
       ),
     );
@@ -162,10 +170,7 @@ class FarmSpotButton extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             if (trailingIcon != null) ...[
               const SizedBox(width: 8),
@@ -233,25 +238,25 @@ Future<bool?> showFarmAlert(
 }) {
   final (Color solid, Color soft, IconData defaultIcon) = switch (type) {
     FarmAlertType.error => (
-        AppColors.errorTerracotta,
-        AppColors.errorSoft,
-        Icons.error_outline_rounded,
-      ),
+      AppColors.errorTerracotta,
+      AppColors.errorSoft,
+      Icons.error_outline_rounded,
+    ),
     FarmAlertType.warning => (
-        AppColors.warningAmber,
-        AppColors.warningSoft,
-        Icons.warning_amber_rounded,
-      ),
+      AppColors.warningAmber,
+      AppColors.warningSoft,
+      Icons.warning_amber_rounded,
+    ),
     FarmAlertType.success => (
-        AppColors.primaryGreen,
-        AppColors.successSoft,
-        Icons.check_circle_outline_rounded,
-      ),
+      AppColors.primaryGreen,
+      AppColors.successSoft,
+      Icons.check_circle_outline_rounded,
+    ),
     FarmAlertType.info => (
-        AppColors.infoSage,
-        AppColors.infoSoft,
-        Icons.info_outline_rounded,
-      ),
+      AppColors.infoSage,
+      AppColors.infoSoft,
+      Icons.info_outline_rounded,
+    ),
   };
 
   return showDialog<bool>(
@@ -285,7 +290,11 @@ Future<bool?> showFarmAlert(
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.black87, fontSize: 14, height: 1.4),
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 14,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 20),
             SizedBox(
@@ -303,7 +312,10 @@ Future<bool?> showFarmAlert(
                 ),
                 child: Text(
                   buttonLabel,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -317,9 +329,9 @@ Future<bool?> showFarmAlert(
 /// Fade page transition used across the auth flow so screens appear and
 /// disappear gently instead of sliding.
 Route<T> farmFadeRoute<T>(Widget page) => PageRouteBuilder<T>(
-      pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionDuration: const Duration(milliseconds: 350),
-      reverseTransitionDuration: const Duration(milliseconds: 250),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-          FadeTransition(opacity: animation, child: child),
-    );
+  pageBuilder: (context, animation, secondaryAnimation) => page,
+  transitionDuration: const Duration(milliseconds: 350),
+  reverseTransitionDuration: const Duration(milliseconds: 250),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+      FadeTransition(opacity: animation, child: child),
+);

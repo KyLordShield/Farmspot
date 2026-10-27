@@ -10,7 +10,9 @@ use App\Models\ListingPhoto;
 use App\Models\ListingReview;
 use App\Models\Report;
 use App\Models\ReviewRequest;
+use App\Services\CropCategorySuggestion;
 use App\Support\CloudinaryImage;
+use App\Support\InputLimits;
 use App\Support\ListingName;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -462,11 +464,15 @@ class FarmerListingController extends Controller
 
         $validated = $request->validate([
             'category_id' => ['nullable', 'string', 'exists:crop_category,CAT_ID'],
-            'crop_icon' => ['nullable', 'string'],
-            'description' => ['nullable', 'string'],
+            'crop_icon' => ['nullable', 'string', 'max:'.InputLimits::CROP_NAME],
+            'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
             'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
             'status' => ['nullable', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
-        ]);
+        ], InputLimits::messages());
+
+        if (! isset($validated['category_id']) && ! empty($validated['crop_icon'])) {
+            $validated['category_id'] = app(CropCategorySuggestion::class)->assign($validated['crop_icon']);
+        }
 
         return DB::transaction(function () use ($listing, $validated) {
             Farm::where('FRM_ID', $listing->FRM_ID)->lockForUpdate()->firstOrFail();

@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Farm;
 use App\Models\Listing;
 use App\Models\ListingPhoto;
+use App\Services\CropCategorySuggestion;
+use App\Support\InputLimits;
 use App\Support\ListingName;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -38,13 +40,15 @@ class ListingCreateController extends Controller
 
         $validated = $request->validate([
             'farm_id' => ['required', 'string'],
-            'category_id' => ['required', 'string', 'exists:crop_category,CAT_ID'],
-            'crop_icon' => ['nullable', 'string'],
-            'description' => ['nullable', 'string'],
+            'category_id' => ['required_without:crop_icon', 'nullable', 'string', 'exists:crop_category,CAT_ID'],
+            'crop_icon' => ['nullable', 'string', 'max:'.InputLimits::CROP_NAME],
+            'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
             'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
             'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
             'photo' => ['nullable', 'image', 'max:5120'],
-        ]);
+        ], InputLimits::messages());
+
+        $validated['category_id'] ??= app(CropCategorySuggestion::class)->assign($validated['crop_icon'] ?? null);
 
         $listingId = $this->uniqueId('listing', 'LST_ID');
 

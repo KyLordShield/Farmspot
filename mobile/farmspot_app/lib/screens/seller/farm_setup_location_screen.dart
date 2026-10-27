@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -667,6 +668,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       borderRadius: BorderRadius.circular(12),
       child: TextField(
         controller: _searchController,
+        maxLength: InputLimits.address,
         textInputAction: TextInputAction.search,
         onSubmitted: _submitSearch,
         decoration: InputDecoration(

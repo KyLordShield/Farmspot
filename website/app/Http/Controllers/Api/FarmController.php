@@ -11,6 +11,7 @@ use App\Models\FarmVisitLog;
 use App\Models\Listing;
 use App\Models\ListingReview;
 use App\Support\CloudinaryImage;
+use App\Support\InputLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -78,9 +79,9 @@ class FarmController extends Controller
         $isFirstFarm = $firstFarm === null;
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:150'],
-            'description' => ['nullable', 'string'],
-            'barangay' => ['required', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:'.InputLimits::FARM_NAME],
+            'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
+            'barangay' => ['required', 'string', 'max:'.InputLimits::BARANGAY],
             'latitude' => ['required', 'numeric'],
             'longitude' => ['required', 'numeric'],
             'photos' => ['required', 'array', 'min:1'],
@@ -99,12 +100,12 @@ class FarmController extends Controller
                 'mimes:jpg,jpeg,png,pdf',
                 'max:5120',
             ],
-        ]);
+        ], InputLimits::messages());
 
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 
         try {
-            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $firstFarm, $isFirstFarm) {
+            $result = DB::transaction(function () use ($validated, $farmId, $farmer, $firstFarm) {
                 $verificationUrl = $firstFarm?->FRM_VERIFICATION_DOC_PATH;
                 $certificateUrl = $firstFarm?->FRM_FARM_CERTIFICATE_PATH;
 
@@ -115,7 +116,7 @@ class FarmController extends Controller
                 if (! empty($validated['verification_document'])) {
                     $doc = $validated['verification_document'];
                     $extension = $doc->getClientOriginalExtension() ?: 'jpg';
-                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+                    $path = "farm-verification/{$farmId}/".uniqid().".{$extension}";
                     Storage::disk('cloudinary')->put($path, $doc->getRealPath());
                     $verificationUrl = Storage::disk('cloudinary')->url($path);
                 }
@@ -123,7 +124,7 @@ class FarmController extends Controller
                 if (! empty($validated['farm_certificate'])) {
                     $doc = $validated['farm_certificate'];
                     $extension = $doc->getClientOriginalExtension() ?: 'jpg';
-                    $path = "farm-verification/{$farmId}/" . uniqid() . ".{$extension}";
+                    $path = "farm-verification/{$farmId}/".uniqid().".{$extension}";
                     Storage::disk('cloudinary')->put($path, $doc->getRealPath());
                     $certificateUrl = Storage::disk('cloudinary')->url($path);
                 }
@@ -147,7 +148,7 @@ class FarmController extends Controller
 
                 foreach ($validated['photos'] as $index => $photo) {
                     $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-                    $path = "farm-photos/{$farmId}/" . uniqid() . ".{$extension}";
+                    $path = "farm-photos/{$farmId}/".uniqid().".{$extension}";
 
                     Storage::disk('cloudinary')->put($path, $photo->getRealPath());
 
@@ -341,8 +342,8 @@ class FarmController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['nullable', 'string', 'max:150'],
-            'description' => ['nullable', 'string'],
+            'name' => ['nullable', 'string', 'max:'.InputLimits::FARM_NAME],
+            'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
             // Location is locked after approval — reject any attempt to change it.
             // ("prohibited" passes only when the field is absent or empty, so an
             // edit form that always sends blank coord fields still works.)
@@ -350,6 +351,7 @@ class FarmController extends Controller
             'longitude' => ['prohibited'],
             'barangay' => ['prohibited'],
         ], [
+            ...InputLimits::messages(),
             'latitude.prohibited' => 'Location cannot be changed after the farm is approved.',
             'longitude.prohibited' => 'Location cannot be changed after the farm is approved.',
             'barangay.prohibited' => 'Location cannot be changed after the farm is approved.',
@@ -480,7 +482,7 @@ class FarmController extends Controller
 
         foreach ($validated['photos'] as $index => $photo) {
             $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-            $path = "farm-photos/{$farm->FRM_ID}/" . uniqid() . ".{$extension}";
+            $path = "farm-photos/{$farm->FRM_ID}/".uniqid().".{$extension}";
 
             Storage::disk('cloudinary')->put($path, $photo->getRealPath());
 

@@ -1,6 +1,7 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/farm_profile.dart';
@@ -184,7 +185,8 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
 
   bool get _nameChanged =>
       _farm != null && _nameCtrl.text.trim() != _farm!.name.trim();
-  bool get _descriptionChanged => _farm != null &&
+  bool get _descriptionChanged =>
+      _farm != null &&
       _descriptionCtrl.text.trim() != _farm!.description.trim();
 
   /// Whether a submit would change the current cover. An explicit choice that
@@ -235,7 +237,9 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
         await FarmService.updateFarm(
           farmId: widget.farmId,
           name: _nameChanged ? _nameCtrl.text.trim() : null,
-          description: _descriptionChanged ? _descriptionCtrl.text.trim() : null,
+          description: _descriptionChanged
+              ? _descriptionCtrl.text.trim()
+              : null,
         );
       }
 
@@ -307,21 +311,23 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
 
     final farm = _farm!;
     // Photos the farm already has, minus any the seller marked for removal.
-    final keptPhotos =
-        farm.photos.where((p) => !_removedPhotoIds.contains(p.id)).toList();
+    final keptPhotos = farm.photos
+        .where((p) => !_removedPhotoIds.contains(p.id))
+        .toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       children: [
         const FieldLabel('FARM NAME'),
         TextField(
           controller: _nameCtrl,
-          maxLength: 150,
+          maxLength: InputLimits.farmName,
           decoration: _inputDecoration(),
         ),
         const SizedBox(height: 8),
         const FieldLabel('DESCRIPTION'),
         TextField(
           controller: _descriptionCtrl,
+          maxLength: InputLimits.description,
           minLines: 3,
           maxLines: 5,
           decoration: _inputDecoration(),
@@ -332,10 +338,7 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
         const FieldLabel('FARM PHOTOS'),
         Text(
           'Tap a photo to set it as the cover. Use ✕ to remove a photo.',
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -379,8 +382,9 @@ class _EditFarmScreenState extends State<EditFarmScreen> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final photo in farm.photos
-                    .where((p) => _removedPhotoIds.contains(p.id)))
+                for (final photo in farm.photos.where(
+                  (p) => _removedPhotoIds.contains(p.id),
+                ))
                   Padding(
                     key: ValueKey('farm_photo_removed_${photo.id}'),
                     padding: const EdgeInsets.only(right: 8),
@@ -530,8 +534,11 @@ class _EditableExistingPhoto extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stack) => Container(
                   color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey, size: 24),
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.grey,
+                    size: 24,
+                  ),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
@@ -586,8 +593,11 @@ class _EditableExistingPhoto extends StatelessWidget {
                       ),
                     ),
                     padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.close,
-                        size: 16, color: Colors.white),
+                    child: const Icon(
+                      Icons.close,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -599,9 +609,7 @@ class _EditableExistingPhoto extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: isCover
-                          ? AppColors.primaryGreen
-                          : Colors.black54,
+                      color: isCover ? AppColors.primaryGreen : Colors.black54,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(10),
                       ),
@@ -649,8 +657,11 @@ class _RemovedPhotoThumb extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stack) => Container(
                     color: Colors.grey.shade300,
-                    child: const Icon(Icons.broken_image_outlined,
-                        color: Colors.grey, size: 24),
+                    child: const Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.grey,
+                      size: 24,
+                    ),
                   ),
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
@@ -697,7 +708,11 @@ class _NewPhotoThumbState extends State<_NewPhotoThumb> {
               future: _bytes,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  return Image.memory(snapshot.data!, cacheWidth: 200, fit: BoxFit.cover);
+                  return Image.memory(
+                    snapshot.data!,
+                    cacheWidth: 200,
+                    fit: BoxFit.cover,
+                  );
                 }
                 if (snapshot.hasError) {
                   return Container(

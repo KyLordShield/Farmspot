@@ -142,7 +142,10 @@ class FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 2,
         children: [
           Text(
             text,
@@ -154,7 +157,6 @@ class FieldLabel extends StatelessWidget {
             ),
           ),
           if (badge != null) ...[
-            const SizedBox(width: 6),
             Text(
               badge!,
               style: TextStyle(
@@ -207,10 +209,7 @@ class UploadBox extends StatelessWidget {
           ? BoxDecoration(
               color: AppColors.successSoft,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.primaryGreen,
-                width: 1.5,
-              ),
+              border: Border.all(color: AppColors.primaryGreen, width: 1.5),
             )
           : null,
       child: Row(
@@ -281,10 +280,7 @@ class UploadBox extends StatelessWidget {
               foregroundColor: AppColors.primaryGreen,
               backgroundColor: isUploaded ? Colors.white : null,
               side: const BorderSide(color: AppColors.primaryGreen),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -393,10 +389,7 @@ class _DocumentPreviewDialog extends StatelessWidget {
                       file.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ),
                   IconButton(
@@ -432,8 +425,7 @@ class _DocumentPreviewDialog extends StatelessWidget {
                         }
                         return const Padding(
                           padding: EdgeInsets.all(48),
-                          child:
-                              CircularProgressIndicator(color: Colors.white),
+                          child: CircularProgressIndicator(color: Colors.white),
                         );
                       },
                     ),
@@ -630,12 +622,20 @@ class CropPickerTile extends StatelessWidget {
               color: selected ? AppColors.primaryGreen : Colors.black45,
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: selected ? AppColors.primaryGreen : Colors.black54,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: selected ? AppColors.primaryGreen : Colors.black54,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
               ),
             ),
           ],

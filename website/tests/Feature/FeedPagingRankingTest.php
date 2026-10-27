@@ -81,14 +81,12 @@ class FeedPagingRankingTest extends TestCase
             'FMR_ID' => $this->farmer->FMR_ID,
         ]);
 
-        $this->leafy = CropCategory::create([
-            'CAT_ID' => 'LEAFVG',
+        $this->leafy = CropCategory::updateOrCreate(['CAT_ID' => 'LEAFVG'], [
             'CAT_NAME' => 'Leafy Vegetables',
             'CAT_ICON' => 'spa',
         ]);
 
-        $this->root = CropCategory::create([
-            'CAT_ID' => 'ROOTCP',
+        $this->root = CropCategory::updateOrCreate(['CAT_ID' => 'ROOTCP'], [
             'CAT_NAME' => 'Root Crops',
             'CAT_ICON' => 'agriculture',
         ]);

@@ -134,4 +134,63 @@ class ListingDuplicateNameTest extends TestCase
         Listing::where('FRM_ID', $seller['farm']->FRM_ID)->update(['LST_AVAILABILITY' => Listing::AVAILABILITY_REMOVED]);
         $this->postJson('/api/listings', $this->payload($seller, 'Tomatoes'))->assertCreated();
     }
+
+    public function test_crop_name_assigns_category_when_none_is_sent_and_manual_choice_is_preserved(): void
+    {
+        $seller = $this->makeSeller();
+        $this->actingAs($seller['user'], 'sanctum');
+        foreach (['Kamatis' => 'LEAFVG', 'Kamote' => 'ROOTCP', 'Rare local crop' => 'OTHERS'] as $name => $category) {
+            $payload = $this->payload($seller, $name);
+            unset($payload['category_id']);
+            $this->postJson('/api/listings', $payload)->assertCreated()->assertJsonPath('listing.category.id', $category);
+        }
+        $payload = $this->payload($seller, 'Mangga');
+        $payload['category_id'] = 'OTHERS';
+        $result = $this->postJson('/api/listings', $payload)->assertCreated()->assertJsonPath('listing.category.id', 'OTHERS');
+        $id = $result->json('listing.id');
+        $this->patchJson("/api/listings/{$id}", ['crop_icon' => 'Banana'])->assertOk()->assertJsonPath('listing.category.id', 'FRUITS');
+    }
+
+    public function test_category_catalog_exposes_simple_names_examples_and_local_crop_aliases(): void
+    {
+        $categories = $this->getJson('/api/crop-categories')->assertOk()->json('categories');
+        $vegetables = collect($categories)->firstWhere('id', 'LEAFVG');
+        $this->assertSame('Vegetables', $vegetables['name']);
+        $this->assertContains('kamatis', $vegetables['crop_names']);
+        $this->assertContains('tomatoes', $vegetables['crop_names']);
+        $this->assertNotEmpty($vegetables['description']);
+        $this->assertNotContains('Legumes', array_column($categories, 'name'));
+    }
+
+    public function test_listing_text_limits_reject_oversized_create_and_edit_without_changing_existing_data(): void
+    {
+        $seller = $this->makeSeller();
+        $this->actingAs($seller['user'], 'sanctum');
+        $payload = $this->payload($seller, str_repeat('A', 41));
+        $payload['description'] = str_repeat('D', 1001);
+        $this->postJson('/api/listings', $payload)->assertUnprocessable()->assertJsonValidationErrors(['crop_icon', 'description']);
+        $this->assertDatabaseCount('listing', 0);
+        $payload['crop_icon'] = str_repeat('A', 40);
+        $payload['description'] = str_repeat('D', 1000);
+        $id = $this->postJson('/api/listings', $payload)->assertCreated()->json('listing.id');
+        $this->patchJson("/api/listings/{$id}", ['crop_icon' => str_repeat('B', 41), 'description' => str_repeat('X', 1001)])
+            ->assertUnprocessable()->assertJsonValidationErrors(['crop_icon', 'description']);
+        $this->assertDatabaseHas('listing', ['LST_ID' => $id, 'LST_CROP_ICON' => str_repeat('A', 40), 'LST_DESCRIPTION' => str_repeat('D', 1000)]);
+    }
+
+    public function test_farm_names_descriptions_and_addresses_are_limited_on_the_server(): void
+    {
+        $seller = $this->makeSeller();
+        $this->actingAs($seller['user'], 'sanctum');
+        $id = $seller['farm']->FRM_ID;
+        $this->patchJson("/api/farms/{$id}", ['name' => str_repeat('F', 101), 'description' => str_repeat('D', 1001)])
+            ->assertUnprocessable()->assertJsonValidationErrors(['name', 'description']);
+        $this->patchJson("/api/farms/{$id}", ['name' => str_repeat('F', 100), 'description' => str_repeat('D', 1000)])->assertOk();
+        $this->postJson('/api/farms', ['name' => str_repeat('F', 101), 'description' => str_repeat('D', 1001), 'barangay' => str_repeat('B', 101)])
+            ->assertUnprocessable()->assertJsonValidationErrors(['name', 'description', 'barangay']);
+        $this->patchJson('/api/user', ['address' => str_repeat('A', 256)])->assertUnprocessable()->assertJsonValidationErrors('address');
+        $this->patchJson('/api/user', ['address' => str_repeat('A', 255)])->assertOk();
+        $this->postJson('/api/register', ['USR_NAME' => 'Test Person', 'USR_EMAIL' => 'invalid', 'address' => str_repeat('A', 256)])
+            ->assertUnprocessable()->assertJsonValidationErrors('address');
+    }
 }

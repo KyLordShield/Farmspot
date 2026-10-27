@@ -40,7 +40,14 @@ void main() {
         await tester.ensureVisible(field);
         await tester.enterText(field, entry.value);
       }
-      await tester.ensureVisible(find.text('Create Account'));
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Create Account'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Create Account'));
       await tester.pump();
       await tester.pumpAndSettle();

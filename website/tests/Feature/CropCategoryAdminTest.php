@@ -40,6 +40,13 @@ class CropCategoryAdminTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // These tests build their own catalog rather than editing starter data.
+        CropCategory::query()->delete();
+    }
+
     private function id(string $table): string
     {
         do {

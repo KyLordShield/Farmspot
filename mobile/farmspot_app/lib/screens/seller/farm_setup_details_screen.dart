@@ -1,6 +1,7 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../models/farm_setup_data.dart';
@@ -33,12 +34,15 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
   static const int _maxPhotos = 4;
 
   final _picker = ImagePicker();
-  late final TextEditingController _farmNameCtrl =
-      TextEditingController(text: widget.farmSetupData.name);
-  late final TextEditingController _descriptionCtrl =
-      TextEditingController(text: widget.farmSetupData.description);
-  late final TextEditingController _barangayCtrl =
-      TextEditingController(text: widget.farmSetupData.barangay);
+  late final TextEditingController _farmNameCtrl = TextEditingController(
+    text: widget.farmSetupData.name,
+  );
+  late final TextEditingController _descriptionCtrl = TextEditingController(
+    text: widget.farmSetupData.description,
+  );
+  late final TextEditingController _barangayCtrl = TextEditingController(
+    text: widget.farmSetupData.barangay,
+  );
   String? _errorMessage;
 
   @override
@@ -171,12 +175,14 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                   const FieldLabel('FARM NAME'),
                   TextField(
                     controller: _farmNameCtrl,
+                    maxLength: InputLimits.farmName,
                     decoration: _inputDecoration(),
                   ),
                   const SizedBox(height: 18),
                   const FieldLabel('DESCRIPTION'),
                   TextField(
                     controller: _descriptionCtrl,
+                    maxLength: InputLimits.description,
                     minLines: 3,
                     maxLines: 5,
                     decoration: _inputDecoration(),
@@ -185,6 +191,7 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                   const FieldLabel('BARANGAY'),
                   TextField(
                     controller: _barangayCtrl,
+                    maxLength: InputLimits.barangay,
                     decoration: _inputDecoration(),
                   ),
                   const SizedBox(height: 18),
@@ -203,7 +210,10 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                           const SizedBox(width: 10),
                         ],
                         if (photos.length < _maxPhotos)
-                          PhotoPlaceholder(isAddButton: true, onTap: _pickPhotos),
+                          PhotoPlaceholder(
+                            isAddButton: true,
+                            onTap: _pickPhotos,
+                          ),
                       ],
                     ),
                   ),
@@ -212,8 +222,11 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.redAccent, size: 16),
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.redAccent,
+                          size: 16,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -307,7 +320,11 @@ class _PhotoThumbState extends State<_PhotoThumb> {
               future: _bytes,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  return Image.memory(snapshot.data!, cacheWidth: 200, fit: BoxFit.cover);
+                  return Image.memory(
+                    snapshot.data!,
+                    cacheWidth: 200,
+                    fit: BoxFit.cover,
+                  );
                 }
                 if (snapshot.hasError) {
                   return Container(

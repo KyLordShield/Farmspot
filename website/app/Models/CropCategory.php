@@ -41,10 +41,10 @@ class CropCategory extends Model
      */
     public const ICONS = [
         'eco' => 'General / mixed produce',
-        'spa' => 'Leafy vegetables',
+        'spa' => 'Vegetables',
         'grass' => 'Herbs and grasses',
-        'grain' => 'Grains and cereals',
-        'local_florist' => 'Fruit vegetables',
+        'grain' => 'Rice, corn and grains',
+        'local_florist' => 'Fruits',
         'agriculture' => 'Farming in general',
         'water_drop' => 'Wet crops, aquaculture',
         'pets' => 'Livestock and poultry',

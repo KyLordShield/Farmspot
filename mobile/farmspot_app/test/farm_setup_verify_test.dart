@@ -266,6 +266,12 @@ void main() {
       2,
       reason: 'a second farm has two steps, not three',
     );
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     expect(find.text('Next: Pin Farm Location'), findsOneWidget);
     expect(find.text('Next: Verify Identity'), findsNothing);
 

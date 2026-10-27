@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme.dart';
@@ -105,12 +106,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final mobile = _mobileCtrl.text.trim();
     final address = _addressCtrl.text.trim();
 
+    if ('$first $last'.trim().length > InputLimits.fullName) {
+      setState(() => _saveError = 'Full name must be 150 characters or fewer.');
+      return;
+    }
     final nameChanged = _currentName != '$first $last'.trim();
     final mobileChanged = mobile != widget.phone.trim();
     final addressChanged = address != widget.address.trim();
 
     // Nothing changed (and nothing to upload) — just close, nothing to save.
-    if (!nameChanged && !mobileChanged && !addressChanged && _newPhoto == null) {
+    if (!nameChanged &&
+        !mobileChanged &&
+        !addressChanged &&
+        _newPhoto == null) {
       Navigator.of(context).pop(false);
       return;
     }
@@ -209,7 +217,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: const CircleAvatar(
                             radius: 10,
                             backgroundColor: AppColors.primaryGreen,
-                            child: Icon(Icons.camera_alt, size: 12, color: Colors.white),
+                            child: Icon(
+                              Icons.camera_alt,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -221,7 +233,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   onPressed: _pickPhoto,
                   child: const Text(
                     'Change Photo',
-                    style: TextStyle(color: AppColors.primaryGreen, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.primaryGreen,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -231,18 +246,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           Row(
             children: [
               Expanded(
-                child: _field('Lastname', _lastNameCtrl),
+                child: _field(
+                  'Lastname',
+                  _lastNameCtrl,
+                  maxLength: InputLimits.personNamePart,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _field('FirstName', _firstNameCtrl),
+                child: _field(
+                  'FirstName',
+                  _firstNameCtrl,
+                  maxLength: InputLimits.personNamePart,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          _field('mobile number', _mobileCtrl, keyboardType: TextInputType.phone),
+          _field(
+            'mobile number',
+            _mobileCtrl,
+            keyboardType: TextInputType.phone,
+          ),
           const SizedBox(height: 14),
-          _field('address', _addressCtrl),
+          _field('address', _addressCtrl, maxLength: InputLimits.address),
           if (_saveError != null) ...[
             const SizedBox(height: 14),
             Container(
@@ -313,13 +340,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     String label,
     TextEditingController controller, {
     TextInputType? keyboardType,
+    int? maxLength,
   }) {
     return TextField(
       controller: controller,
+      maxLength: maxLength,
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: Colors.grey.shade300),

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/crop_category.dart';
@@ -43,12 +44,14 @@ class AddCropScreen extends StatefulWidget {
   /// updateListing() (+ updateListingPhoto() when a new photo was picked)
   /// instead of createListing(). Pops true after a successful edit.
   final Listing? existingListing;
+  final Future<List<CropCategory>> Function() loadCategories;
 
   const AddCropScreen({
     super.key,
     this.isFirstCrop = false,
     this.farmId,
     this.existingListing,
+    this.loadCategories = ListingService.fetchCropCategories,
   });
 
   @override
@@ -68,6 +71,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
   List<CropCategory> _categories = [];
   String? _categoriesError;
   int _selectedCategoryIndex = -1;
+  bool _categorySuggested = false;
 
   /// Category-grid index the form started on (first category for a new crop,
   /// the listing's current category when editing). The back button compares
@@ -198,7 +202,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _categoriesError = null;
     });
     try {
-      final categories = await ListingService.fetchCropCategories();
+      final categories = await widget.loadCategories();
       if (!mounted) return;
       setState(() {
         _categoriesLoading = false;
@@ -206,6 +210,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
         _selectedCategoryIndex = _initialCategoryIndex(categories);
         _baselineCategoryIndex = _selectedCategoryIndex;
       });
+      if (!_isEditing && _cropLabelCtrl.text.trim().isNotEmpty) {
+        _suggestCategory(_cropLabelCtrl.text);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -216,15 +223,35 @@ class _AddCropScreenState extends State<AddCropScreen> {
     }
   }
 
+  void _suggestCategory(String crop) {
+    if (_categories.isEmpty) return;
+    final match = CropCategory.suggestIndex(_categories, crop);
+    final other = _categories.indexWhere((c) => c.id == 'OTHERS');
+    setState(() {
+      _categorySuggested = match >= 0;
+      _selectedCategoryIndex = match >= 0 ? match : other;
+    });
+  }
+
   /// Edit mode starts on the listing's current category; otherwise the first
   /// (only) item is selected like before. Falls back to 0 when the listing's
   /// category no longer exists.
   int _initialCategoryIndex(List<CropCategory> categories) {
     if (categories.isEmpty) return -1;
     final currentId = widget.existingListing?.categoryId;
-    if (currentId == null || currentId.isEmpty) return 0;
+    if (currentId == null || currentId.isEmpty) {
+      final match = CropCategory.suggestIndex(categories, _cropLabelCtrl.text);
+      return match >= 0 ? match : -1;
+    }
     final index = categories.indexWhere((c) => c.id == currentId);
-    return index == -1 ? 0 : index;
+    if (index >= 0) return index;
+    final suggested = CropCategory.suggestIndex(
+      categories,
+      _cropLabelCtrl.text,
+    );
+    return suggested >= 0
+        ? suggested
+        : categories.indexWhere((c) => c.id == 'OTHERS');
   }
 
   Future<void> _pickPhotos() async {
@@ -356,6 +383,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
       return;
     }
 
+    if (_cropLabelCtrl.text.trim().isEmpty) {
+      setState(() => _submitError = 'Please enter the crop name.');
+      return;
+    }
     final farmId = _farmIdForSubmit;
     if (farmId.isEmpty) {
       setState(
@@ -371,8 +402,8 @@ class _AddCropScreenState extends State<AddCropScreen> {
     }
     if (_status == AvailabilityStatus.soonToHarvest && _harvestDate == null) {
       setState(
-        () => _submitError =
-            'Please pick a harvest date for "Soon to Harvest".',
+        () =>
+            _submitError = 'Please pick a harvest date for "Soon to Harvest".',
       );
       return;
     }
@@ -529,8 +560,8 @@ class _AddCropScreenState extends State<AddCropScreen> {
     final soon = _status == AvailabilityStatus.soonToHarvest;
     if (soon && _harvestDate == null) {
       setState(
-        () => _submitError =
-            'Please pick a harvest date for "Soon to Harvest".',
+        () =>
+            _submitError = 'Please pick a harvest date for "Soon to Harvest".',
       );
       return;
     }
@@ -711,7 +742,33 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         ),
                     const SizedBox(height: 8),
                   ],
+                  const FieldLabel(
+                    'CROP NAME',
+                    badge: '(required)',
+                    badgeColor: Colors.black38,
+                  ),
+                  TextField(
+                    controller: _cropLabelCtrl,
+                    maxLength: InputLimits.cropName,
+                    onChanged: _suggestCategory,
+                    decoration: _inputDecoration(
+                      hint: 'e.g. Cabbage, Kangkong, Tomatoes',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   const FieldLabel('CROP CATEGORY'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      _categorySuggested
+                          ? 'Suggested from your crop name. Tap another category to change it.'
+                          : 'Common crops are categorized automatically. For other crops, choose the best match below.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
                   if (_categoriesLoading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -744,23 +801,25 @@ class _AddCropScreenState extends State<AddCropScreen> {
                           icon: _iconForCategory(category),
                           label: category.name,
                           selected: _selectedCategoryIndex == i,
-                          onTap: () =>
-                              setState(() => _selectedCategoryIndex = i),
+                          onTap: () => setState(() {
+                            _selectedCategoryIndex = i;
+                            _categorySuggested = false;
+                          }),
                         );
                       }),
                     ),
-                  const SizedBox(height: 18),
-                  const FieldLabel(
-                    'CROP NAME',
-                    badge: '(optional)',
-                    badgeColor: Colors.black38,
-                  ),
-                  TextField(
-                    controller: _cropLabelCtrl,
-                    decoration: _inputDecoration(
-                      hint: 'e.g. Cabbage, Kangkong, Tomatoes',
+                  if (_selectedCategoryIndex >= 0 &&
+                      _selectedCategoryIndex < _categories.length)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        _categories[_selectedCategoryIndex].description ?? '',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 18),
                   const FieldLabel(
                     'DESCRIPTION',
@@ -769,6 +828,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   ),
                   TextField(
                     controller: _descCtrl,
+                    maxLength: InputLimits.description,
                     maxLines: 4,
                     minLines: 2,
                     textInputAction: TextInputAction.newline,
@@ -809,7 +869,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
                       // Always (re)pick in add mode, where this tile is the only
                       // date control. In edit mode the section below handles a
                       // change, so the picker only opens on first selection.
-                      if (!_isEditing || !alreadySelected || _harvestDate == null) {
+                      if (!_isEditing ||
+                          !alreadySelected ||
+                          _harvestDate == null) {
                         await _pickHarvestDate();
                       }
                     },

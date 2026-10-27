@@ -9,6 +9,7 @@ use App\Models\ContactLog;
 use App\Models\CropCategory;
 use App\Models\Listing;
 use App\Models\SearchLog;
+use App\Services\CropCategorySuggestion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -29,6 +30,7 @@ class ListingController extends Controller
                 'name' => $c->CAT_NAME,
                 'icon' => $c->CAT_ICON,
                 'description' => $c->CAT_DESCRIPTION,
+                'crop_names' => app(CropCategorySuggestion::class)->aliases($c->CAT_ID),
             ]
         );
 

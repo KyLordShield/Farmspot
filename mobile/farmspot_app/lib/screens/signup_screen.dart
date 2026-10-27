@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:flutter/services.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/lottie_loader.dart';
@@ -34,8 +35,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _passwordError;
   String? _confirmPasswordError;
 
-  static final _nameRegex =
-      RegExp(r"^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$");
+  static final _nameRegex = RegExp(r"^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$");
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   static final _mobileRegex = RegExp(r'^09\d{9}$');
 
@@ -72,7 +72,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _validateEmail(String value) {
     final email = value.trim();
     if (email.isEmpty) return 'Please enter your email.';
-    if (!_emailRegex.hasMatch(email)) return 'Please enter a valid email address.';
+    if (!_emailRegex.hasMatch(email))
+      return 'Please enter a valid email address.';
     return null;
   }
 
@@ -101,12 +102,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
     FocusScope.of(context).unfocus();
 
     final lastNameError = _validateLastName(_lastNameController.text);
-    final firstNameError = _validateFirstName(_firstNameController.text);
+    var firstNameError = _validateFirstName(_firstNameController.text);
+    if ('${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'
+            .trim()
+            .length >
+        InputLimits.fullName) {
+      firstNameError = 'Full name must be 150 characters or fewer.';
+    }
     final emailError = _validateEmail(_emailController.text);
     final mobileError = _validateMobile(_mobileController.text);
     final passwordError = _validatePassword(_passwordController.text);
-    final confirmError =
-        _validateConfirmPassword(_confirmPasswordController.text);
+    final confirmError = _validateConfirmPassword(
+      _confirmPasswordController.text,
+    );
 
     if (lastNameError != null ||
         firstNameError != null ||
@@ -129,8 +137,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     showFarmLottieLoading(context, message: 'Creating account...');
 
     final result = await AuthService.attemptRegister(
-      name: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'
-          .trim(),
+      name:
+          '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'
+              .trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
       passwordConfirmation: _confirmPasswordController.text,
@@ -143,9 +152,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
       return;
     }
     _handleRegisterError(result);
@@ -246,7 +255,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   /// Picks the first backend message for [fieldKey] and rewrites the raw
   /// "The USR_EMAIL ..." text into a friendly one-liner for the app's field.
   String? _friendlyFieldError(
-      Map<String, List<String>> fieldErrors, String fieldKey, String fieldLabel) {
+    Map<String, List<String>> fieldErrors,
+    String fieldKey,
+    String fieldLabel,
+  ) {
     final messages = fieldErrors[fieldKey];
     if (messages == null || messages.isEmpty) return null;
     final raw = messages.first.toLowerCase();
@@ -271,15 +283,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return 'Please choose a stronger password.';
     }
     if (fieldKey == 'USR_NAME') {
+      if (raw.contains('characters') || raw.contains('greater'))
+        return 'Full name must be 150 characters or fewer.';
       return 'Please check your $fieldLabel — only letters are allowed.';
+    }
+    if (fieldKey == 'address' &&
+        (raw.contains('characters') || raw.contains('greater'))) {
+      return 'Address must be 255 characters or fewer.';
     }
     return 'Please check your $fieldLabel.';
   }
 
   void _goToLogin() {
-    Navigator.of(context).pushReplacement(
-      farmFadeRoute(const LoginScreen()),
-    );
+    Navigator.of(context).pushReplacement(farmFadeRoute(const LoginScreen()));
   }
 
   @override
@@ -312,6 +328,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         Expanded(
                           child: FarmSpotTextField(
                             hint: 'Lastname',
+                            maxLength: InputLimits.personNamePart,
                             controller: _lastNameController,
                             errorText: _lastNameError,
                             onChanged: (_) {
@@ -325,6 +342,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         Expanded(
                           child: FarmSpotTextField(
                             hint: 'FirstName',
+                            maxLength: InputLimits.personNamePart,
                             controller: _firstNameController,
                             errorText: _firstNameError,
                             onChanged: (_) {
@@ -339,6 +357,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     const SizedBox(height: 14),
                     FarmSpotTextField(
                       hint: 'email',
+                      maxLength: 200,
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       errorText: _emailError,
@@ -367,6 +386,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     const SizedBox(height: 14),
                     FarmSpotTextField(
                       hint: 'address',
+                      maxLength: InputLimits.address,
                       controller: _addressController,
                       errorText: _addressError,
                       onChanged: (_) {
@@ -394,7 +414,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           color: Colors.black45,
                         ),
                         onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword),
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -415,23 +436,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               : Icons.visibility,
                           color: Colors.black45,
                         ),
-                        onPressed: () => setState(
-                            () => _obscureConfirm = !_obscureConfirm),
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
                       ),
                     ),
                     if (_isLoading) ...[
                       const SizedBox(height: 16),
-                      const Center(child: SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )),
+                      const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 26),
                     FarmSpotButton(
-                      label: _isLoading ? 'Creating Account...' : 'Create Account',
+                      label: _isLoading
+                          ? 'Creating Account...'
+                          : 'Create Account',
                       trailingIcon: Icons.arrow_forward,
-                      onPressed: _isLoading ? () {} : () => _handleCreateAccount(),
+                      onPressed: _isLoading
+                          ? () {}
+                          : () => _handleCreateAccount(),
                     ),
                     const SizedBox(height: 20),
                     FarmSpotSwitchLink(
