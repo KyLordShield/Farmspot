@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Farm;
 use App\Models\Listing;
 use App\Models\ListingPhoto;
+use App\Support\ListingName;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,7 @@ class ListingCreateController extends Controller
             $result = DB::transaction(function () use ($validated, $farmer, $listingId) {
                 $farm = Farm::where('FRM_ID', $validated['farm_id'])
                     ->where('FMR_ID', $farmer->FMR_ID)
+                    ->lockForUpdate()
                     ->first();
 
                 if (! $farm) {
@@ -61,12 +63,14 @@ class ListingCreateController extends Controller
                     );
                 }
 
+                ListingName::ensureUnique($farm->FRM_ID, $validated['crop_icon'] ?? null);
+
                 $imageUrl = null;
 
                 if (isset($validated['photo'])) {
                     $photo = $validated['photo'];
                     $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-                    $path = "listing-photos/{$listingId}/" . uniqid() . ".{$extension}";
+                    $path = "listing-photos/{$listingId}/".uniqid().".{$extension}";
 
                     Storage::disk('cloudinary')->put($path, $photo->getRealPath());
 

@@ -66,10 +66,8 @@ String get _imageSearchRangeLabel => imageSearchRangeKm.toStringAsFixed(0);
 /// the ?suggest=1 opt-out — so the backend logs the submitted term into
 /// search_log exactly as before, feeding the existing Top Searched analytics.
 ///
-/// The "Nearest" / "Available" chips sort the already-fetched set client-side:
-/// Nearest uses a haversine distance from the buyer's position to each
-/// listing's farm (the same latlong2.Distance math the Map screen uses), and
-/// Available just bumps AVAILABLE_NOW listings to the front. No new backend
+/// Nearest orders all matches by distance. Available and Soon to harvest
+/// narrow the fetched results to their respective listing statuses. No new backend
 /// call is made when a chip is toggled.
 ///
 /// The [loadResults] / [loadBuyerPosition] / [loadFarms] callbacks are
@@ -394,14 +392,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     }
   }
 
-  /// Rows narrowed by the active category filter (null id = All). The raw
-  /// [_rows] keeps every fetched result; only the visible subset is sorted.
-  List<_ResultRow> get _visibleRows {
-    if (_activeCategoryId == null) return _rows;
-    return _rows
-        .where((r) => r.listing.categoryId == _activeCategoryId)
-        .toList();
-  }
+  /// Narrow by category and the selected availability. Keep all fetched rows
+  /// intact so switching back to Nearest restores every matching result.
+  List<_ResultRow> get _visibleRows => _rows.where((row) {
+    if (_activeCategoryId != null &&
+        row.listing.categoryId != _activeCategoryId)
+      return false;
+    return switch (_sort) {
+      SearchSortMode.nearest => true,
+      SearchSortMode.available => row.listing.status == 'AVAILABLE_NOW',
+      SearchSortMode.soonToHarvest => row.listing.status == 'SOON_TO_HARVEST',
+    };
+  }).toList();
 
   String? get _activeCategoryName {
     for (final c in _categories) {
@@ -410,22 +412,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     return null;
   }
 
-  /// Nearest: ascending straight-line distance (unknowns sink to the end).
-  /// Available: AVAILABLE_NOW first, then SOON_TO_HARVEST, then everything else.
-  List<_ResultRow> get _sortedRows {
-    final sorted = List<_ResultRow>.of(_visibleRows);
-    switch (_sort) {
-      case SearchSortMode.nearest:
-        sorted.sort((a, b) => _kmFor(a).compareTo(_kmFor(b)));
-      case SearchSortMode.available:
-        sorted.sort(
-          (a, b) => _statusRank(
-            b.listing.status,
-          ).compareTo(_statusRank(a.listing.status)),
-        );
-    }
-    return sorted;
-  }
+  /// Use nearest-first order within either status filter too.
+  List<_ResultRow> get _sortedRows =>
+      List<_ResultRow>.of(_visibleRows)
+        ..sort((a, b) => _kmFor(a).compareTo(_kmFor(b)));
 
   double _kmFor(_ResultRow row) {
     final farmId = row.listing.farmId;
@@ -461,14 +451,6 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       farmId: crop.farmId,
       ratings: crop.ratings,
     );
-  }
-
-  static int _statusRank(String status) {
-    return switch (status) {
-      'AVAILABLE_NOW' => 2,
-      'SOON_TO_HARVEST' => 1,
-      _ => 0,
-    };
   }
 
   /// Distance from the buyer to an image-search result's farm, or infinity
@@ -824,7 +806,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Center(
             child: Text(
-              _activeCategoryId != null && _rows.isNotEmpty
+              _sort != SearchSortMode.nearest
+                  ? 'No listings match this availability filter.'
+                  : _activeCategoryId != null && _rows.isNotEmpty
                   ? 'No ${(_activeCategoryName ?? 'crop').toLowerCase()} '
                         'crops listed right now.'
                   : 'No farms selling this crop yet.',

@@ -127,12 +127,13 @@ const List<SearchResultItem> mockSearchResults = [
 
 /// Sort modes for the result chips. Visually selectable only — no real
 /// ordering logic in this mockup.
-enum SearchSortMode { nearest, available }
+enum SearchSortMode { nearest, available, soonToHarvest }
 
 extension SearchSortModeLabel on SearchSortMode {
   String get label => switch (this) {
     SearchSortMode.nearest => 'Nearest',
     SearchSortMode.available => 'Available',
+    SearchSortMode.soonToHarvest => 'Soon to harvest',
   };
 }
 
@@ -362,9 +363,7 @@ class SearchResultCard extends StatelessWidget {
 }
 
 /// The toolbar that sits above the results grid: a segmented Nearest /
-/// Available sort control plus a Filters action chip. Both are visual-only in
-/// this mockup — the segmented control toggles its own state and the Filters
-/// chip just fires [onFiltersTap] for the screen to handle (or ignore).
+/// Nearest ordering and exclusive availability filters, plus category filters.
 class SearchResultsToolbar extends StatelessWidget {
   final SearchSortMode sort;
   final ValueChanged<SearchSortMode> onSortChanged;
@@ -452,6 +451,7 @@ class _SegmentedSort extends StatelessWidget {
         children: [
           _segment(SearchSortMode.nearest),
           _segment(SearchSortMode.available),
+          _segment(SearchSortMode.soonToHarvest),
         ],
       ),
     );

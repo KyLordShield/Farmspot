@@ -86,7 +86,10 @@ void _mockMissingPlugins() {
     return null;
   });
   messenger.setMockMethodCallHandler(_photoManagerChannel, (call) async {
-    throw PlatformException(code: 'unavailable', message: 'No gallery in tests');
+    throw PlatformException(
+      code: 'unavailable',
+      message: 'No gallery in tests',
+    );
   });
 }
 
@@ -561,8 +564,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Nearest sorts by haversine distance; Available bumps '
-        'AVAILABLE_NOW first', (tester) async {
+    testWidgets('Nearest sorts by distance and status filters are exclusive', (
+      tester,
+    ) async {
       await pumpResults(
         tester,
         listings: [
@@ -595,8 +599,18 @@ void main() {
       expect(
         find.descendant(of: firstCard, matching: find.text("Little A's Farm")),
         findsOneWidget,
-        reason: 'Available order puts AVAILABLE_NOW before SOON_TO_HARVEST',
+        reason: 'Available shows only AVAILABLE_NOW',
       );
+      expect(find.byType(SearchResultCard), findsOneWidget);
+      expect(find.text('Big Ben Farm'), findsNothing);
+      await tester.tap(find.text('Soon to harvest'));
+      await tester.pump();
+      expect(find.byType(SearchResultCard), findsOneWidget);
+      expect(find.text('Big Ben Farm'), findsOneWidget);
+      expect(find.text("Little A's Farm"), findsNothing);
+      await tester.tap(find.text('Nearest'));
+      await tester.pump();
+      expect(find.byType(SearchResultCard), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     });
 
@@ -764,9 +778,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ImageSearchScreen(
-            createCamera: () async => _FakeLiveCamera(
-              shot: XFile('/tmp/crop.jpg'),
-            ),
+            createCamera: () async =>
+                _FakeLiveCamera(shot: XFile('/tmp/crop.jpg')),
             loadPhotos: ({int? limit}) async => const [],
             detect: (_) async => [
               DetectedCrop(name: 'Carrots', confidence: 0.94),
@@ -828,9 +841,8 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: ImageSearchScreen(
-              createCamera: () async => _FakeLiveCamera(
-                shot: XFile('/tmp/crop.jpg'),
-              ),
+              createCamera: () async =>
+                  _FakeLiveCamera(shot: XFile('/tmp/crop.jpg')),
               loadPhotos: ({int? limit}) async => const [],
               detect: (_) async => <DetectedCrop>[],
             ),

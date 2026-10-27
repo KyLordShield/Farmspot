@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
+use App\Models\Farm;
 use App\Models\Listing;
 use App\Models\ListingPhoto;
 use App\Models\ListingReview;
 use App\Models\Report;
 use App\Models\ReviewRequest;
 use App\Support\CloudinaryImage;
+use App\Support\ListingName;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -466,48 +468,55 @@ class FarmerListingController extends Controller
             'status' => ['nullable', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
         ]);
 
-        if (array_key_exists('category_id', $validated)) {
-            $listing->CAT_ID = $validated['category_id'];
-        }
-
-        if (array_key_exists('crop_icon', $validated)) {
-            $listing->LST_CROP_ICON = $validated['crop_icon'];
-        }
-
-        if (array_key_exists('description', $validated)) {
-            $listing->LST_DESCRIPTION = $validated['description'];
-        }
-
-        if (array_key_exists('harvest_date', $validated)) {
-            $listing->LST_HARVEST_DATE = $validated['harvest_date'];
-        }
-
-        if (array_key_exists('status', $validated)) {
-            // Moving an expired listing back into an on-sale state is a
-            // renewal. Editing text, category, or photos on the expired row is
-            // still allowed; only the revival goes through renew().
-            if (
-                $validated['status'] !== $listing->LST_STATUS
-                && $validated['status'] !== 'NOT_AVAILABLE'
-                && $this->listingHasExpired($listing)
-            ) {
-                return response()->json([
-                    'message' => self::RENEW_REQUIRED_MESSAGE,
-                ], 422);
+        return DB::transaction(function () use ($listing, $validated) {
+            Farm::where('FRM_ID', $listing->FRM_ID)->lockForUpdate()->firstOrFail();
+            if (array_key_exists('crop_icon', $validated)) {
+                ListingName::ensureUnique($listing->FRM_ID, $validated['crop_icon'], $listing->LST_ID);
             }
 
-            $listing->LST_STATUS = $validated['status'];
-        }
+            if (array_key_exists('category_id', $validated)) {
+                $listing->CAT_ID = $validated['category_id'];
+            }
 
-        $listing->LST_UPDATED_AT = now();
-        $listing->save();
+            if (array_key_exists('crop_icon', $validated)) {
+                $listing->LST_CROP_ICON = $validated['crop_icon'];
+            }
 
-        $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
+            if (array_key_exists('description', $validated)) {
+                $listing->LST_DESCRIPTION = $validated['description'];
+            }
 
-        return response()->json([
-            'message' => 'Listing updated successfully.',
-            'listing' => $this->formatListing($fresh),
-        ]);
+            if (array_key_exists('harvest_date', $validated)) {
+                $listing->LST_HARVEST_DATE = $validated['harvest_date'];
+            }
+
+            if (array_key_exists('status', $validated)) {
+                // Moving an expired listing back into an on-sale state is a
+                // renewal. Editing text, category, or photos on the expired row is
+                // still allowed; only the revival goes through renew().
+                if (
+                    $validated['status'] !== $listing->LST_STATUS
+                    && $validated['status'] !== 'NOT_AVAILABLE'
+                    && $this->listingHasExpired($listing)
+                ) {
+                    return response()->json([
+                        'message' => self::RENEW_REQUIRED_MESSAGE,
+                    ], 422);
+                }
+
+                $listing->LST_STATUS = $validated['status'];
+            }
+
+            $listing->LST_UPDATED_AT = now();
+            $listing->save();
+
+            $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
+
+            return response()->json([
+                'message' => 'Listing updated successfully.',
+                'listing' => $this->formatListing($fresh),
+            ]);
+        });
     }
 
     /**
@@ -594,7 +603,7 @@ class FarmerListingController extends Controller
             foreach ($uploads as $index => $photo) {
                 $extension = $photo->getClientOriginalExtension() ?: 'jpg';
                 $path = "listing-photos/{$listing->LST_ID}/"
-                    . uniqid() . "-{$index}.{$extension}";
+                    .uniqid()."-{$index}.{$extension}";
 
                 Storage::disk('cloudinary')->put($path, $photo->getRealPath());
                 $newUrls[] = Storage::disk('cloudinary')->url($path);
@@ -715,7 +724,7 @@ class FarmerListingController extends Controller
 
         $photo = $request->file('photo');
         $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-        $path = "listing-photos/{$listing->LST_ID}/" . uniqid() . ".{$extension}";
+        $path = "listing-photos/{$listing->LST_ID}/".uniqid().".{$extension}";
 
         Storage::disk('cloudinary')->put($path, $photo->getRealPath());
         $newUrl = Storage::disk('cloudinary')->url($path);
