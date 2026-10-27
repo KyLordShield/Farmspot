@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../utils/mobile_number.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +12,7 @@ class EditProfileScreen extends StatefulWidget {
   final String lastName;
   final String address;
   final String phone;
+  final String email;
   final String photoUrl;
 
   const EditProfileScreen({
@@ -18,6 +21,7 @@ class EditProfileScreen extends StatefulWidget {
     this.lastName = '',
     this.address = '',
     this.phone = '',
+    this.email = '',
     this.photoUrl = '',
   });
 
@@ -31,6 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _lastNameCtrl;
   late final TextEditingController _firstNameCtrl;
   late final TextEditingController _mobileCtrl;
+  late final TextEditingController _emailCtrl;
   late final TextEditingController _addressCtrl;
 
   // Newly-picked photo (previewed locally, uploaded on Save). Bytes are read
@@ -41,6 +46,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   bool _isSaving = false;
   String? _saveError;
+  String? _phoneError;
 
   String get _currentName => '${widget.firstName} ${widget.lastName}'.trim();
 
@@ -50,6 +56,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _lastNameCtrl = TextEditingController(text: widget.lastName);
     _firstNameCtrl = TextEditingController(text: widget.firstName);
     _mobileCtrl = TextEditingController(text: widget.phone);
+    _emailCtrl = TextEditingController(text: widget.email);
     _addressCtrl = TextEditingController(text: widget.address);
   }
 
@@ -58,6 +65,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _lastNameCtrl.dispose();
     _firstNameCtrl.dispose();
     _mobileCtrl.dispose();
+    _emailCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
   }
@@ -113,6 +121,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final nameChanged = _currentName != '$first $last'.trim();
     final mobileChanged = mobile != widget.phone.trim();
     final addressChanged = address != widget.address.trim();
+    if (mobileChanged) {
+      final error = MobileNumber.validate(mobile);
+      if (error != null) {
+        setState(() {
+          _phoneError = error;
+          _saveError = error;
+        });
+        return;
+      }
+    }
 
     // Nothing changed (and nothing to upload) — just close, nothing to save.
     if (!nameChanged &&
@@ -142,6 +160,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() {
           _isSaving = false;
           _saveError = result.error;
+          if (mobileChanged &&
+              (result.error == MobileNumber.duplicateMessage ||
+                  result.error == MobileNumber.invalidMessage ||
+                  result.error == MobileNumber.requiredMessage)) {
+            _phoneError = result.error;
+          }
         });
         return;
       }
@@ -263,10 +287,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          _field('Email', _emailCtrl, readOnly: true),
+          const SizedBox(height: 14),
           _field(
             'mobile number',
             _mobileCtrl,
             keyboardType: TextInputType.phone,
+            maxLength: 11,
+            inputFormatters: MobileNumber.formatters,
+            errorText: _phoneError,
+            onChanged: (_) => setState(() {
+              _phoneError = null;
+              _saveError = null;
+            }),
           ),
           const SizedBox(height: 14),
           _field('address', _addressCtrl, maxLength: InputLimits.address),
@@ -341,13 +374,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     TextEditingController controller, {
     TextInputType? keyboardType,
     int? maxLength,
+    bool readOnly = false,
+    List<TextInputFormatter>? inputFormatters,
+    String? errorText,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
       maxLength: maxLength,
       keyboardType: keyboardType,
+      readOnly: readOnly,
+      inputFormatters: inputFormatters,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
+        errorText: errorText,
+        errorMaxLines: 3,
+        suffixIcon: readOnly ? const Icon(Icons.lock_outline, size: 18) : null,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 12,

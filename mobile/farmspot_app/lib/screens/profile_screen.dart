@@ -32,6 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _lastName = '';
   String _address = 'Address';
   String _phone = '';
+  String _email = '';
   String _photoUrl = '';
   bool _photoBusy = false;
   bool _hasPendingReview = false;
@@ -66,6 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final firstName = parts.isNotEmpty ? parts.first : '';
     final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
     final phone = user['USR_MOBILE_NUMBER'] as String? ?? '';
+    final email = user['USR_EMAIL'] as String? ?? '';
     // Real server values — an empty USR_ADDRESS/USR_PHOTO_PATH means the buyer
     // simply hasn't set one yet (this replaces the old hardcoded 'Address').
     final address = user['USR_ADDRESS'] as String? ?? '';
@@ -85,6 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _firstName = firstName;
       _lastName = lastName;
       _phone = phone;
+      _email = email;
       _address = address;
       _photoUrl = photoUrl;
       _hasPendingReview = hasPending && !hasApproved;
@@ -179,6 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           lastName: _lastName,
           address: _address,
           phone: _phone,
+          email: _email,
           photoUrl: _photoUrl,
         ),
       ),
@@ -328,6 +332,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         label: 'Personal Info',
                         value: fullName,
                         onTap: _openEditProfile,
+                      ),
+                      _accountTile(
+                        icon: Icons.email_outlined,
+                        label: 'Email',
+                        value: _email,
                       ),
                       _accountTile(
                         icon: Icons.phone_outlined,
@@ -786,11 +795,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             if (value.isNotEmpty)
-              Text(
-                value,
-                style: const TextStyle(color: Colors.black45, fontSize: 12),
+              Flexible(
+                flex: 2,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.end,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.black45, fontSize: 12),
+                ),
               ),
-            if (label != 'log out') ...[
+            if (onTap != null && label != 'log out') ...[
               const SizedBox(width: 6),
               const Icon(Icons.chevron_right, color: Colors.black26, size: 18),
             ],

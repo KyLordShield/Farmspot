@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\MobileNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -21,10 +22,10 @@ class AuthController extends Controller
             'USR_NAME' => ['required', 'string', 'max:150'],
             'USR_EMAIL' => ['required', 'email', 'max:200', 'unique:user,USR_EMAIL'],
             'USR_PASSWORD' => ['required', 'confirmed', Password::defaults()],
-            'USR_MOBILE_NUMBER' => ['required', 'string', 'max:20', 'unique:user,USR_MOBILE_NUMBER'],
+            'USR_MOBILE_NUMBER' => ['bail', 'required', 'string', MobileNumber::PATTERN, 'unique:user,USR_MOBILE_NUMBER'],
             // Optional — the buyer can skip it, and existing test flows don't send it.
             'address' => ['nullable', 'string', 'max:255'],
-        ]);
+        ], MobileNumber::messages('USR_MOBILE_NUMBER'));
 
         do {
             $id = strtoupper(Str::random(6));

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
-import 'package:flutter/services.dart';
+import 'package:farmspot_app/utils/mobile_number.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/lottie_loader.dart';
 import '../services/auth_service.dart';
@@ -37,7 +37,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   static final _nameRegex = RegExp(r"^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$");
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  static final _mobileRegex = RegExp(r'^09\d{9}$');
 
   @override
   void dispose() {
@@ -77,14 +76,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return null;
   }
 
-  String? _validateMobile(String value) {
-    final mobile = value.trim();
-    if (mobile.isEmpty) return 'Please enter your mobile number.';
-    if (!_mobileRegex.hasMatch(mobile)) {
-      return 'Please enter an 11-digit number starting with 09 (e.g. 09171234567).';
-    }
-    return null;
-  }
+  String? _validateMobile(String value) => MobileNumber.validate(value);
 
   String? _validatePassword(String value) {
     if (value.isEmpty) return 'Please create a password.';
@@ -271,9 +263,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
     if (fieldKey == 'USR_MOBILE_NUMBER') {
       if (raw.contains('taken') || raw.contains('already')) {
-        return 'That mobile number is already registered.';
+        return MobileNumber.duplicateMessage;
       }
-      return 'Please enter a valid mobile number (09XXXXXXXXX).';
+      return MobileNumber.invalidMessage;
     }
     if (fieldKey == 'USR_PASSWORD') {
       if (raw.contains('confirmation')) return 'Passwords do not match.';
@@ -372,10 +364,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       hint: 'mobile number',
                       controller: _mobileController,
                       keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(11),
-                      ],
+                      inputFormatters: MobileNumber.formatters,
                       errorText: _mobileError,
                       onChanged: (_) {
                         if (_mobileError != null) {

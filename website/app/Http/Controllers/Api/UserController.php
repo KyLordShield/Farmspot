@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Support\CloudinaryImage;
+use App\Support\MobileNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -29,13 +30,21 @@ class UserController extends Controller
             'name' => ['sometimes', 'string', 'max:150'],
             'mobile_number' => [
                 'sometimes',
+                'bail',
+                'required',
                 'string',
-                'max:20',
+                MobileNumber::PATTERN,
                 // Same uniqueness semantics as registration, scoped to exclude
                 // the current user so keeping your own number is fine.
                 Rule::unique('user', 'USR_MOBILE_NUMBER')->ignore($user->USR_ID, 'USR_ID'),
             ],
             'address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email' => ['prohibited'],
+            'USR_EMAIL' => ['prohibited'],
+        ], [
+            ...MobileNumber::messages('mobile_number'),
+            'email.prohibited' => 'Email cannot be changed from your profile.',
+            'USR_EMAIL.prohibited' => 'Email cannot be changed from your profile.',
         ]);
 
         if (array_key_exists('name', $validated)) {
@@ -80,7 +89,7 @@ class UserController extends Controller
 
         $photo = $request->file('photo');
         $extension = $photo->getClientOriginalExtension() ?: 'jpg';
-        $path = "profile-photos/{$user->USR_ID}/" . uniqid() . ".{$extension}";
+        $path = "profile-photos/{$user->USR_ID}/".uniqid().".{$extension}";
 
         Storage::disk('cloudinary')->put($path, $photo->getRealPath());
         $newUrl = Storage::disk('cloudinary')->url($path);

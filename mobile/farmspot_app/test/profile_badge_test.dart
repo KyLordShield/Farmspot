@@ -17,6 +17,7 @@ Future<void> _pumpProfile(WidgetTester tester, int isSeller) async {
       'USR_ID': isSeller == 1 ? 'XXXXXX' : 'YYYYYY',
       'USR_NAME': isSeller == 1 ? 'Rejean Libando' : 'Plain Buyer',
       'USR_MOBILE_NUMBER': '09878687656',
+      'USR_EMAIL': 'profile@example.test',
       'USR_IS_SELLER': isSeller,
     }),
   });
@@ -51,5 +52,22 @@ void main() {
 
     expect(find.text('Buyer Account'), findsOneWidget);
     expect(find.text('Seller Account'), findsNothing);
+  });
+  testWidgets('profile displays the account email without an edit action', (
+    tester,
+  ) async {
+    await _pumpProfile(tester, 0);
+    final email = find.text('profile@example.test');
+    await tester.scrollUntilVisible(
+      email,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(email, findsOneWidget);
+    final tile = tester.widget<InkWell>(
+      find.ancestor(of: email, matching: find.byType(InkWell)).first,
+    );
+    expect(tile.onTap, isNull);
   });
 }
