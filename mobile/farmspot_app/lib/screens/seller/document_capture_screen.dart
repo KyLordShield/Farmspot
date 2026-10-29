@@ -2,12 +2,18 @@ import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 
 import '../../../services/live_camera.dart';
+import '../../../services/camera_permission_service.dart';
 
 /// Keeps capture in Farmspot instead of backgrounding it behind another app.
 /// Releases camera resources before the caller starts OCR.
 class DocumentCaptureScreen extends StatefulWidget {
   final Future<LiveCamera?> Function() openCamera;
-  const DocumentCaptureScreen({super.key, this.openCamera = createLiveCamera});
+  final CameraPermissionGateway permissions;
+  const DocumentCaptureScreen({
+    super.key,
+    this.openCamera = createLiveCamera,
+    this.permissions = const DeviceCameraPermissions(),
+  });
 
   @override
   State<DocumentCaptureScreen> createState() => _DocumentCaptureScreenState();
@@ -22,15 +28,44 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
   bool _active = true;
   int _generation = 0;
   String? _error;
+  CameraAccess? _access;
+
+  bool get _needsSettings =>
+      _access == CameraAccess.blocked || _access == CameraAccess.restricted;
+  String _permissionMessage(CameraAccess access) => switch (access) {
+    CameraAccess.blocked =>
+      'Camera access is blocked. Enable Camera in your phone’s app settings to photograph your ID or permit.',
+    CameraAccess.restricted =>
+      'Camera access is restricted on this device. Enable camera access before photographing your ID or permit.',
+    _ =>
+      'Camera permission is required to photograph your ID or permit. Tap Allow camera to continue.',
+  };
+
+  Future<void> _openSettings() async {
+    try {
+      if (!await widget.permissions.openSettings() && mounted) {
+        setState(
+          () => _error =
+              'Could not open settings. Open your phone settings and allow Camera for Farmspot.',
+        );
+      }
+    } catch (_) {
+      if (mounted)
+        setState(
+          () => _error =
+              'Open your phone settings and allow Camera for Farmspot.',
+        );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _open();
+    _open(requestPermission: true);
   }
 
-  Future<void> _open() async {
+  Future<void> _open({bool requestPermission = false}) async {
     if (_opening || _camera != null || !_active || _capturing) return;
     final generation = _generation;
     setState(() {
@@ -38,13 +73,29 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
       _error = null;
     });
     LiveCamera? camera;
+    CameraAccess? access;
     try {
       await _closing;
       if (mounted && _active && generation == _generation) {
-        camera = await widget.openCamera();
+        access = await widget.permissions.status();
+        if (access == CameraAccess.denied &&
+            requestPermission &&
+            mounted &&
+            _active &&
+            generation == _generation) {
+          access = await widget.permissions.request();
+        }
+        // Permission dialogs can background the app. Never open a controller
+        // until the grant is confirmed and this screen is active again.
+        if (access == CameraAccess.granted &&
+            mounted &&
+            _active &&
+            generation == _generation) {
+          camera = await widget.openCamera();
+        }
       }
     } catch (_) {
-      // Show the same actionable retry state for permissions and hardware errors.
+      // Fail closed if permission cannot be checked or hardware cannot open.
     }
     if (!mounted || !_active || generation != _generation) {
       await camera?.dispose();
@@ -57,9 +108,12 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
     setState(() {
       _opening = false;
       _camera = camera;
-      if (camera == null) {
+      _access = access;
+      if (access != null && access != CameraAccess.granted) {
+        _error = _permissionMessage(access);
+      } else if (camera == null) {
         _error =
-            'Could not open the camera. Allow camera access and try again.';
+            'Could not open the camera. Check camera access and try again.';
       }
     });
   }
@@ -83,6 +137,24 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
     if (camera == null || _capturing) return;
     setState(() => _capturing = true);
     try {
+      final access = await widget.permissions.status();
+      if (!mounted) return;
+      if (!_active || _camera != camera) {
+        setState(() => _capturing = false);
+        if (_active) _open();
+        return;
+      }
+      if (access != CameraAccess.granted) {
+        setState(() {
+          _camera = null;
+          _capturing = false;
+          _access = access;
+          _error = _permissionMessage(access);
+        });
+        _closing = camera.dispose();
+        await _closing;
+        return;
+      }
       final XFile? photo = await camera.capture();
       if (!mounted) return;
       if (!_active || _camera != camera) {
@@ -156,8 +228,16 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
               padding: const EdgeInsets.all(20),
               child: _camera == null && !_opening && !_capturing
                   ? FilledButton(
-                      onPressed: _open,
-                      child: const Text('Retry camera'),
+                      onPressed: _needsSettings
+                          ? _openSettings
+                          : () => _open(requestPermission: true),
+                      child: Text(
+                        _needsSettings
+                            ? 'Open settings'
+                            : _access == CameraAccess.denied
+                            ? 'Allow camera'
+                            : 'Retry camera',
+                      ),
                     )
                   : FilledButton.icon(
                       onPressed: _camera == null || _capturing

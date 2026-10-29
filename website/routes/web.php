@@ -11,6 +11,8 @@ use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\SellerRequestController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/legal/{document}', [\App\Http\Controllers\LegalController::class, 'show'])->name('legal.show');
+
 Route::get('/', function () {
     return redirect()->route('login');
 });

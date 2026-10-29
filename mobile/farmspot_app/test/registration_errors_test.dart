@@ -1,3 +1,4 @@
+import 'package:farmspot_app/legal/legal.dart';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,28 @@ import 'package:http/testing.dart';
 import 'package:farmspot_app/services/auth_service.dart';
 
 void main() {
+  setUpAll(() async {
+    await LegalService.catalog();
+  });
+  testWidgets(
+    'registration stays blocked before reviewing the required agreement',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SignUpScreen()));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Create Account'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Create Account'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Please review and accept the Terms of Service'),
+        findsOneWidget,
+      );
+      expect(find.byType(SignUpScreen), findsOneWidget);
+    },
+  );
   testWidgets('duplicate fields show friendly alert and inline messages', (
     tester,
   ) async {
@@ -48,6 +71,19 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      final policyScroll = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('legal-reader-scroll')),
+          )
+          .controller!;
+      policyScroll.jumpTo(policyScroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('legal-reader-agree')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Create Account'));
       await tester.tap(find.text('Create Account'));
       await tester.pump();
       await tester.pumpAndSettle();

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\LegalPolicies;
 use App\Support\MobileNumber;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -27,22 +29,33 @@ class AuthController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
         ], MobileNumber::messages('USR_MOBILE_NUMBER'));
 
+        $legal = app(LegalPolicies::class);
+        $acceptLegal = $legal->validateRegistration($request);
+
         do {
             $id = strtoupper(Str::random(6));
         } while (User::where('USR_ID', $id)->exists());
 
-        $user = User::create([
-            'USR_ID' => $id,
-            'USR_NAME' => $validated['USR_NAME'],
-            'USR_EMAIL' => $validated['USR_EMAIL'],
-            'USR_PASSWORD' => Hash::make($validated['USR_PASSWORD']),
-            'USR_MOBILE_NUMBER' => $validated['USR_MOBILE_NUMBER'],
-            'USR_ADDRESS' => $validated['address'] ?? null,
-            'USR_ROLE' => 'GENERAL_USER',
-            'USR_IS_SELLER' => 0,
-            'USR_STATUS' => 'ACTIVE',
-            'USR_CREATED_AT' => now(),
-        ]);
+        $user = DB::transaction(function () use ($id, $validated, $legal, $acceptLegal) {
+            $user = User::create([
+                'USR_ID' => $id,
+                'USR_NAME' => $validated['USR_NAME'],
+                'USR_EMAIL' => $validated['USR_EMAIL'],
+                'USR_PASSWORD' => Hash::make($validated['USR_PASSWORD']),
+                'USR_MOBILE_NUMBER' => $validated['USR_MOBILE_NUMBER'],
+                'USR_ADDRESS' => $validated['address'] ?? null,
+                'USR_ROLE' => 'GENERAL_USER',
+                'USR_IS_SELLER' => 0,
+                'USR_STATUS' => 'ACTIVE',
+                'USR_CREATED_AT' => now(),
+            ]);
+
+            if ($acceptLegal) {
+                $legal->record($user->USR_ID, ['terms', 'privacy']);
+            }
+
+            return $user;
+        });
 
         $token = $user->createToken('flutter-app')->plainTextToken;
 

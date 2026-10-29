@@ -1,3 +1,4 @@
+import '../../legal/legal.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/premium_checkout.dart';
@@ -10,11 +11,13 @@ class PremiumCheckoutScreen extends StatefulWidget {
   final PremiumCheckoutGateway? gateway;
   final Future<bool> Function(Uri)? openCheckout;
   final Future<bool> Function()? refreshAccount;
+  final Future<void> Function()? savePaymentAgreement;
   const PremiumCheckoutScreen({
     super.key,
     this.gateway,
     this.openCheckout,
     this.refreshAccount,
+    this.savePaymentAgreement,
   });
   @override
   State<PremiumCheckoutScreen> createState() => _PremiumCheckoutScreenState();
@@ -23,6 +26,8 @@ class PremiumCheckoutScreen extends StatefulWidget {
 class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
     with WidgetsBindingObserver {
   PremiumCheckout? _checkout;
+  LegalCatalog? _legalCatalog;
+  bool _paymentTermsAccepted = false;
   bool _busy = true, _opened = false, _activated = false;
   String? _error, _notice;
   PremiumCheckoutGateway get _gateway =>
@@ -69,6 +74,25 @@ class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
 
   Future<void> _open() async {
     if (_busy || _checkout == null) return;
+    late LegalCatalog policies;
+    try {
+      policies = _legalCatalog ?? await LegalService.catalog();
+    } catch (_) {
+      if (mounted)
+        setState(
+          () => _error =
+              'Could not load the payment terms. Reopen the app and try again.',
+        );
+      return;
+    }
+    if (!mounted) return;
+    if (policies.published && !_paymentTermsAccepted) {
+      setState(
+        () => _error =
+            'Please review and accept the payment terms before continuing.',
+      );
+      return;
+    }
     final uri = Uri.tryParse(_checkout!.url);
     if (uri == null ||
         uri.scheme != 'https' ||
@@ -83,6 +107,12 @@ class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
       _error = null;
     });
     try {
+      if (policies.published) {
+        if (widget.savePaymentAgreement != null)
+          await widget.savePaymentAgreement!();
+        else
+          await LegalService.recordAccepted(policies, ['terms', 'privacy']);
+      }
       final opened =
           await (widget.openCheckout?.call(uri) ??
               launchUrl(uri, mode: LaunchMode.externalApplication));
@@ -231,6 +261,17 @@ class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
                   Text(_notice!, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                 ],
+                if (!_activated)
+                  LegalRegistrationConsent(
+                    agreementLabel:
+                        'I agree to the Premium payment terms and acknowledge the Privacy Policy.',
+                    onChanged: (catalog, accepted) {
+                      setState(() {
+                        _legalCatalog = catalog;
+                        _paymentTermsAccepted = accepted;
+                      });
+                    },
+                  ),
                 if (_activated)
                   FilledButton(
                     onPressed: () => Navigator.pop(context, true),
@@ -245,9 +286,7 @@ class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
                   FilledButton(
                     onPressed: _busy || order.paid ? null : _open,
                     child: Text(
-                      _opened
-                          ? 'Return to PayMongo'
-                          : 'Continue to PayMongo',
+                      _opened ? 'Return to PayMongo' : 'Continue to PayMongo',
                     ),
                   ),
                   const SizedBox(height: 12),

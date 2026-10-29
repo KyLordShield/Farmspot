@@ -195,6 +195,7 @@
                 </button>
             </form>
 
+            <p class="footer-note"><a href="{{ route('legal.show', 'privacy') }}">Privacy Policy</a> · <a href="{{ route('legal.show', 'terms') }}">Terms of Service</a></p>
             <p class="footer-note">
                 Authorized personnel only. All access attempts are logged.
             </p>

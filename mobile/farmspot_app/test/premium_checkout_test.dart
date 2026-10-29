@@ -1,3 +1,4 @@
+import 'package:farmspot_app/legal/legal.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +36,9 @@ class Gateway implements PremiumCheckoutGateway {
 }
 
 void main() {
+  setUpAll(() async {
+    await LegalService.catalog();
+  });
   testWidgets(
     'opening checkout does not grant access; pending then verified payment refreshes account',
     (tester) async {
@@ -44,6 +48,7 @@ void main() {
         MaterialApp(
           home: PremiumCheckoutScreen(
             gateway: gateway,
+            savePaymentAgreement: () async {},
             openCheckout: (_) async {
               opened++;
               return true;
@@ -56,10 +61,33 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Continue to PayMongo'));
+      await tester.tap(find.text('Continue to PayMongo'));
+      await tester.pumpAndSettle();
+      expect(opened, 0);
+      expect(
+        find.textContaining('Please review and accept the payment terms'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      final policyScroll = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('legal-reader-scroll')),
+          )
+          .controller!;
+      policyScroll.jumpTo(policyScroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('legal-reader-agree')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Continue to PayMongo'));
       await tester.tap(find.text('Continue to PayMongo'));
       await tester.pumpAndSettle();
       expect(opened, 1);
       expect(refreshed, 0);
+      await tester.ensureVisible(find.text('Check payment'));
+      await tester.ensureVisible(find.text('Check payment'));
       await tester.tap(find.text('Check payment'));
       await tester.pumpAndSettle();
       expect(
@@ -68,6 +96,8 @@ void main() {
       );
       expect(refreshed, 0);
       gateway.result = paid;
+      await tester.ensureVisible(find.text('Check payment'));
+      await tester.ensureVisible(find.text('Check payment'));
       await tester.tap(find.text('Check payment'));
       await tester.pumpAndSettle();
       expect(refreshed, 1);
@@ -83,6 +113,8 @@ void main() {
         MaterialApp(home: PremiumCheckoutScreen(gateway: gateway)),
       );
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Check payment'));
+      await tester.ensureVisible(find.text('Check payment'));
       await tester.tap(find.text('Check payment'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -109,6 +141,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Check payment'));
     await tester.tap(find.text('Check payment'));
     await tester.pumpAndSettle();
     expect(
@@ -116,6 +149,7 @@ void main() {
       findsOneWidget,
     );
     allow = true;
+    await tester.ensureVisible(find.text('Check payment'));
     await tester.tap(find.text('Check payment'));
     await tester.pumpAndSettle();
     expect(find.text('Premium is active'), findsOneWidget);

@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/paymongo/return', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'returned']);
 Route::post('/paymongo/webhook', [\App\Http\Controllers\Api\PayMongoCheckoutController::class, 'webhook'])->middleware('throttle:60,1');
 
+Route::get('/legal', [\App\Http\Controllers\LegalController::class, 'index']);
+
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -75,6 +77,8 @@ Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
 Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::get('/legal/acceptances', [\App\Http\Controllers\LegalController::class, 'acceptances']);
+    Route::post('/legal/acceptances', [\App\Http\Controllers\LegalController::class, 'accept'])->middleware('throttle:20,1');
     Route::get('/premium/alert-settings', [\App\Http\Controllers\Api\PremiumAlertSettingsController::class, 'show']);
     Route::put('/premium/alert-settings', [\App\Http\Controllers\Api\PremiumAlertSettingsController::class, 'update']);
     Route::get('/sourcing/list', [\App\Http\Controllers\Api\SourcingController::class, 'show']);

@@ -1,0 +1,231 @@
+{
+  "version": "2026-10-28-v2",
+  "published": true,
+  "operator_name": "Farmspot Team",
+  "contact_email": null,
+  "retention_policy": "Verification documents are kept while needed for seller verification and account administration. Removal requests are reviewed manually, taking account of unresolved disputes, moderation and required records. Leaving setup or uninstalling the app does not delete the records.",
+  "refund_policy": "We review duplicate or incorrect charges and confirmed payments where Premium access was not provided. Provide a payment reference to the association secretary or a Farmspot administrator. Requests are reviewed individually; submitting a request is not an automatic refund.",
+  "draft_notice": "These policies are not yet active.",
+  "documents": [
+    {
+      "id": "terms",
+      "title": "Terms of Service",
+      "sections": [
+        {
+          "heading": "Using Farmspot",
+          "text": "Farmspot helps buyers discover farms and produce and contact sellers.",
+          "points": [
+            "Sellers and buyers must confirm prices, quantity, freshness, pickup or delivery arrangements with each other.",
+            "A listing is not a guarantee that produce is still available."
+          ]
+        },
+        {
+          "heading": "Your account",
+          "text": "Provide accurate account details, keep your password private and use only accounts you are authorized to manage.",
+          "points": [
+            "Do not impersonate others, submit false documents, harass users, post prohibited content or misuse the service."
+          ]
+        },
+        {
+          "heading": "Listings, photos and messages",
+          "text": "Post content you own or have permission to share.",
+          "points": [
+            "Keep crop descriptions, availability and farm information accurate.",
+            "Do not put ID or permit photos in public farm galleries, listings or messages.",
+            "Use the verification flow for documents."
+          ]
+        },
+        {
+          "heading": "Verification and moderation",
+          "text": "Document text checks and automated photo screening assist the review process and can make mistakes.",
+          "points": [
+            "An administrator reviews seller submissions.",
+            "Reports may lead to restrictions or removal.",
+            "Use the available appeal process when a decision can be appealed.",
+            "Approval does not guarantee every listing, statement or product."
+          ]
+        },
+        {
+          "heading": "Premium and payment",
+          "text": "The current Premium plan provides one month of access, with no automatic renewal.",
+          "points": [
+            "Review the displayed price and payment details before continuing to PayMongo.",
+            "Access activates after payment confirmation.",
+            "Removing the app or leaving checkout does not by itself reverse a completed payment."
+          ]
+        },
+        {
+          "heading": "Payment issues and refund requests",
+          "text": "We review duplicate or incorrect charges and confirmed payments where Premium access was not provided.",
+          "points": [
+            "Provide a payment reference to the association secretary or a Farmspot administrator.",
+            "Requests are reviewed individually; submitting a request is not an automatic refund.",
+            "Never send payment passwords or one-time authentication codes.",
+            "These terms do not remove rights provided by applicable law."
+          ]
+        },
+        {
+          "heading": "Questions and changes",
+          "text": "Read the Privacy Policy for information about personal data and the Seller Agreement before selling.",
+          "points": [
+            "Contact your association secretary or a Farmspot administrator with questions.",
+            "Each policy page shows its version; a new version may require a new agreement for the relevant action."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy Policy",
+      "sections": [
+        {
+          "heading": "About this policy",
+          "text": "Farmspot Team provides this app to help buyers and sellers connect.",
+          "points": [
+            "This policy explains the information used by its features, your choices and how to raise a privacy concern."
+          ]
+        },
+        {
+          "heading": "Information used by the app",
+          "text": "Depending on the features you use, Farmspot processes account name, email, phone number, address, profile photo, farm and listing details, uploaded photos, messages, reports, searches, contact activity, location pins, notification identifiers and Premium payment references.",
+          "points": [
+            "Seller verification also uses ID and permit/certificate photos and the seller name."
+          ]
+        },
+        {
+          "heading": "Why information is processed",
+          "text": "Information supports account access, seller verification, listing discovery, location-based results, buyer–seller communication, notifications, payments, moderation and app analytics.",
+          "points": [
+            "Image search and automated text/photo checks process images to support those features; those checks do not replace administrator review."
+          ]
+        },
+        {
+          "heading": "What other users can see",
+          "text": "Published farm and listing information, photos and map pins are visible through the relevant public features.",
+          "points": [
+            "Contact details are shared where the app displays them for buyer–seller communication; buy-request phone and location details are shown to approved sellers.",
+            "Share exact location only when you intend to.",
+            "Verification documents are submitted for administrator review, not for public listing galleries."
+          ]
+        },
+        {
+          "heading": "Service providers and safety",
+          "text": "The app uses hosting, database, media-storage, notification, payment and AI services to operate relevant features.",
+          "points": [
+            "Those providers process information needed for their services.",
+            "Only send information you intend to provide through a feature.",
+            "Do not assume ordinary messages are end-to-end encrypted.",
+            "No service can promise that security risks are eliminated."
+          ]
+        },
+        {
+          "heading": "Keeping and removing documents",
+          "text": "Verification documents are kept while needed for seller verification and account administration.",
+          "points": [
+            "Removal requests are reviewed manually, taking account of unresolved disputes, moderation and required records.",
+            "Leaving setup or uninstalling the app does not delete the records."
+          ]
+        },
+        {
+          "heading": "Your choices and requests",
+          "text": "You can decline camera or location permissions and stop using the features that need them.",
+          "points": [
+            "Correct profile details using the available app options.",
+            "Ask your association secretary or a Farmspot administrator about access, correction, deletion or withdrawal of document-processing consent.",
+            "Your identity may need to be checked before a request is handled.",
+            "Requests are reviewed individually; records needed for unresolved disputes or required record-keeping may need to be kept."
+          ]
+        },
+        {
+          "heading": "Contact",
+          "text": "For privacy, document-removal or payment issues, contact your association secretary or a Farmspot administrator.",
+          "points": [
+            "Explain the issue and identify the relevant account or payment reference.",
+            "Do not share passwords or authentication codes."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "seller",
+      "title": "Seller Agreement",
+      "sections": [
+        {
+          "heading": "Becoming a seller",
+          "text": "Submit truthful farm details, a genuine ID and the required permit or certificate that you are authorized to use.",
+          "points": [
+            "Follow the verification instructions and keep contact details current.",
+            "An administrator decides whether a farm is approved."
+          ]
+        },
+        {
+          "heading": "Keeping listings useful",
+          "text": "Use accurate crop names, photos, descriptions, quantities and availability.",
+          "points": [
+            "Update listings when produce is no longer available and provide a fresh photo when renewing.",
+            "A “Check freshness” notice means the listing needs a new freshness confirmation; it is not proof that produce is spoiled or safe."
+          ]
+        },
+        {
+          "heading": "Respect buyers and other sellers",
+          "text": "Do not post misleading offers, stolen images, abusive or adult content, spam or duplicate listings intended to evade the app’s checks.",
+          "points": [
+            "Honor arrangements you agree with buyers and communicate changes promptly."
+          ]
+        },
+        {
+          "heading": "Public information and document review",
+          "text": "Farm and listing information you publish can be visible to buyers.",
+          "points": [
+            "Verification documents support review of your seller identity and farm submission.",
+            "Review the Privacy Policy and the ID & Permit Privacy Notice before providing documents."
+          ]
+        },
+        {
+          "heading": "Review, restrictions and additional farms",
+          "text": "Each farm is reviewed separately.",
+          "points": [
+            "Existing documents may be reused for additional farms belonging to the same seller.",
+            "Reports and policy violations may lead to review or restrictions.",
+            "Available appeal tools remain available.",
+            "Accepting a seller agreement does not guarantee approval or a sale."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "verification",
+      "title": "ID & Permit Privacy Notice",
+      "sections": [
+        {
+          "heading": "Before taking a document photo",
+          "text": "Your ID, permit/certificate photos and seller name are used for seller verification.",
+          "points": [
+            "Text recognition checks document-related text and the name; an administrator reviews the submitted documents.",
+            "Do not provide someone else’s documents."
+          ]
+        },
+        {
+          "heading": "How the photos are handled",
+          "text": "Taking a photo starts a local capture/check step.",
+          "points": [
+            "Documents confirmed in the wizard are uploaded with the farm submission for review and can be reused for additional farms on your account.",
+            "Do not upload these photos to public galleries.",
+            "Storage is not automatically cleared just by leaving setup or uninstalling the app."
+          ]
+        },
+        {
+          "heading": "Choice, retention and contact",
+          "text": "You can cancel capture and remain a buyer.",
+          "points": [
+            "Seller setup requires the requested verification documents.",
+            "Before capture, you are asked separately to agree to their use for seller verification.",
+            "Documents are retained while needed for verification and administration; removal requests are reviewed manually.",
+            "Contact your association secretary or a Farmspot administrator for privacy or document-removal requests."
+          ]
+        }
+      ]
+    }
+  ],
+  "contact_text": "For privacy, document-removal or payment issues, contact your association secretary or a Farmspot administrator."
+}

@@ -1,3 +1,4 @@
+import '../../legal/legal.dart';
 import 'package:flutter/material.dart';
 import 'package:cross_file/cross_file.dart';
 
@@ -13,6 +14,7 @@ class FarmSetupVerifyScreen extends StatefulWidget {
   final FarmSetupData farmSetupData;
   final Future<String> Function(XFile) readDocument;
   final Future<XFile?> Function()? captureDocument;
+  final Future<bool> Function()? confirmDocumentPrivacy;
 
   /// Only reached on a seller's first farm. Additional farms skip this step
   /// because the server copies their ID and permit from the first farm, so
@@ -22,6 +24,7 @@ class FarmSetupVerifyScreen extends StatefulWidget {
     required this.farmSetupData,
     this.readDocument = DocumentTextCheck.read,
     this.captureDocument,
+    this.confirmDocumentPrivacy,
   });
 
   @override
@@ -31,6 +34,8 @@ class FarmSetupVerifyScreen extends StatefulWidget {
 class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
   final _fullNameCtrl = TextEditingController();
   bool _checking = false;
+  LegalCatalog? _legalCatalog;
+  bool _documentPrivacyAccepted = false;
 
   @override
   void initState() {
@@ -88,6 +93,28 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     if (_checking) return;
     setState(() => _checking = true);
     try {
+      if (widget.confirmDocumentPrivacy != null) {
+        if (!await widget.confirmDocumentPrivacy!() || !mounted) return;
+      } else {
+        final policies = _legalCatalog ?? await LegalService.catalog();
+        if (!mounted) return;
+        if (policies.published && !_documentPrivacyAccepted) {
+          _showError(
+            'Please read and agree to the ID & Permit Privacy Notice before taking a photo.',
+          );
+          return;
+        }
+        if (policies.published) {
+          try {
+            await LegalService.recordAccepted(policies, ['verification']);
+          } catch (error) {
+            if (mounted)
+              _showError(error.toString().replaceFirst('Exception: ', ''));
+            return;
+          }
+        }
+        if (!mounted) return;
+      }
       final picked = widget.captureDocument != null
           ? await widget.captureDocument!()
           : await Navigator.of(context).push<XFile>(
@@ -130,7 +157,7 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     }
   }
 
-  void _next() {
+  Future<void> _next() async {
     if (_checking) return;
     // Documents are always required here: this step is only reached on a
     // seller's first farm, where there is nothing to inherit them from.
@@ -145,6 +172,16 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
         ),
       );
       return;
+    }
+    if (widget.confirmDocumentPrivacy == null) {
+      final policies = _legalCatalog ?? await LegalService.catalog();
+      if (!mounted) return;
+      if (policies.published && !_documentPrivacyAccepted) {
+        _showError(
+          'Please read and agree to the ID & Permit Privacy Notice before continuing.',
+        );
+        return;
+      }
     }
     final data = widget.farmSetupData;
     if (!DocumentTextCheck.looksLikeDocument(
@@ -195,6 +232,21 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 children: [
+                  const Text(
+                    'Please review the document privacy notice before taking photos.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  LegalRegistrationConsent(
+                    documents: const ['verification'],
+                    agreementLabel:
+                        'I consent to ID and permit processing for seller verification.',
+                    onChanged: (catalog, accepted) {
+                      _legalCatalog = catalog;
+                      _documentPrivacyAccepted = accepted;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   const FieldLabel(
                     'VALID ID',
                     badge: '(required)',

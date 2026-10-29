@@ -31,6 +31,7 @@ dependencies:
   photo_manager: ^3.12.0
   google_mlkit_text_recognition: ^0.17.1
   nsfw_detector_flutter: 2.0.2
+  permission_handler: ^12.0.3
 
 dev_dependencies:
   flutter_test:
@@ -49,6 +50,7 @@ flutter:
     - assets/images/logo.png
     - assets/images/Mountian Bg Myfarm.png
     - assets/animations/
+    - assets/legal/
   fonts:
     - family: Cooper
       fonts:

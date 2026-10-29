@@ -1,3 +1,4 @@
+import '../legal/legal.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -272,6 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       actionLabel: 'Create Account',
                       onTap: _goToSignUp,
                     ),
+                    const LegalLinks(),
                   ],
                 ),
               ),

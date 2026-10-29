@@ -1,3 +1,4 @@
+import '../legal/legal.dart';
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:farmspot_app/utils/mobile_number.dart';
@@ -24,6 +25,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _checkingLegal = false, _legalAccepted = false;
+  LegalCatalog? _legalCatalog;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
@@ -91,6 +94,35 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleCreateAccount() async {
+    if (_isLoading || _checkingLegal) return;
+    _checkingLegal = true;
+    late LegalCatalog catalog;
+    try {
+      catalog = _legalCatalog ?? await LegalService.catalog();
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not load the legal pages. Please reopen the app and try again.',
+            ),
+          ),
+        );
+      return;
+    } finally {
+      _checkingLegal = false;
+    }
+    if (!mounted) return;
+    if (catalog.published && !_legalAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please review and accept the Terms of Service and acknowledge the Privacy Policy.',
+          ),
+        ),
+      );
+      return;
+    }
     FocusScope.of(context).unfocus();
 
     final lastNameError = _validateLastName(_lastNameController.text);
@@ -137,6 +169,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       passwordConfirmation: _confirmPasswordController.text,
       mobileNumber: _mobileController.text.trim(),
       address: _addressController.text.trim(),
+      legalAcceptance: catalog.published
+          ? {
+              'legal_version': catalog.version,
+              'terms_accepted': '1',
+              'privacy_acknowledged': '1',
+            }
+          : null,
     );
 
     if (!mounted) return;
@@ -167,6 +206,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
+    if (result.fieldErrors.keys.any(
+      (key) => [
+        'legal_version',
+        'terms_accepted',
+        'privacy_acknowledged',
+      ].contains(key),
+    )) {
+      showFarmAlert(
+        context,
+        type: FarmAlertType.error,
+        title: 'Review the Legal Pages',
+        message: result.fieldErrors.values
+            .expand((messages) => messages)
+            .join('\n'),
+      );
+      return;
+    }
     if (result.fieldErrors.isNotEmpty) {
       setState(() {
         _firstNameError = _friendlyFieldError(
@@ -439,6 +495,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 12),
+                    LegalRegistrationConsent(
+                      onChanged: (catalog, accepted) {
+                        _legalCatalog = catalog;
+                        _legalAccepted = accepted;
+                      },
+                    ),
                     const SizedBox(height: 26),
                     FarmSpotButton(
                       label: _isLoading

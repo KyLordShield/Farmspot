@@ -269,6 +269,7 @@ class AuthService {
     required String passwordConfirmation,
     required String mobileNumber,
     String? address,
+    Map<String, String>? legalAcceptance,
     http.Client? client,
   }) async {
     try {
@@ -282,6 +283,7 @@ class AuthService {
               'USR_PASSWORD_confirmation': passwordConfirmation,
               'USR_MOBILE_NUMBER': mobileNumber,
               if (address != null) 'address': address.trim(),
+              if (legalAcceptance != null) ...legalAcceptance,
             },
           )
           .timeout(const Duration(seconds: 15));

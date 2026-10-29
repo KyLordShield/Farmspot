@@ -1,3 +1,4 @@
+import 'package:farmspot_app/legal/legal.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,13 +38,86 @@ Future<void> _pumpVerifyScreen(WidgetTester tester, FarmSetupData data) async {
     'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
   });
   await tester.pumpWidget(
-    MaterialApp(home: FarmSetupVerifyScreen(farmSetupData: data)),
+    MaterialApp(
+      home: FarmSetupVerifyScreen(
+        farmSetupData: data,
+        confirmDocumentPrivacy: () async => true,
+      ),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
 }
 
 void main() {
+  setUpAll(() async {
+    await LegalService.catalog();
+  });
+  testWidgets('verification Next stays blocked without the privacy agreement', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
+    });
+    final data = FarmSetupData()
+      ..verificationDocument = XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'id.jpg',
+      )
+      ..farmCertificate = XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'permit.jpg',
+      );
+    await tester.pumpWidget(
+      MaterialApp(home: FarmSetupVerifyScreen(farmSetupData: data)),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Next: Pin Farm Location'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining(
+        'Please read and agree to the ID & Permit Privacy Notice',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(FarmSetupLocationScreen), findsNothing);
+  });
+  testWidgets(
+    'verification cannot start capture before document privacy agreement',
+    (tester) async {
+      var captures = 0;
+      SharedPreferences.setMockInitialValues({
+        'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FarmSetupVerifyScreen(
+            farmSetupData: FarmSetupData(),
+            captureDocument: () async {
+              captures++;
+              return null;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Take photo').first);
+      await tester.tap(find.text('Take photo').first);
+      await tester.pumpAndSettle();
+      expect(captures, 0);
+      expect(
+        find.textContaining(
+          'Please read and agree to the ID & Permit Privacy Notice',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
   testWidgets('verify step shows two required document boxes', (tester) async {
     await _pumpVerifyScreen(tester, FarmSetupData());
 
@@ -94,7 +168,11 @@ void main() {
     final data = FarmSetupData();
     await _pumpVerifyScreen(tester, data);
 
-    await tester.ensureVisible(find.text('Next: Pin Farm Location'));
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Next: Pin Farm Location'));
     await tester.pump();
 
@@ -112,7 +190,11 @@ void main() {
         Uint8List.fromList([1, 2, 3]),
         name: 'id.jpg',
       );
-    await tester.ensureVisible(find.text('Next: Pin Farm Location'));
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Next: Pin Farm Location'));
     await tester.pump();
 
@@ -136,7 +218,12 @@ void main() {
       'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
     });
     await tester.pumpWidget(
-      MaterialApp(home: FarmSetupVerifyScreen(farmSetupData: data)),
+      MaterialApp(
+        home: FarmSetupVerifyScreen(
+          farmSetupData: data,
+          confirmDocumentPrivacy: () async => true,
+        ),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -145,7 +232,11 @@ void main() {
     GeolocatorPlatform.instance = _FakeGeolocator();
     addTearDown(() => GeolocatorPlatform.instance = original);
 
-    await tester.ensureVisible(find.text('Next: Pin Farm Location'));
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Next: Pin Farm Location'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -169,6 +260,7 @@ void main() {
       MaterialApp(
         home: FarmSetupVerifyScreen(
           farmSetupData: data,
+          confirmDocumentPrivacy: () async => true,
           captureDocument: () async =>
               XFile.fromData(Uint8List.fromList([1, 2, 3]), name: 'id.jpg'),
           readDocument: (_) async => text,
@@ -209,6 +301,7 @@ void main() {
       MaterialApp(
         home: FarmSetupVerifyScreen(
           farmSetupData: data,
+          confirmDocumentPrivacy: () async => true,
           captureDocument: () async => cancelled ? null : XFile('id.jpg'),
           readDocument: (_) async => throw Exception('OCR unavailable'),
         ),
@@ -275,7 +368,11 @@ void main() {
     expect(find.text('Next: Pin Farm Location'), findsOneWidget);
     expect(find.text('Next: Verify Identity'), findsNothing);
 
-    await tester.ensureVisible(find.text('Next: Pin Farm Location'));
+    await tester.scrollUntilVisible(
+      find.text('Next: Pin Farm Location'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Next: Pin Farm Location'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));

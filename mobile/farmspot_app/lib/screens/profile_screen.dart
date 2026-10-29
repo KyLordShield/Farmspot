@@ -1,3 +1,4 @@
+import '../legal/legal.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
@@ -106,6 +107,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _sellerError = null;
     });
 
+    if (enable &&
+        !await LegalService.ensureAccepted(context, [
+          'seller',
+        ], label: 'I agree to the Seller Agreement.')) {
+      if (mounted) setState(() => _sellerBusy = false);
+      return;
+    }
+    if (!mounted) return;
     final result = enable
         ? await AuthService.activateSeller()
         : (error: await AuthService.deactivateSeller(), reactivated: false);
@@ -343,6 +352,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         label: 'Contact Number',
                         value: _phone,
                         onTap: _openEditProfile,
+                      ),
+                      _accountTile(
+                        icon: Icons.privacy_tip_outlined,
+                        label: 'Privacy & Terms',
+                        value: '',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const LegalScreen(),
+                          ),
+                        ),
                       ),
                       _accountTile(
                         icon: Icons.logout,
