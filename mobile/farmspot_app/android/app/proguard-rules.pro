@@ -1,3 +1,9 @@
+# ML Kit discovers these components through manifest names and reflection.
+# Preserve constructors and factories: release optimization otherwise removes
+# CommonComponentRegistrar's constructor and leaves OCR dependencies unset.
+-keep class com.google.mlkit.** implements com.google.firebase.components.ComponentRegistrar { *; }
+-keep class com.google.mlkit.common.sdkinternal.** { *; }
+
 # Optional TensorFlow Lite GPU delegate types referenced by tflite_flutter.
 -keep class org.tensorflow.lite.gpu.GpuDelegateFactory$Options { *; }
 -dontwarn org.tensorflow.lite.gpu.GpuDelegateFactory$Options

@@ -121,7 +121,17 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
               MaterialPageRoute(builder: (_) => const DocumentCaptureScreen()),
             );
       if (picked == null || !mounted) return;
-      final text = await widget.readDocument(picked);
+      final String text;
+      try {
+        text = await widget.readDocument(picked);
+      } catch (_) {
+        if (mounted) {
+          _showError(
+            'The photo was taken, but the document reader failed. Please restart the app and try again.',
+          );
+        }
+        return;
+      }
       if (!mounted) return;
       if (!DocumentTextCheck.looksLikeDocument(text, isId: isId)) {
         _showError(
@@ -149,7 +159,7 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
     } catch (_) {
       if (mounted) {
         _showError(
-          'Unable to capture or read the document. Allow camera access and try again on an Android or iOS phone.',
+          'Unable to open document capture. Please try again.',
         );
       }
     } finally {

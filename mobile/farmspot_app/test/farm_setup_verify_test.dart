@@ -315,7 +315,8 @@ void main() {
     await tester.tap(find.text('Take photo').first);
     await tester.pumpAndSettle();
     expect(data.verificationDocument, isNull);
-    expect(find.textContaining('Unable to capture or read'), findsOneWidget);
+    expect(find.textContaining('document reader failed'), findsOneWidget);
+    expect(find.textContaining('Allow camera access'), findsNothing);
   });
 
   // ------------------------------------------- adding a second farm onward
