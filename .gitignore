@@ -13,6 +13,16 @@ runs/
 # Experimental checkpoints stay local; the deployed checkpoint remains tracked.
 ml_service/farmspot_9class_v*_best.pt
 
+# Local ML experiments: prepared datasets, review images, and Kaggle bundles.
+# Keep these on disk; archived experiment scripts live under ignored uploads/.
+/output/original_improvement/
+/output/original_label_cleanup/
+/output/rejection_label_review/
+ml_service/farmspot_original*_review.zip
+ml_service/yolo_fruits_and_vegetables_v1.pt
+ml_service/fruit_veg_yolo11m_35class.pt
+ml_service/pretrained/
+
 # Service runtime artifacts -- uvicorn output and the per-request detection log
 ml_service/detect_log.txt
 ml_service/uvicorn_*.log
