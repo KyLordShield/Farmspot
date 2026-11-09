@@ -28,8 +28,8 @@ Route::post('/paymongo/webhook', [\App\Http\Controllers\Api\PayMongoCheckoutCont
 
 Route::get('/legal', [\App\Http\Controllers\LegalController::class, 'index']);
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:registration');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
 // Password reset for app users, by emailed 6-digit code.
 //

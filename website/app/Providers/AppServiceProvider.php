@@ -10,6 +10,9 @@ use App\Observers\PremiumBuyRequestObserver;
 use App\Observers\PremiumListingObserver;
 use App\Services\MassReportService;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -29,6 +32,30 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Authenticated limits follow the account across devices and tokens.
+        $identity = fn (Request $request) => $request->user()
+            ? 'user:'.$request->user()->getAuthIdentifier()
+            : 'ip:'.$request->ip();
+
+        RateLimiter::for('api', fn (Request $request) =>
+            Limit::perMinute(180)->by($identity($request)));
+        RateLimiter::for('website', fn (Request $request) =>
+            Limit::perMinute(120)->by($identity($request)));
+        RateLimiter::for('writes', fn (Request $request) => $request->isMethodSafe()
+            ? Limit::none()
+            : Limit::perMinute(60)->by($identity($request)));
+        RateLimiter::for('login', function (Request $request) {
+            $email = $request->input('email');
+            $email = is_string($email) ? strtolower(trim($email)) : '';
+
+            return [
+                Limit::perMinute(20)->by('ip:'.$request->ip()),
+                Limit::perMinute(5)->by('account:'.hash('sha256', $email.'|'.$request->ip())),
+            ];
+        });
+        RateLimiter::for('registration', fn (Request $request) =>
+            Limit::perMinute(3)->by('ip:'.$request->ip()));
+
         Paginator::useBootstrapFive();
         Listing::observe(PremiumListingObserver::class);
         BuyRequest::observe(PremiumBuyRequestObserver::class);
