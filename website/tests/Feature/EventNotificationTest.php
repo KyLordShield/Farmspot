@@ -5,18 +5,70 @@ namespace Tests\Feature;
 use App\Models\AdminPlanner;
 use App\Models\User;
 use App\Services\EventNotificationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class EventNotificationTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();
+        // The legacy base tables are supplied by a MySQL dump, not migrations.
+        // Build only this suite's dependencies in a fresh, isolated SQLite DB.
+        config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
+        DB::purge('sqlite');
+        // Planner IDs use this MySQL collation; test IDs are ASCII.
+        DB::connection()->getPdo()->sqliteCreateCollation('utf8mb4_general_ci', 'strcasecmp');
+        Schema::create('user', function (Blueprint $t) {
+            $t->char('USR_ID', 6)->primary();
+            $t->string('USR_NAME');
+            $t->string('USR_EMAIL')->unique();
+            $t->string('USR_PASSWORD');
+            $t->string('USR_MOBILE_NUMBER');
+            $t->string('USR_ROLE');
+            $t->string('USR_STATUS');
+            $t->boolean('USR_IS_SELLER')->default(false);
+            $t->dateTime('USR_CREATED_AT');
+        });
+        Schema::create('buyer', function (Blueprint $t) {
+            $t->char('BUY_ID', 6)->primary();
+            $t->char('USR_ID', 6);
+            $t->foreign('USR_ID')->references('USR_ID')->on('user');
+        });
+        Schema::create('farmer', function (Blueprint $t) {
+            $t->char('FMR_ID', 6)->primary();
+            $t->char('BUY_ID', 6);
+            $t->boolean('FMR_SELLER_MODE_ACTIVE');
+            $t->foreign('BUY_ID')->references('BUY_ID')->on('buyer');
+        });
+        Schema::create('farm', function (Blueprint $t) {
+            $t->char('FRM_ID', 6)->primary();
+            $t->char('FMR_ID', 6);
+            $t->string('FRM_NAME');
+            $t->string('FRM_BARANGAY');
+            $t->decimal('FRM_LATITUDE', 10, 7);
+            $t->decimal('FRM_LONGITUDE', 10, 7);
+            $t->string('FRM_STATUS');
+            $t->boolean('FRM_PIN_ACTIVE');
+            $t->dateTime('FRM_CREATED_AT');
+            $t->foreign('FMR_ID')->references('FMR_ID')->on('farmer');
+        });
+        Schema::create('notification', function (Blueprint $t) {
+            $t->char('NOTIF_ID', 6)->primary();
+            $t->char('USR_ID', 6);
+            $t->enum('NOTIF_TYPE', \App\Models\UserNotification::TYPES);
+            $t->string('NOTIF_TITLE', 150);
+            $t->string('NOTIF_BODY', 300);
+            $t->char('NOTIF_REF_ID', 6)->nullable();
+            $t->boolean('NOTIF_IS_READ')->default(false);
+            $t->dateTime('NOTIF_CREATED_AT');
+            $t->foreign('USR_ID')->references('USR_ID')->on('user');
+        });
+        (require database_path('migrations/2026_10_16_000001_create_admin_planner_table.php'))->up();
+        (require database_path('migrations/2026_10_27_000001_add_event_notifications.php'))->up();
         config(['services.onesignal.app_id' => 'test-app', 'services.onesignal.rest_api_key' => 'test-key',
             'services.onesignal.base_url' => 'https://push.example.test']);
         Http::preventStrayRequests();
