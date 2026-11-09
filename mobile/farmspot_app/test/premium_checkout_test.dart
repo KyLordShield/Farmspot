@@ -11,13 +11,13 @@ const pending = PremiumCheckout(
   id: 'order',
   status: 'PENDING',
   url: 'https://checkout.paymongo.com/test',
-  amount: 9900,
+  amount: 200,
 );
 const paid = PremiumCheckout(
   id: 'order',
   status: 'PAID',
   url: 'https://checkout.paymongo.com/test',
-  amount: 9900,
+  amount: 200,
   paymentReference: 'pay_test',
   premiumUntil: '2026-11-25T00:00:00Z',
 );

@@ -18,7 +18,7 @@ class PayMongoCheckoutTest extends TestCase
     {
         parent::setUp();
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:',
-            'paymongo.enabled' => true, 'paymongo.secret_key' => 'sk_test_fake', 'paymongo.webhook_secret' => 'test_webhook']);
+            'paymongo.enabled' => true, 'paymongo.live' => false, 'paymongo.secret_key' => 'sk_test_fake', 'paymongo.webhook_secret' => 'test_webhook']);
         DB::purge('sqlite');
         Schema::create('user', function (Blueprint $t) {
             $t->string('USR_ID')->primary();
@@ -31,6 +31,7 @@ class PayMongoCheckoutTest extends TestCase
         });
         (require database_path('migrations/2026_10_24_000001_add_premium_access_to_user_table.php'))->up();
         (require database_path('migrations/2026_10_25_000003_create_premium_checkout.php'))->up();
+        (require database_path('migrations/2026_11_09_000001_add_mode_to_premium_checkout.php'))->up();
         Http::preventStrayRequests();
     }
 
@@ -53,9 +54,9 @@ class PayMongoCheckoutTest extends TestCase
     private function sessionFixture(PremiumCheckout $row, bool $paid = false): array
     {
         return ['id' => $row->SESSION_ID ?? 'cs_test_'.$row->ID, 'type' => 'checkout_session', 'attributes' => [
-            'livemode' => false, 'reference_number' => $row->ID, 'checkout_url' => 'https://checkout.paymongo.com/test',
+            'livemode' => $row->IS_LIVE, 'reference_number' => $row->ID, 'checkout_url' => 'https://checkout.paymongo.com/test',
             'status' => 'active', 'payments' => $paid ? [['id' => 'pay_test_001', 'type' => 'payment', 'attributes' => [
-                'livemode' => false, 'status' => 'paid', 'amount' => 9900, 'currency' => 'PHP']]] : []]];
+                'livemode' => $row->IS_LIVE, 'status' => 'paid', 'amount' => 200, 'currency' => 'PHP']]] : []]];
     }
 
     private function fakeCreate(): void
@@ -67,7 +68,11 @@ class PayMongoCheckoutTest extends TestCase
             return Http::response(['data' => $this->sessionFixture($row)]);
         }, 'https://api.paymongo.com/v2/checkout_sessions' => function ($request) {
             $row = PremiumCheckout::findOrFail($request['data']['attributes']['reference_number']);
-            $this->assertSame(9900, $request['data']['attributes']['line_items'][0]['amount']);
+            $this->assertSame(200, $request['data']['attributes']['line_items'][0]['amount']);
+            if ($row->IS_LIVE) {
+                $this->assertSame(['qrph'], $request['data']['attributes']['payment_method_types']);
+                $this->assertFalse($request['data']['attributes']['pass_on_fees']);
+            }
             $this->assertTrue($request->hasHeader('Idempotency-Key', $row->ID));
 
             return Http::response(['data' => $this->sessionFixture($row)]);
@@ -77,7 +82,7 @@ class PayMongoCheckoutTest extends TestCase
     private function createOrder(): PremiumCheckout
     {
         $this->fakeCreate();
-        $this->postJson('/api/premium/checkouts', ['amount' => 1, 'USR_ID' => 'OTHER'])->assertOk()->assertJsonPath('checkout.amount', 9900);
+        $this->postJson('/api/premium/checkouts', ['amount' => 1, 'USR_ID' => 'OTHER'])->assertOk()->assertJsonPath('checkout.amount', 200);
 
         return PremiumCheckout::firstOrFail();
     }
@@ -121,13 +126,51 @@ class PayMongoCheckoutTest extends TestCase
         $this->postJson('/api/premium/checkouts/'.$row->ID.'/verify')->assertNotFound();
     }
 
-    public function test_live_key_is_never_sent(): void
+    public function test_live_key_requires_explicit_live_configuration(): void
     {
         $user = $this->login();
         config(['paymongo.secret_key' => 'sk_live_not_allowed']);
         $this->postJson('/api/premium/checkouts')->assertStatus(503);
         Http::assertNothingSent();
         $this->assertFalse($user->fresh()->USR_IS_PREMIUM);
+    }
+
+    public function test_live_checkout_uses_qr_ph_and_only_credits_verified_live_payment_once(): void
+    {
+        $user = $this->login();
+        $testOrder = $this->createOrder();
+        config(['paymongo.live' => true, 'paymongo.secret_key' => 'sk_live_fake', 'paymongo.webhook_secret' => 'live_webhook',
+            'paymongo.return_base_url' => 'https://farmspot.example.com']);
+
+        $this->fakeCreate();
+        $this->postJson('/api/premium/checkouts')->assertOk()->assertJsonPath('checkout.test_mode', false)->assertJsonPath('checkout.amount', 200);
+        $row = PremiumCheckout::where('IS_LIVE', true)->sole();
+        $this->assertNotSame($testOrder->ID, $row->ID);
+        $this->postJson('/api/premium/checkouts/'.$testOrder->ID.'/verify')->assertConflict();
+
+        $session = $this->sessionFixture($row, true);
+        $wrong = $session;
+        $wrong['attributes']['payments'][0]['attributes']['amount'] = 201;
+        $this->fake(['https://api.paymongo.com/v1/*' => Http::response(['data' => $wrong])]);
+        $this->postJson('/api/premium/checkouts/'.$row->ID.'/verify')->assertStatus(422);
+        $this->assertFalse($user->fresh()->USR_IS_PREMIUM);
+
+        $payload = json_encode(['data' => ['attributes' => ['type' => 'checkout_session.payment.paid', 'livemode' => true, 'data' => $session]]]);
+        $timestamp = now()->timestamp;
+        $signature = hash_hmac('sha256', $timestamp.'.'.$payload, 'live_webhook');
+        $headers = ['CONTENT_TYPE' => 'application/json', 'HTTP_PAYMONGO_SIGNATURE' => "t={$timestamp},te={$signature}"];
+        $this->call('POST', '/api/paymongo/webhook', [], [], [], $headers, $payload)->assertUnauthorized();
+
+        $this->fake(['https://api.paymongo.com/v1/*' => Http::response(['data' => $session])]);
+        $headers['HTTP_PAYMONGO_SIGNATURE'] = "t={$timestamp},li={$signature}";
+        $this->call('POST', '/api/paymongo/webhook', [], [], [], $headers, $payload)->assertOk();
+        $this->assertSame('PAID', $row->fresh()->STATUS);
+        $expiry = $user->fresh()->USR_PREMIUM_EXPIRES_AT;
+        $this->assertNotNull($expiry);
+        $this->call('POST', '/api/paymongo/webhook', [], [], [], $headers, $payload)->assertOk();
+        $this->postJson('/api/premium/checkouts/'.$row->ID.'/verify')->assertOk()->assertJsonPath('checkout.status', 'PAID');
+        $this->assertEquals($expiry, $user->fresh()->USR_PREMIUM_EXPIRES_AT);
+        Http::assertSentCount(1);
     }
 
     public function test_mismatched_paid_responses_never_grant_access(): void

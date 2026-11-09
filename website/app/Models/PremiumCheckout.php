@@ -18,5 +18,5 @@ class PremiumCheckout extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['CREATE_PAYLOAD' => 'array', 'AMOUNT' => 'integer', 'PAID_AT' => 'datetime', 'PREMIUM_UNTIL' => 'datetime', 'CREATED_AT' => 'datetime'];
+    protected $casts = ['CREATE_PAYLOAD' => 'array', 'AMOUNT' => 'integer', 'IS_LIVE' => 'boolean', 'PAID_AT' => 'datetime', 'PREMIUM_UNTIL' => 'datetime', 'CREATED_AT' => 'datetime'];
 }

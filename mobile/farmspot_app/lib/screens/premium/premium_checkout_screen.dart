@@ -231,6 +231,15 @@ class _PremiumCheckoutScreenState extends State<PremiumCheckoutScreen>
                             'One month of access. No automatic renewal.',
                             textAlign: TextAlign.center,
                           ),
+                          if (!_activated) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              order.testMode
+                                  ? 'Test checkout. No real charge.'
+                                  : 'Pay with QR Ph using Maya, GCash, or a participating bank app.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                           if (_activated && order.premiumUntil != null) ...[
                             const SizedBox(height: 12),
                             Text(

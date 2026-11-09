@@ -56,7 +56,7 @@ class PremiumCheckoutService implements PremiumCheckoutGateway {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        data['message'] as String? ?? 'Could not check your test payment.',
+        data['message'] as String? ?? 'Could not check your payment.',
       );
     }
     return PremiumCheckout.fromJson(data['checkout'] as Map<String, dynamic>);
