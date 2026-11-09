@@ -48,7 +48,7 @@ class NotificationService
         ?string $refId = null,
         bool $sendPush = true,
         ?string $dedupKey = null
-    ): void {
+    ): bool {
         $attributes = [
             'NOTIF_ID' => UserNotification::newId(),
             'USR_ID' => $usrId,
@@ -64,15 +64,15 @@ class NotificationService
             : UserNotification::firstOrCreate(['NOTIF_DEDUP_KEY' => $dedupKey], $attributes);
 
         if (! $notification->wasRecentlyCreated) {
-            return;
+            return false;
         }
 
-        if (! $sendPush) {
-            return;
+        if ($sendPush) {
+            // The inbox row is already saved. Push delivery is best effort.
+            $this->push($usrId, $notification->NOTIF_TITLE, $notification->NOTIF_BODY);
         }
 
-        // Everything below is best-effort. The row above is already committed.
-        $this->push($usrId, $notification->NOTIF_TITLE, $notification->NOTIF_BODY);
+        return true;
     }
 
     /**

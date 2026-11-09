@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Notifications\PremiumExpiryNotice;
 use App\Services\NotificationService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class NotifyPremiumExpiry extends Command
 {
@@ -28,16 +30,29 @@ class NotifyPremiumExpiry extends Command
                     }
                     $expired = $expiry->lte($now);
                     $type = $expired ? 'PREMIUM_EXPIRED' : 'PREMIUM_EXPIRING_SOON';
-                    $notifications->notify(
+                    $title = $expired ? 'Your Premium has expired' : 'Premium expires soon';
+                    $body = $expired
+                        ? 'Your Premium access has ended. Renew to restore Premium features. Your saved requests and existing messages remain available.'
+                        : 'Your Premium access ends within 24 hours. Renew from the Premium screen to continue using Premium features.';
+                    $created = $notifications->notify(
                         $user->USR_ID,
                         $type,
-                        $expired ? 'Your Premium has expired' : 'Premium expires soon',
-                        $expired
-                            ? 'Your Premium access has ended. Renew to restore Premium features. Your saved requests and existing messages remain available.'
-                            : 'Your Premium access ends within 24 hours. Renew from the Premium screen to continue using Premium features.',
+                        $title,
+                        $body,
                         $user->USR_ID,
                         dedupKey: hash('sha256', $type.'|'.$user->USR_ID.'|'.$expiry->toIso8601String()),
                     );
+                    if ($created && filled($user->USR_EMAIL)) {
+                        try {
+                            $user->notify(new PremiumExpiryNotice($title, $body));
+                        } catch (\Throwable $error) {
+                            Log::warning('Premium expiry email could not be sent.', [
+                                'user_id' => $user->USR_ID,
+                                'type' => $type,
+                                'exception' => $error::class,
+                            ]);
+                        }
+                    }
                 }
             }, 'USR_ID');
 

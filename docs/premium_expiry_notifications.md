@@ -1,8 +1,11 @@
 # Premium expiry notifications
 
 `premium:notify-expiry` runs hourly through the Laravel scheduler. Active accounts
-receive an inbox notification and a best-effort push during the last 24 hours of
-Premium, then another notice once access ends. Non-subscribers and inactive
+receive an inbox notification, push, and email during the last 24 hours of
+Premium, then another notice once access ends. Email uses the account email
+address and the same mailer and sender as password reset codes. Each new inbox
+notice triggers one email attempt. A mail failure is logged and the inbox notice
+remains available. Non-subscribers and inactive
 accounts are skipped. The first run also notifies already-expired subscribers.
 
 The unique notification key includes account, notification type, and expiry
