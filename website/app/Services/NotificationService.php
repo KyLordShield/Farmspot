@@ -46,9 +46,10 @@ class NotificationService
         string $title,
         string $body,
         ?string $refId = null,
-        bool $sendPush = true
+        bool $sendPush = true,
+        ?string $dedupKey = null
     ): void {
-        $notification = UserNotification::create([
+        $attributes = [
             'NOTIF_ID' => UserNotification::newId(),
             'USR_ID' => $usrId,
             'NOTIF_TYPE' => $type,
@@ -57,7 +58,14 @@ class NotificationService
             'NOTIF_REF_ID' => $refId,
             'NOTIF_IS_READ' => 0,
             'NOTIF_CREATED_AT' => now(),
-        ]);
+        ];
+        $notification = $dedupKey === null
+            ? UserNotification::create($attributes)
+            : UserNotification::firstOrCreate(['NOTIF_DEDUP_KEY' => $dedupKey], $attributes);
+
+        if (! $notification->wasRecentlyCreated) {
+            return;
+        }
 
         if (! $sendPush) {
             return;

@@ -9,7 +9,7 @@ import '../theme.dart';
 /// completed setup may have no farm yet. Guessing a destination for those would
 /// either dead-end the tap or invent a screen that does not exist, so the row
 /// just marks itself read.
-enum NotificationTarget { listing, profile, myFarm, buyRequests, none }
+enum NotificationTarget { listing, profile, myFarm, buyRequests, premium, none }
 
 /// The presentation for one NOTIF_TYPE: the leading icon, its tint, and where a
 /// tap goes.
@@ -23,6 +23,13 @@ enum NotificationTarget { listing, profile, myFarm, buyRequests, none }
   String type,
 ) {
   switch (type) {
+    case 'PREMIUM_EXPIRING_SOON':
+    case 'PREMIUM_EXPIRED':
+      return (
+        icon: Icons.workspace_premium_outlined,
+        color: AppColors.warningAmber,
+        target: NotificationTarget.premium,
+      );
     // Listing lifecycle. These carry the LST_ID the row is about, which is what
     // makes them worth deep-linking: "your listing expires tomorrow" is only
     // actionable if the tap lands on that listing.

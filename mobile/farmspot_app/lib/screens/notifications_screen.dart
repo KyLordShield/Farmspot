@@ -14,6 +14,7 @@ import 'profile_screen.dart';
 import 'seller/my_farm_screen.dart';
 import 'seller/requests_board_screen.dart';
 import 'premium/alert_settings_screen.dart';
+import 'premium/premium_upgrade_screen.dart';
 
 /// The notification inbox: things that happened without the user asking — a
 /// listing about to expire, a report answered, a seller application resolved.
@@ -227,6 +228,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     switch (style.target) {
+      case NotificationTarget.premium:
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PremiumUpgradeScreen()),
+        );
       case NotificationTarget.listing:
         await _openListing(notification.refId!);
       case NotificationTarget.profile:

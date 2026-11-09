@@ -67,6 +67,8 @@ class UserNotification extends Model
      * own unread badge, and a chat message must never turn up in this inbox.
      */
     public const TYPES = [
+        'PREMIUM_EXPIRING_SOON',
+        'PREMIUM_EXPIRED',
         'LISTING_EXPIRING_SOON',
         'LISTING_EXPIRED',
         'LISTING_REMOVED',
