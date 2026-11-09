@@ -9,30 +9,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
-class PayMongoCheckout
+class PayMongoTestCheckout
 {
     public function ready(): bool
     {
-        if (! config('paymongo.enabled')) {
-            return false;
-        }
-
-        $key = (string) config('paymongo.secret_key');
-        if (! config('paymongo.live')) {
-            return str_starts_with($key, 'sk_test_');
-        }
-
-        $returnUrl = (string) config('paymongo.return_base_url');
-
-        return str_starts_with($key, 'sk_live_')
-            && filled(config('paymongo.webhook_secret'))
-            && filter_var($returnUrl, FILTER_VALIDATE_URL) !== false
-            && parse_url($returnUrl, PHP_URL_SCHEME) === 'https';
+        return (bool) config('paymongo.enabled') && str_starts_with((string) config('paymongo.secret_key'), 'sk_test_');
     }
 
     private function client()
     {
-        abort_unless($this->ready(), 503, 'PayMongo checkout is unavailable.');
+        abort_unless($this->ready(), 503, 'PayMongo test checkout is not configured. A secret test key is required.');
 
         return Http::withBasicAuth(config('paymongo.secret_key'), '')->acceptJson()->asJson()->connectTimeout(5)->timeout(15);
     }
@@ -49,7 +35,7 @@ class PayMongoCheckout
             abort(503, 'PayMongo could not be reached. Your checkout is saved; please retry.');
         }
         if (! $response->successful()) {
-            abort(502, 'PayMongo could not complete the checkout request. Please try again later.');
+            abort(502, $response->status() === 401 ? 'PayMongo did not accept the test key. Check the backend configuration.' : 'PayMongo could not complete the test checkout request. Check your test payment methods or try again.');
         }
         $data = $response->json('data');
         abort_unless(is_array($data), 502, 'PayMongo returned an unexpected response.');
@@ -59,31 +45,28 @@ class PayMongoCheckout
 
     public function create(User $actor): PremiumCheckout
     {
-        abort_unless($this->ready(), 503, 'PayMongo checkout is unavailable.');
+        abort_unless($this->ready(), 503, 'PayMongo test checkout is not configured.');
         abort_unless($actor->USR_ROLE === 'GENERAL_USER', 403);
-        $live = (bool) config('paymongo.live');
-        $order = DB::transaction(function () use ($actor, $live) {
+        $order = DB::transaction(function () use ($actor) {
             $user = User::whereKey($actor->USR_ID)->lockForUpdate()->firstOrFail();
-            abort_unless($user->USR_STATUS === 'ACTIVE', 403, 'This account is not active.');
             abort_if($user->USR_IS_PREMIUM, 409, 'Premium is already active on this account.');
-            $previous = PremiumCheckout::where('USR_ID', $user->USR_ID)->where('IS_LIVE', $live)->whereIn('STATUS', ['CREATING', 'PENDING'])->orderByDesc('CREATED_AT')->first();
+            $previous = PremiumCheckout::where('USR_ID', $user->USR_ID)->whereIn('STATUS', ['CREATING', 'PENDING'])->orderByDesc('CREATED_AT')->first();
             if ($previous) {
                 // Do not silently create another payable checkout after an uncertain timeout.
-                abort_if(! $previous->SESSION_ID && $previous->CREATED_AT->lt(now()->subHours(23)), 409, 'This older checkout needs to be checked before a replacement is created.');
+                abort_if($previous->CREATED_AT->lt(now()->subHours(23)), 409, 'This older checkout needs to be checked before a replacement is created.');
 
                 return $previous;
             }
             $id = (string) Str::uuid();
             $return = rtrim(config('paymongo.return_base_url'), '/').'/api/paymongo/return';
 
-            return PremiumCheckout::create(['ID' => $id, 'USR_ID' => $user->USR_ID, 'IS_LIVE' => $live, 'AMOUNT' => config('paymongo.amount'), 'CURRENCY' => 'PHP', 'CREATED_AT' => now(), 'UPDATED_AT' => now(),
+            return PremiumCheckout::create(['ID' => $id, 'USR_ID' => $user->USR_ID, 'AMOUNT' => config('paymongo.amount'), 'CURRENCY' => 'PHP', 'CREATED_AT' => now(), 'UPDATED_AT' => now(),
                 'CREATE_PAYLOAD' => ['data' => ['attributes' => [
                     'line_items' => [['name' => 'FarmSpot Business Premium - Monthly Plan', 'amount' => config('paymongo.amount'), 'currency' => 'PHP', 'quantity' => 1]],
-                    'payment_method_types' => $live ? ['qrph'] : config('paymongo.methods'), 'description' => 'One month of FarmSpot Business Premium, including buy requests, weekly sourcing, saved farms and crop alerts. No automatic renewal.',
+                    'payment_method_types' => config('paymongo.methods'), 'description' => 'One month of FarmSpot Business Premium, including buy requests, weekly sourcing, saved farms and crop alerts. No automatic renewal.',
                     'reference_number' => $id, 'metadata' => ['farmspot_checkout_id' => $id],
                     'success_url' => $return.'?result=complete', 'cancel_url' => $return.'?result=cancelled',
                     'send_email_receipt' => false,
-                    'pass_on_fees' => false,
                 ]]]]);
         });
         if ($order->SESSION_ID) {
@@ -121,7 +104,7 @@ class PayMongoCheckout
     private function validateSession(PremiumCheckout $order, array $session, bool $retrieved = true): void
     {
         abort_unless(($session['type'] ?? null) === 'checkout_session' && is_string($session['id'] ?? null) && str_starts_with($session['id'], 'cs_'), 502, 'Invalid checkout session.');
-        abort_unless(data_get($session, 'attributes.livemode') === $order->IS_LIVE, 422, 'Checkout payment mode mismatch.');
+        abort_unless(data_get($session, 'attributes.livemode') === false, 422, 'Live-mode payments are not supported.');
         if ($retrieved) {
             abort_unless($session['id'] === $order->SESSION_ID, 422, 'Checkout session mismatch.');
         }
@@ -131,7 +114,6 @@ class PayMongoCheckout
 
     public function refresh(PremiumCheckout $order): PremiumCheckout
     {
-        abort_unless($order->IS_LIVE === (bool) config('paymongo.live'), 409, 'This checkout was created in a different payment environment.');
         if ($order->STATUS === 'PAID' || ! $order->SESSION_ID) {
             return $order;
         }
@@ -141,7 +123,7 @@ class PayMongoCheckout
         $paid = collect(is_array($payments) ? $payments : [])->first(fn ($p) => data_get($p, 'attributes.status') === 'paid');
         if ($paid) {
             $attributes = $paid['attributes'];
-            abort_unless(($attributes['livemode'] ?? $order->IS_LIVE) === $order->IS_LIVE && ($attributes['amount'] ?? null) === $order->AMOUNT && ($attributes['currency'] ?? null) === $order->CURRENCY && is_string($paid['id'] ?? null) && str_starts_with($paid['id'], 'pay_'), 422, 'Payment details do not match this order.');
+            abort_unless(($attributes['livemode'] ?? false) === false && ($attributes['amount'] ?? null) === $order->AMOUNT && ($attributes['currency'] ?? null) === 'PHP' && is_string($paid['id'] ?? null), 422, 'Payment amount, currency or environment does not match this test order.');
 
             return $this->activate($order, $paid['id']);
         }

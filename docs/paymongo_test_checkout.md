@@ -1,22 +1,10 @@
-# PayMongo Premium checkout
+# PayMongo test Premium checkout
 
-The app uses PayMongo Hosted Checkout to sell one month of Premium for PHP 2.00. Live checkout accepts QR Ph. Customers renew by making a new purchase after their access expires. Previously created checkouts retain their original prices and payment modes.
+The app uses PayMongo hosted checkout for one month of Premium. The demo amount is PHP 2.00 (200 centavos). There is no real charge and no automatic renewal. Live keys and live checkout sessions are rejected.
 
-## Live QR Ph setup
+## Built-in demo
 
-1. Confirm QR Ph is active in your PayMongo dashboard in Live mode. Deploy the backend at a public HTTPS URL and run `php artisan migrate` to add the checkout mode field. Rebuild the mobile app and point it to that backend.
-2. In the live PayMongo dashboard, register `https://YOUR_DOMAIN/api/paymongo/webhook` for `checkout_session.payment.paid`. Use the same backend base URL (including any deployment subpath) for the webhook and the return URL.
-3. Set the following only on the server. Obtain the live secret API key and webhook signing secret from PayMongo. Refresh cached configuration after changing the values.
-
-```dotenv
-PAYMONGO_LIVE_CHECKOUT_ENABLED=true
-PAYMONGO_TEST_CHECKOUT_ENABLED=false
-PAYMONGO_SECRET_KEY=<live secret API key>
-PAYMONGO_WEBHOOK_SECRET=<live endpoint signing secret>
-PAYMONGO_RETURN_BASE_URL=https://YOUR_DOMAIN
-```
-
-4. Sign in as a user without active Premium. Open Premium checkout, confirm the PHP 2.00 amount, and open PayMongo. Display the QR code on a second screen and scan it with Maya, GCash, or a participating bank app. Confirm the payment in your wallet, return to FarmSpot, and tap **Check payment** if needed. Confirm that the payment is paid in the live PayMongo dashboard and that FarmSpot shows one month of access.
+For a demo without PayMongo, set `PAYMONGO_TEST_CHECKOUT_ENABLED=false` and `PREMIUM_SIMULATION_ENABLED=true` on the backend. Open Premium and confirm **Activate demo** to simulate the purchase and grant one month of access. Use these settings on the demo backend only.
 
 ## Local setup
 
@@ -29,7 +17,7 @@ PAYMONGO_RETURN_BASE_URL=http://127.0.0.1:8000
 PAYMONGO_TEST_METHODS=card,gcash
 ```
 
-Apply the checkout migrations and restart the local backend if configuration is cached. USB debug builds use the existing port 8000 reverse connection. Internet access is needed for both the backend and phone.
+Apply `2026_10_25_000003_create_premium_checkout.php` and restart the local backend if configuration is cached. USB debug builds use the existing port 8000 reverse connection. Internet access is needed for both the backend and phone.
 
 Use a free test account: Profile → Premium → Continue to checkout → Continue to PayMongo. Complete PayMongo's test flow using test payment details only. Return to FarmSpot and tap Check payment if it has not checked automatically. A successful server verification activates one month and refreshes Home/Profile. Existing Premium accounts keep their access and cannot buy another month while active.
 
@@ -39,15 +27,15 @@ Closing the browser, a pending payment, a failed payment, or visiting the succes
 
 - `POST /api/premium/checkouts`: authenticated creation/reuse; account, amount and duration are server controlled.
 - `GET /api/premium/checkouts/{id}`: authenticated owner only.
-- `POST /api/premium/checkouts/{id}/verify`: retrieves the saved provider session. Checks the payment mode, session ID, order reference, paid status, amount and currency before a transaction credits Premium exactly once.
+- `POST /api/premium/checkouts/{id}/verify`: retrieves the saved provider session. Checks test mode, session ID, order reference, paid status, amount and currency before a transaction credits Premium exactly once.
 - `GET /api/paymongo/return`: instructions only; never grants access.
-- `POST /api/paymongo/webhook`: checks the test or live signature, then retrieves the session from PayMongo before crediting the payment.
+- `POST /api/paymongo/webhook`: optional signed test event followed by authoritative provider retrieval.
 
-The `premium_checkout` table stores order ownership, provider creation payload, session/payment references, payment mode, amount, status and activation dates. Creation retries use a stable UUID Idempotency-Key and the identical payload. A CREATING order that remains unresolved beyond the idempotency window requires operator reconciliation with PayMongo before replacement. Verify an existing saved session to detect expiry before replacing it.
+The `premium_checkout` table stores order ownership, stable provider creation payload, session/payment references, test amount, status and activation dates. It stores no card details. Creation retries use a stable UUID Idempotency-Key and the identical payload. An unresolved order older than 23 hours requires investigation rather than silently risking another payable session. Verify an existing saved session to detect expiry before replacing it. A CREATING order that remains unresolved beyond the idempotency window requires operator reconciliation with PayMongo before replacement.
 
-The simulate-purchase endpoint is blocked whenever PayMongo checkout is enabled.
+When PayMongo test checkout is enabled, the old direct simulate-purchase endpoint is blocked. The existing simulation remains available only on servers explicitly running with PayMongo disabled. This is development behavior; live billing is not implemented.
 
-## Test webhook
+## Optional webhook
 
 Local testing works through authenticated verification without a public webhook. For background activation while the app is closed, register a public HTTPS `/api/paymongo/webhook` endpoint for `checkout_session.payment.paid`, and set `PAYMONGO_WEBHOOK_SECRET` to that endpoint's signing secret. The handler verifies the test signature, raw body and a five minute timestamp window before looking up the saved session. Repeated events cannot extend the same purchase twice. This public webhook was not configured locally.
 
@@ -62,4 +50,4 @@ Official references: [Create checkout](https://docs.paymongo.com/reference/creat
 
 ## Presentation wording
 
-New PayMongo sessions display “FarmSpot Business Premium - Monthly Plan” with a feature description. Existing provider sessions retain their original copy.
+The app uses regular subscription wording, and new PayMongo sessions display “FarmSpot Business Premium - Monthly Plan” with a feature description. Payment mode is still test-only. Existing provider sessions retain their original copy; replace an unpaid session only after confirming provider expiry.

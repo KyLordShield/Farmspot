@@ -16,24 +16,37 @@ class PremiumCheckoutService implements PremiumCheckoutGateway {
     : _client = client ?? http.Client();
   static final instance = PremiumCheckoutService();
   @override
-  Future<PremiumCheckout> create() => _request('/premium/checkouts');
+  Future<PremiumCheckout> create() async => PremiumCheckout.fromJson(
+    (await _request('/premium/checkouts'))['checkout'] as Map<String, dynamic>,
+  );
   @override
-  Future<PremiumCheckout> verify(String id) =>
-      _request('/premium/checkouts/${Uri.encodeComponent(id)}/verify');
-  Future<PremiumCheckout> _request(String path) async {
+  Future<PremiumCheckout> verify(String id) async => PremiumCheckout.fromJson(
+    (await _request(
+          '/premium/checkouts/${Uri.encodeComponent(id)}/verify',
+        ))['checkout']
+        as Map<String, dynamic>,
+  );
+
+  Future<bool> simulationEnabled() async =>
+      (await _request('/premium', readOnly: true))['simulation_enabled'] ==
+      true;
+
+  Future<Map<String, dynamic>> _request(
+    String path, {
+    bool readOnly = false,
+  }) async {
     final token = await AuthService.getToken();
     if (token == null) throw Exception('Please sign in to continue.');
     final http.Response response;
     try {
-      response = await _client
-          .post(
-            Uri.parse('${ApiConfig.apiBaseUrl}$path'),
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 25));
+      final send = readOnly ? _client.get : _client.post;
+      response = await send(
+        Uri.parse('${ApiConfig.apiBaseUrl}$path'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 25));
     } on TimeoutException {
       throw Exception(
         'The request timed out. Retry to check your saved checkout.',
@@ -56,9 +69,9 @@ class PremiumCheckoutService implements PremiumCheckoutGateway {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        data['message'] as String? ?? 'Could not check your payment.',
+        data['message'] as String? ?? 'Could not check your test payment.',
       );
     }
-    return PremiumCheckout.fromJson(data['checkout'] as Map<String, dynamic>);
+    return data;
   }
 }

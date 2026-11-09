@@ -1,8 +1,8 @@
 <?php
 
 return [
-    'live' => (bool) env('PAYMONGO_LIVE_CHECKOUT_ENABLED', false),
-    'enabled' => env('APP_ENV') !== 'testing' && ((bool) env('PAYMONGO_TEST_CHECKOUT_ENABLED', false) || (bool) env('PAYMONGO_LIVE_CHECKOUT_ENABLED', false)),
+    // This integration intentionally supports TEST keys only.
+    'enabled' => env('APP_ENV') !== 'testing' && (bool) env('PAYMONGO_TEST_CHECKOUT_ENABLED', false),
     'secret_key' => env('PAYMONGO_SECRET_KEY', ''),
     'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET', ''),
     'amount' => 200,
