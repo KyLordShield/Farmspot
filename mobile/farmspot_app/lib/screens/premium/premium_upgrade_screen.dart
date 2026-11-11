@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'premium_checkout_screen.dart';
 import '../../premium/premium_state.dart';
-import '../../services/auth_service.dart';
-import '../../services/premium_checkout_service.dart';
 import '../../theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/premium_widgets.dart';
@@ -45,49 +43,9 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
     if (_purchasing || isPremium.value) return;
     setState(() => _purchasing = true);
     try {
-      final simulate = await PremiumCheckoutService.instance
-          .simulationEnabled();
-      if (!context.mounted) return;
-      if (simulate) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Activate demo Premium?'),
-            content: const Text(
-              'This simulates a ₱2 purchase for one month of Premium. No money will be charged.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Activate demo'),
-              ),
-            ],
-          ),
-        );
-        if (confirmed != true || !context.mounted) return;
-        final error = await AuthService.simulatePremiumPurchase();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error ?? 'Demo Premium is active.')),
-          );
-        }
-        return;
-      }
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (_) => const PremiumCheckoutScreen()),
       );
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Exception: ', '')),
-          ),
-        );
-      }
     } finally {
       if (mounted) setState(() => _purchasing = false);
     }

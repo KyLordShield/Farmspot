@@ -2,16 +2,13 @@
 
 The app uses PayMongo hosted checkout for one month of Premium. The demo amount is PHP 2.00 (200 centavos). There is no real charge and no automatic renewal. Live keys and live checkout sessions are rejected.
 
-## Built-in demo
-
-For a demo without PayMongo, set `PAYMONGO_TEST_CHECKOUT_ENABLED=false` and `PREMIUM_SIMULATION_ENABLED=true` on the backend. Open Premium and confirm **Activate demo** to simulate the purchase and grant one month of access. Use these settings on the demo backend only.
-
 ## Local setup
 
 Keep the secret test key only in `website/.env`; never put it in Flutter or Git.
 
 ```
 PAYMONGO_TEST_CHECKOUT_ENABLED=true
+PREMIUM_SIMULATION_ENABLED=false
 PAYMONGO_SECRET_KEY=<your secret test key>
 PAYMONGO_RETURN_BASE_URL=http://127.0.0.1:8000
 PAYMONGO_TEST_METHODS=card,gcash
