@@ -12,6 +12,7 @@ use App\Http\Controllers\SellerRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/legal/{document}', [\App\Http\Controllers\LegalController::class, 'show'])->name('legal.show');
+Route::get('/farmspot', \App\Http\Controllers\PublicSiteController::class)->name('public.farmspot');
 
 Route::get('/', function () {
     return redirect()->route('login');
