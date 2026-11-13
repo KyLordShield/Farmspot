@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Tests\TestCase;
 
 class PublicSiteTest extends TestCase
@@ -23,7 +24,7 @@ class PublicSiteTest extends TestCase
             ->assertSee(route('legal.show', 'terms'))
             ->assertSee(route('legal.show', 'privacy'));
 
-        $this->get('/')->assertRedirect(route('login'));
+        $this->get('/')->assertOk()->assertDontSee('href="'.route('login').'"', false);
         $this->get('/dashboard')->assertRedirect(route('login'));
     }
 
@@ -37,5 +38,28 @@ class PublicSiteTest extends TestCase
         ]]);
 
         $this->get('/farmspot')->assertNotFound();
+    }
+
+    public function test_public_and_policy_pages_do_not_link_to_admin_login(): void
+    {
+        foreach (['/farmspot', '/legal/terms', '/legal/privacy', '/legal/seller', '/legal/verification'] as $path) {
+            $this->get($path)->assertOk()
+                ->assertDontSee('href="'.route('login').'"', false)
+                ->assertSee('href="'.route('public.home').'"', false);
+        }
+        $this->get('/login')->assertOk()->assertHeader('X-Robots-Tag', 'noindex, nofollow')
+            ->assertSee('<meta name="robots" content="noindex, nofollow">', false);
+    }
+
+    public function test_admin_pages_require_login_and_reject_regular_accounts(): void
+    {
+        foreach (['/dashboard', '/reports', '/users'] as $path) {
+            $this->get($path)->assertRedirect(route('login'));
+        }
+
+        $this->actingAs(new User(['USR_ID' => 'BUY001', 'USR_ROLE' => 'GENERAL_USER']));
+        foreach (['/dashboard', '/reports', '/users'] as $path) {
+            $this->get($path)->assertForbidden();
+        }
     }
 }

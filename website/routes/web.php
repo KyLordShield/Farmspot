@@ -14,9 +14,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/legal/{document}', [\App\Http\Controllers\LegalController::class, 'show'])->name('legal.show');
 Route::get('/farmspot', \App\Http\Controllers\PublicSiteController::class)->name('public.farmspot');
 
-Route::get('/', function () {
-    return redirect()->route('login');
-});
+Route::get('/', \App\Http\Controllers\PublicSiteController::class)->name('public.home');
 
 // The whole block below is the admin panel. It was guarded by `auth` alone, so
 // any signed-in web account could open /reports and read reported message text
