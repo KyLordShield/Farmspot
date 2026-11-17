@@ -36,7 +36,7 @@
 
             <tr>
                 <th>Name</th>
-                <td>{{ $user->USR_NAME }}</td>
+                <td>{{ $user->USR_NAME }} @include('users.partials.premium-indicator')</td>
             </tr>
 
             <tr>

@@ -110,6 +110,14 @@
             </select>
         </div>
 
+        <div class="filter-auto">
+            <select name="membership" class="form-select" aria-label="Filter by membership" onchange="this.form.submit()">
+                <option value="">All Memberships</option>
+                <option value="premium" {{ request('membership') == 'premium' ? 'selected' : '' }}>Premium</option>
+                <option value="standard" {{ request('membership') == 'standard' ? 'selected' : '' }}>Standard</option>
+            </select>
+        </div>
+
     </form>
 
     <div class="table-responsive">
@@ -132,7 +140,7 @@
 
                 <tr>
                     <td><span class="id-cell">{{ $user->USR_ID }}</span></td>
-                    <td>{{ $user->USR_NAME }}</td>
+                    <td>{{ $user->USR_NAME }} @include('users.partials.premium-indicator')</td>
                     <td class="cell-secondary">{{ $user->USR_EMAIL }}</td>
                     <td>
                         @if($user->USR_ROLE == 'ADMIN')

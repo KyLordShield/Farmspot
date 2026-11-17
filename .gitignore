@@ -55,3 +55,13 @@ backups/
 # binaries are large and go stale, so they are never committed.
 apk/
 *.apk
+
+# Local app walkthrough videos, capture files, and portable video tools.
+/output/Farmspot-Buyer-Walkthrough/
+/output/Farmspot-Buyer-Walkthrough.zip
+/output/recording/
+/output/capture-check/
+/output/video-tools/
+
+# Local generated documents, recordings, previews, and database preparation files.
+/output/

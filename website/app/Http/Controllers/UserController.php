@@ -19,6 +19,8 @@ class UserController extends Controller
         $search = trim((string) $request->input('search', ''));
         $role = (string) $request->input('role', '');
         $status = (string) $request->input('status', '');
+        $membership = (string) $request->input('membership', '');
+        $membershipNow = now();
 
         $users = User::query()
             ->when($search !== '', function ($query) use ($search) {
@@ -46,6 +48,15 @@ class UserController extends Controller
             })
             ->when($status !== '', function ($query) use ($status) {
                 $query->where('USR_STATUS', $status);
+            })
+            ->when($membership === 'premium', function ($query) use ($membershipNow) {
+                $query->where('USR_PREMIUM_EXPIRES_AT', '>', $membershipNow);
+            })
+            ->when($membership === 'standard', function ($query) use ($membershipNow) {
+                $query->where(function ($q) use ($membershipNow) {
+                    $q->whereNull('USR_PREMIUM_EXPIRES_AT')
+                      ->orWhere('USR_PREMIUM_EXPIRES_AT', '<=', $membershipNow);
+                });
             })
             ->orderBy('USR_CREATED_AT', 'desc')
             ->paginate(10)

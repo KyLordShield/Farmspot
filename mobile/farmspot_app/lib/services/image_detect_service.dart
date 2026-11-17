@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:cross_file/cross_file.dart';
 
 import 'api_config.dart';
+import 'auth_service.dart';
 
 /// How long one scan may take end to end.
 ///
@@ -17,7 +18,7 @@ const Duration _detectTimeout = Duration(seconds: 180);
 
 /// Talks to the Python YOLO service (ml_service/app.py).
 class ImageDetectService {
-  static final String _baseUrl = ApiConfig.imageDetectBaseUrl;
+  static final String _baseUrl = '${ApiConfig.apiBaseUrl}/image-search';
 
   /// Sends a photo and returns every crop the model found in it (multiple
   /// crops per image are expected), each with its confidence. One entry per
@@ -34,6 +35,11 @@ class ImageDetectService {
       Uri.parse('$_baseUrl/detect'),
     );
     request.headers['Accept'] = 'application/json';
+    final token = await AuthService.getToken();
+    if (token == null) {
+      throw ImageDetectException('Please log in to use image search.');
+    }
+    request.headers['Authorization'] = 'Bearer $token';
     request.files.add(
       await http.MultipartFile.fromPath('file', photo.path, filename: 'crop.jpg'),
     );

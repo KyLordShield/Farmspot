@@ -77,6 +77,7 @@ Route::get('/sellers/{farmerId}', [SellerDirectoryController::class, 'show']);
 Route::get('/users/{userId}/profile', [UserProfileController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::post('/image-search/detect', [\App\Http\Controllers\Api\ImageDetectController::class, 'detect'])->middleware('throttle:10,1');
     Route::get('/legal/acceptances', [\App\Http\Controllers\LegalController::class, 'acceptances']);
     Route::post('/legal/acceptances', [\App\Http\Controllers\LegalController::class, 'accept'])->middleware('throttle:20,1');
     Route::get('/premium/alert-settings', [\App\Http\Controllers\Api\PremiumAlertSettingsController::class, 'show']);
