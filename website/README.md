@@ -13,6 +13,8 @@ After a valid password, FarmSpot sends a six-digit sign-in code to the email add
 
 Configure a direct mail transport such as SMTP on the website and confirm delivery to an admin inbox before rollout. Use HTTPS, a persistent `APP_KEY`, secure session cookies, and server-side session and cache stores. Share those stores across instances if the site runs on multiple instances.
 
+On Render Free, set `BREVO_ADMIN_MAIL_API_KEY` to a Brevo transactional API key and `BREVO_ADMIN_MAIL_FROM` to an authorized Brevo sender address. With these values, admin codes use Brevo over HTTPS. The recipient is still the admin email stored in the deployed database. Check Brevo's transactional logs for delivery after deployment.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

@@ -26,6 +26,11 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    'brevo' => [
+        'admin_mail_key' => env('BREVO_ADMIN_MAIL_API_KEY'),
+        'admin_mail_from' => env('BREVO_ADMIN_MAIL_FROM'),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

@@ -53,7 +53,8 @@ Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']
 Route::post('/appeals/account', [\App\Http\Controllers\Api\AppealController::class, 'storeAccount'])
     ->middleware('throttle:5,1');
 
-Route::get('/listings', [ListingController::class, 'index']);
+Route::get('/listings', [ListingController::class, 'index'])
+    ->middleware(\App\Http\Middleware\ProfileListings::class);
 Route::get('/listings/{id}', [ListingController::class, 'show']);
 // Public, like the listing detail it sits on: reviews are shown on a public
 // page, and an optional bearer token only adds `my_review` + `can_review`.

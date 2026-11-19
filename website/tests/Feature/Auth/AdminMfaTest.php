@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Notifications\AdminSignInCode;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -120,6 +121,26 @@ class AdminMfaTest extends TestCase
         Notification::assertNothingSent();
         $this->assertNull(session('admin_mfa.nonce'));
         $this->get('/users')->assertRedirect(route('admin.mfa'));
+    }
+
+    public function test_brevo_delivers_a_working_sign_in_code_over_https(): void
+    {
+        config([
+            'mail.default' => 'log',
+            'services.brevo.admin_mail_key' => 'test-key',
+            'services.brevo.admin_mail_from' => 'sender@example.test',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake(['https://api.brevo.com/v3/smtp/email' => Http::response(['messageId' => 'test-id'], 201)]);
+
+        $this->login()->assertRedirect(route('admin.mfa'))->assertSessionDoesntHaveErrors();
+        [$request] = Http::recorded()->sole();
+        $this->assertTrue($request->hasHeader('api-key', 'test-key'));
+        $this->assertSame([['email' => $this->admin->USR_EMAIL]], $request['to']);
+        $this->assertStringContainsString(session('admin_mfa.reference'), $request['subject']);
+        $this->assertSame(1, preg_match('/sign-in code is ([0-9]{6})/', $request['textContent'], $matches));
+        Notification::assertNothingSent();
+        $this->post('/admin/verify', ['code' => $matches[1]])->assertRedirect('/dashboard');
     }
 
     private function sentCode(): string

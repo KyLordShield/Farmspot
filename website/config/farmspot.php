@@ -2,6 +2,8 @@
 
 return [
 
+    'profile_listings' => env('FARMSPOT_PROFILE_LISTINGS', false),
+
     /*
     |--------------------------------------------------------------------------
     | Report threshold

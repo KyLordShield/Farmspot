@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Notifications\AdminSignInCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class AdminMfa
@@ -44,14 +45,11 @@ class AdminMfa
         $reference = strtoupper(substr($nonce, 0, 8));
 
         try {
-            $mailer = config('mail.default');
-            $transport = config("mail.mailers.{$mailer}.transport");
-            if (in_array($transport, [null, 'log', 'array', 'failover', 'roundrobin'], true)
-                || ! filter_var($user->USR_EMAIL, FILTER_VALIDATE_EMAIL)) {
-                throw new \RuntimeException('Admin sign-in requires a direct mail transport and a valid admin email.');
+            if (! filter_var($user->USR_EMAIL, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException('Admin sign-in requires a valid admin email.');
             }
 
-            $user->notify(new AdminSignInCode($code, $reference));
+            $this->deliver($user, new AdminSignInCode($code, $reference));
         } catch (\Exception $exception) {
             Log::warning('Admin sign-in code delivery failed.', ['exception_type' => $exception::class]);
 
@@ -69,6 +67,43 @@ class AdminMfa
         ]);
 
         return '';
+    }
+
+    private function deliver(User $user, AdminSignInCode $notification): void
+    {
+        $apiKey = config('services.brevo.admin_mail_key');
+        $from = config('services.brevo.admin_mail_from');
+
+        if (filled($apiKey) || filled($from)) {
+            if (blank($apiKey) || ! filter_var($from, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException('Brevo requires an API key and a valid sender address.');
+            }
+
+            $message = $notification->toMail($user);
+            $response = Http::withHeaders(['api-key' => $apiKey])
+                ->acceptJson()->connectTimeout(5)->timeout(10)
+                ->post('https://api.brevo.com/v3/smtp/email', [
+                    'sender' => ['email' => $from, 'name' => 'FarmSpot Admin'],
+                    'to' => [['email' => $user->USR_EMAIL]],
+                    'subject' => $message->subject,
+                    'textContent' => implode("\n\n", $message->introLines),
+                ]);
+
+            if (! $response->successful() || blank($response->json('messageId'))) {
+                Log::warning('Brevo rejected admin sign-in email.', ['http_status' => $response->status()]);
+                throw new \RuntimeException('Brevo did not accept the admin sign-in email.');
+            }
+
+            return;
+        }
+
+        $mailer = config('mail.default');
+        $transport = config("mail.mailers.{$mailer}.transport");
+        if (in_array($transport, [null, 'log', 'array', 'failover', 'roundrobin'], true)) {
+            throw new \RuntimeException('Admin sign-in requires a direct mail transport.');
+        }
+
+        $user->notify($notification);
     }
 
     public function consume(Request $request, string $code): bool
