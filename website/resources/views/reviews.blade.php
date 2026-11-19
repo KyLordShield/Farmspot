@@ -84,7 +84,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="status" class="form-select" onchange="this.form.submit()">
+            <select name="status" class="form-select" data-submit-on-change="submit">
                 <option value="">All Status</option>
                 <option value="VISIBLE" {{ request('status') == 'VISIBLE' ? 'selected' : '' }}>Visible</option>
                 <option value="HIDDEN" {{ request('status') == 'HIDDEN' ? 'selected' : '' }}>Hidden</option>
@@ -92,7 +92,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="rating" class="form-select" onchange="this.form.submit()">
+            <select name="rating" class="form-select" data-submit-on-change="submit">
                 <option value="">All Ratings</option>
                 @for($star = 5; $star >= 1; $star--)
                     <option value="{{ $star }}" {{ (int) request('rating') === $star ? 'selected' : '' }}>

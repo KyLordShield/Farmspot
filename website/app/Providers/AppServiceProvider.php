@@ -55,6 +55,15 @@ class AppServiceProvider extends ServiceProvider
         });
         RateLimiter::for('registration', fn (Request $request) =>
             Limit::perMinute(3)->by('ip:'.$request->ip()));
+        RateLimiter::for('admin-login', function (Request $request) {
+            $email = $request->input('email');
+            $email = is_string($email) ? strtolower(trim($email)) : '';
+
+            return [
+                Limit::perMinute(20)->by('ip:'.$request->ip()),
+                Limit::perMinute(5)->by('account:'.hash('sha256', $email)),
+            ];
+        });
 
         Paginator::useBootstrapFive();
         Listing::observe(PremiumListingObserver::class);

@@ -64,6 +64,8 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'USR_PASSWORD',
+        'USR_MFA_SECRET',
+        'USR_MFA_LAST_STEP',
     ];
 
     protected $appends = ['USR_IS_PREMIUM'];
@@ -86,6 +88,11 @@ class User extends Authenticatable
     public function getAuthPassword()
     {
         return $this->USR_PASSWORD;
+    }
+
+    public function getAuthPasswordName()
+    {
+        return 'USR_PASSWORD';
     }
 
     /**

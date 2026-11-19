@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\AdminMfa;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,13 +23,20 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request, AdminMfa $mfa): RedirectResponse
     {
         $request->authenticate();
 
-        $request->session()->regenerate();
+        $request->session()->regenerate(true);
+        $request->session()->put('admin_mfa', [
+            'pending' => $mfa->fingerprint($request->user()),
+            'pending_at' => now()->timestamp,
+        ]);
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        $error = $mfa->send($request);
+        $redirect = redirect()->route('admin.mfa');
+
+        return $error === '' ? $redirect : $redirect->withErrors(['delivery' => $error]);
     }
 
     /**

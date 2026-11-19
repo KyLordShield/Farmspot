@@ -7,6 +7,12 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## FarmSpot admin email verification
+
+After a valid password, FarmSpot sends a six-digit sign-in code to the email address on the admin account. The email and verification page show a matching reference. Codes expire within five minutes, and a pending sign-in lasts at most ten minutes. Admins can request a replacement after one minute.
+
+Configure a direct mail transport such as SMTP on the website and confirm delivery to an admin inbox before rollout. Use HTTPS, a persistent `APP_KEY`, secure session cookies, and server-side session and cache stores. Share those stores across instances if the site runs on multiple instances.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

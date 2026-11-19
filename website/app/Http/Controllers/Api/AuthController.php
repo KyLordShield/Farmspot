@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\PersonName;
 use App\Services\LegalPolicies;
 use App\Support\MobileNumber;
 use Illuminate\Http\Request;
@@ -20,8 +21,10 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
+        PersonName::normalize($request, 'USR_NAME');
+
         $validated = $request->validate([
-            'USR_NAME' => ['required', 'string', 'max:150'],
+            'USR_NAME' => ['bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
             'USR_EMAIL' => ['required', 'email', 'max:200', 'unique:user,USR_EMAIL'],
             'USR_PASSWORD' => ['required', 'confirmed', Password::defaults()],
             'USR_MOBILE_NUMBER' => ['bail', 'required', 'string', MobileNumber::PATTERN, 'unique:user,USR_MOBILE_NUMBER'],

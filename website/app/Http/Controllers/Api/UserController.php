@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Rules\PersonName;
 use App\Support\CloudinaryImage;
 use App\Support\MobileNumber;
 use Illuminate\Http\Request;
@@ -25,9 +26,10 @@ class UserController extends Controller
     public function update(Request $request)
     {
         $user = $request->user();
+        PersonName::normalize($request, 'name');
 
         $validated = $request->validate([
-            'name' => ['sometimes', 'string', 'max:150'],
+            'name' => ['sometimes', 'bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
             'mobile_number' => [
                 'sometimes',
                 'bail',

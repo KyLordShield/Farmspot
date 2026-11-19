@@ -22,7 +22,14 @@ class GalleryService {
   /// full page for the expanded gallery grid).
   static Future<List<GalleryPhoto>> loadPhotos({int? limit}) async {
     try {
-      final permission = await PhotoManager.requestPermissionExtend();
+      final permission = await PhotoManager.requestPermissionExtend(
+        requestOption: const PermissionRequestOption(
+          androidPermission: AndroidPermission(
+            type: RequestType.image,
+            mediaLocation: false,
+          ),
+        ),
+      );
       if (!permission.hasAccess) return const [];
 
       // The aggregate "all photos" album, so the strip never shows an

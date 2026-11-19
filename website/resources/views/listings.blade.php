@@ -95,7 +95,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="category" class="form-select" onchange="this.form.submit()">
+            <select name="category" class="form-select" data-submit-on-change="submit">
                 <option value="">All Categories</option>
                 @foreach($categories as $category)
                     <option value="{{ $category->CAT_ID }}"
@@ -107,7 +107,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="status" class="form-select" onchange="this.form.submit()">
+            <select name="status" class="form-select" data-submit-on-change="submit">
                 <option value="">All Status</option>
                 <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
                 <option value="NOT_AVAILABLE" {{ request('status') == 'NOT_AVAILABLE' ? 'selected' : '' }}>Not Available</option>

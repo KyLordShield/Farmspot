@@ -93,7 +93,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="role" class="form-select" onchange="this.form.submit()">
+            <select name="role" class="form-select" data-submit-on-change="submit">
                 <option value="">All Roles</option>
                 <option value="FARMER" {{ request('role') == 'FARMER' ? 'selected' : '' }}>Farmer</option>
                 <option value="BUYER" {{ request('role') == 'BUYER' ? 'selected' : '' }}>Buyer</option>
@@ -102,7 +102,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="status" class="form-select" onchange="this.form.submit()">
+            <select name="status" class="form-select" data-submit-on-change="submit">
                 <option value="">All Status</option>
                 <option value="ACTIVE" {{ request('status') == 'ACTIVE' ? 'selected' : '' }}>Active</option>
                 <option value="PENDING_VERIFICATION" {{ request('status') == 'PENDING_VERIFICATION' ? 'selected' : '' }}>Pending Verification</option>
@@ -111,7 +111,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="membership" class="form-select" aria-label="Filter by membership" onchange="this.form.submit()">
+            <select name="membership" class="form-select" aria-label="Filter by membership" data-submit-on-change="submit">
                 <option value="">All Memberships</option>
                 <option value="premium" {{ request('membership') == 'premium' ? 'selected' : '' }}>Premium</option>
                 <option value="standard" {{ request('membership') == 'standard' ? 'selected' : '' }}>Standard</option>

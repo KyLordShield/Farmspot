@@ -45,7 +45,7 @@
                 <p class="cell-secondary">No searches recorded this week yet.</p>
                 @endif
                 <div class="chart-box">
-                    <canvas id="cropChart" role="img" aria-label="Bar chart of most recorded searches this week"></canvas>
+                    <canvas id="cropChart" data-labels="{{ $topSearches->pluck('keyword')->values()->toJson() }}" data-values="{{ $topSearches->pluck('total')->map(fn ($count) => (int) $count)->values()->toJson() }}" role="img" aria-label="Bar chart of most recorded searches this week"></canvas>
                 </div>
             </div>
         </div>
@@ -108,7 +108,7 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box-sm">
-                    <canvas id="growthChart" role="img" aria-label="Bar chart of user growth this month"></canvas>
+                    <canvas id="growthChart" data-labels="{{ json_encode($growthLabels) }}" data-values="{{ json_encode($growthValues) }}" role="img" aria-label="Bar chart of user growth this month"></canvas>
                 </div>
             </div>
         </div>
@@ -166,72 +166,6 @@
 
 @push('scripts')
 
-<script>
-
-// JSON encoding keeps search terms safe even when they contain quotes or HTML.
-const cropLabels = {{ Illuminate\Support\Js::from($topSearches->pluck('keyword')->values()) }};
-const cropValues = {{ Illuminate\Support\Js::from($topSearches->pluck('total')->map(fn ($count) => (int) $count)->values()) }};
-const growthLabels = {{ Illuminate\Support\Js::from($growthLabels) }};
-const growthValues = {{ Illuminate\Support\Js::from($growthValues) }};
-
-new Chart(document.getElementById('cropChart'), {
-    type: 'bar',
-    data: {
-        labels: cropLabels,
-        datasets: [{
-            data: cropValues,
-            backgroundColor: ['#1b6b2c', '#3d9347', '#6fcf6f', '#a9d8b4', '#c8e6d0', '#e2efe6'],
-            borderRadius: 6
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }
-        },
-        scales: {
-            x: {
-                grid: { display: false }
-            },
-            y: {
-                beginAtZero: true,
-                ticks: { precision: 0 },
-                grid: { color: '#eef1f0' }
-            }
-        }
-    }
-});
-
-new Chart(document.getElementById('growthChart'), {
-    type: 'bar',
-    data: {
-        labels: growthLabels,
-        datasets: [{
-            data: growthValues,
-            backgroundColor: ['#e2efe6', '#c8e6d0', '#6fcf6f', '#1b6b2c'],
-            borderRadius: 6
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }
-        },
-        scales: {
-            x: {
-                grid: { display: false }
-            },
-            y: {
-                beginAtZero: true,
-                ticks: { precision: 0 },
-                grid: { color: '#eef1f0' }
-            }
-        }
-    }
-});
-
-</script>
+<script src="{{ asset('js/analytics.js') }}?v={{ filemtime(public_path('js/analytics.js')) }}"></script>
 
 @endpush

@@ -95,7 +95,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="type" class="form-select" onchange="this.form.submit()">
+            <select name="type" class="form-select" data-submit-on-change="submit">
                 <option value="">All Types</option>
                 <option value="LISTING" {{ request('type') == 'LISTING' ? 'selected' : '' }}>Crop listing</option>
                 <option value="MESSAGE" {{ request('type') == 'MESSAGE' ? 'selected' : '' }}>Message</option>
@@ -105,7 +105,7 @@
         </div>
 
         <div class="filter-auto">
-            <select name="status" class="form-select" onchange="this.form.submit()">
+            <select name="status" class="form-select" data-submit-on-change="submit">
                 <option value="">All Status</option>
                 <option value="New" {{ request('status') == 'New' ? 'selected' : '' }}>New</option>
                 <option value="Reviewing" {{ request('status') == 'Reviewing' ? 'selected' : '' }}>Reviewing</option>

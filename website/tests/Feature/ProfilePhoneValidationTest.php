@@ -37,6 +37,35 @@ class ProfilePhoneValidationTest extends TestCase
             'USR_ROLE' => 'GENERAL_USER', 'USR_STATUS' => 'ACTIVE', 'USR_CREATED_AT' => now()]);
     }
 
+    public function test_profile_normalizes_name_spacing_and_rejects_invalid_names(): void
+    {
+        $user = $this->account('USR001', '09171234567');
+        $this->actingAs($user, 'sanctum');
+
+        $this->patchJson('/api/user', ['name' => "  José\t   Dela Cruz-O’Neil  "])
+            ->assertOk()->assertJsonPath('user.USR_NAME', 'José Dela Cruz-O’Neil');
+
+        foreach (['James123', '<h1>James</h1>', '   ', '...'] as $name) {
+            $this->patchJson('/api/user', ['name' => $name])->assertUnprocessable()
+                ->assertJsonValidationErrors('name');
+        }
+
+        $this->assertSame('José Dela Cruz-O’Neil', $user->fresh()->USR_NAME);
+    }
+
+    public function test_registration_rejects_an_invalid_name(): void
+    {
+        $this->postJson('/api/register', [
+            'USR_NAME' => 'James123',
+            'USR_EMAIL' => 'new@example.test',
+            'USR_PASSWORD' => 'example123',
+            'USR_PASSWORD_confirmation' => 'example123',
+            'USR_MOBILE_NUMBER' => '09171234567',
+        ])->assertUnprocessable()->assertJsonValidationErrors('USR_NAME');
+
+        $this->assertDatabaseCount('user', 0);
+    }
+
     public function test_profile_rejects_invalid_phone_formats_with_registration_wording(): void
     {
         $user = $this->account('USR001', '09171234567');
@@ -81,6 +110,7 @@ class ProfilePhoneValidationTest extends TestCase
             $this->postJson('/api/register', [...$data, 'USR_MOBILE_NUMBER' => $phone])->assertUnprocessable()
                 ->assertJsonPath('errors.USR_MOBILE_NUMBER.0', MobileNumber::INVALID);
         }
+        $this->travel(61)->seconds();
         $this->postJson('/api/register', [...$data, 'USR_MOBILE_NUMBER' => '09171234567'])->assertUnprocessable()
             ->assertJsonPath('errors.USR_MOBILE_NUMBER.0', MobileNumber::DUPLICATE);
         $this->assertDatabaseCount('user', 1);

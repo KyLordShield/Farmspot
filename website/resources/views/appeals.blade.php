@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Appeals')
 
@@ -87,7 +87,7 @@
 <div class="panel">
     <form method="GET" action="{{ route('appeals') }}" class="filter-bar">
         <div class="filter-auto">
-            <select name="status" class="form-select" onchange="this.form.submit()" aria-label="Filter appeals by status">
+            <select name="status" class="form-select" data-submit-on-change="submit" aria-label="Filter appeals by status">
                 <option value="">All statuses</option>
                 <option value="PENDING" {{ $activeStatus === 'PENDING' ? 'selected' : '' }}>Pending</option>
                 <option value="APPROVED" {{ $activeStatus === 'APPROVED' ? 'selected' : '' }}>Approved</option>

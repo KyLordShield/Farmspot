@@ -174,7 +174,7 @@ Route::post('/reports', [ReportController::class, 'store'])->middleware('throttl
     Route::get('/user/stats', [UserStatsController::class, 'show']);
 });
 
-Route::middleware(['auth:sanctum', 'active', 'admin'])->prefix('admin')->group(function () {
+Route::middleware(['web', 'auth:sanctum', 'admin', 'admin.mfa:api'])->prefix('admin')->group(function () {
     Route::get('/seller-requests', [SellerRequestController::class, 'index']);
     Route::post('/seller-requests/{farmId}/approve', [SellerRequestController::class, 'approve']);
     Route::post('/seller-requests/{farmId}/reject', [SellerRequestController::class, 'reject']);

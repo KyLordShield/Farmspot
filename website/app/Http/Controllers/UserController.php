@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\PersonName;
+
 use App\Models\User;
 use App\Services\ModerationService;
 use App\Services\NotificationService;
@@ -93,8 +95,9 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        PersonName::normalize($request, 'USR_NAME');
         $validated = $request->validate([
-            'USR_NAME' => ['required', 'string', 'max:255'],
+            'USR_NAME' => ['bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
             'USR_EMAIL' => ['required', 'email', 'max:255', 'unique:user,USR_EMAIL'],
             'USR_PASSWORD' => ['required', 'confirmed', Password::defaults()],
             'USR_MOBILE_NUMBER' => ['required', 'string', 'max:20'],
@@ -137,8 +140,9 @@ class UserController extends Controller
         // single time an admin fixed a typo in their email.
         $previousStatus = $user->USR_STATUS;
 
+        PersonName::normalize($request, 'USR_NAME');
         $validated = $request->validate([
-            'USR_NAME' => ['required', 'string', 'max:255'],
+            'USR_NAME' => ['bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
             'USR_EMAIL' => [
                 'required', 'email', 'max:255',
                 Rule::unique('user', 'USR_EMAIL')->ignore($user->USR_ID, 'USR_ID'),

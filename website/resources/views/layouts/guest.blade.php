@@ -53,11 +53,12 @@
             color: #ffffff;
         }
     </style>
+    @stack('head')
 </head>
 <body>
 
 <div class="guest-wrapper">
-    <div class="guest-card">
+    <div class="guest-card @yield('card-class')">
         <div class="guest-brand">FarmSpot Admin</div>
         @yield('content')
     </div>

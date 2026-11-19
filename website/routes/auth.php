@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\AdminMfaController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
@@ -15,10 +16,16 @@ Route::middleware('guest')->group(function () {
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
-    Route::post('login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:login');
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:admin-login');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('admin/verify', [AdminMfaController::class, 'show'])->name('admin.mfa');
+    Route::post('admin/verify', [AdminMfaController::class, 'verify'])->block(30, 10)->name('admin.mfa.verify');
+    Route::post('admin/verify/resend', [AdminMfaController::class, 'resend'])->block(30, 10)->name('admin.mfa.resend');
+});
+
+Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 
@@ -36,7 +43,7 @@ Route::middleware('auth')->group(function () {
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store'])->middleware('throttle:login');
 
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
-
-    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
-        ->name('logout');
 });
+
+Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
+    ->middleware('auth')->name('logout');

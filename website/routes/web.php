@@ -21,7 +21,7 @@ Route::get('/', \App\Http\Controllers\PublicSiteController::class)->name('public
 // and the names of the people accused, or reach /users. Now that
 // reports can be filed from the app, that is a real leak rather than a
 // theoretical one.
-Route::middleware(['auth', 'admin'])->group(function () {
+Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // The admin's personal planner, written from the dashboard. Notes and

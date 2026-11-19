@@ -4,6 +4,16 @@
 (function () {
     'use strict';
 
+    document.querySelectorAll('[data-submit-on-change]').forEach(function (control) {
+        control.addEventListener('change', function () {
+            if (control.dataset.submitOnChange === 'requestSubmit') {
+                control.form.requestSubmit();
+            } else {
+                control.form.submit();
+            }
+        });
+    });
+
     var sidebar = document.getElementById('appSidebar');
     var overlay = document.getElementById('sidebarOverlay');
     var toggle = document.getElementById('sidebarToggle');
