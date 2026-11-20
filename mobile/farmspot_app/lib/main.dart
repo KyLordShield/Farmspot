@@ -60,8 +60,7 @@ class FarmSpotApp extends StatefulWidget {
   State<FarmSpotApp> createState() => _FarmSpotAppState();
 }
 
-class _FarmSpotAppState extends State<FarmSpotApp>
-    with WidgetsBindingObserver {
+class _FarmSpotAppState extends State<FarmSpotApp> with WidgetsBindingObserver {
   /// How often a foregrounded app re-checks that its token is still accepted.
   ///
   /// This deliberately lives above the [Navigator] rather than in [AuthGate].
@@ -99,8 +98,10 @@ class _FarmSpotAppState extends State<FarmSpotApp>
 
   void _startSessionWatch() {
     _sessionTimer?.cancel();
-    _sessionTimer =
-        Timer.periodic(_sessionCheckInterval, (_) => _checkSession());
+    _sessionTimer = Timer.periodic(
+      _sessionCheckInterval,
+      (_) => _checkSession(),
+    );
   }
 
   /// Re-validates the stored token. A rejection has already cleared the local
@@ -133,8 +134,6 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool _ready = false;
-  bool _splashDone = false;
-  bool _bootstrapped = false;
   String? _token;
 
   @override
@@ -143,8 +142,7 @@ class _AuthGateState extends State<AuthGate> {
     _bootstrap();
   }
 
-  /// Read the saved token while the splash plays; never swap the screen
-  /// until the splash's logo fade-out has actually completed.
+  /// Read the saved token while the startup loader plays.
   ///
   /// [SessionState.init] rides along in the same window. Seeding the role here
   /// — behind the splash rather than in the first screen's `initState` — is
@@ -164,9 +162,10 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (!mounted) return;
-    _token = token;
-    _bootstrapped = true;
-    _maybeReady();
+    setState(() {
+      _token = token;
+      _ready = true;
+    });
 
     // A stored token is trusted for the first frame, then checked straight
     // away rather than gating the splash on a network round trip. A revoked
@@ -174,9 +173,6 @@ class _AuthGateState extends State<AuthGate> {
     // within a moment of launch instead of opening onto a cached Home screen —
     // and a valid session never waits on the check to start.
     unawaited(_checkSession());
-
-    // SplashScreen bounds asset loading itself. A separate wall-clock timeout
-    // here would skip playback on a slow launch or while the app is backgrounded.
   }
 
   /// Re-validates the stored token. On rejection the session has already been
@@ -190,33 +186,18 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  /// The splash fires this the moment its intro animation finishes (and holds
-  /// its final frame until the gate is otherwise ready).
-  void _onSplashFinished() {
-    if (!mounted) return;
-    _splashDone = true;
-    _maybeReady();
-  }
-
-  void _maybeReady() {
-    if (_ready || !_splashDone || !_bootstrapped) return;
-    setState(() => _ready = true);
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Cross-fade between states so the splash's final frame melts into the
-    // first frame of the next screen instead of snapping.
+    // Cross-fade from the startup loader to the next screen.
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 400),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
       child: !_ready
-          ? SplashScreen(
-              key: const ValueKey('splash'), onFinished: _onSplashFinished)
+          ? const SplashScreen(key: ValueKey('splash'))
           : _token != null
-              ? const HomeScreen(key: ValueKey('home'))
-              : const LoginScreen(key: ValueKey('login')),
+          ? const HomeScreen(key: ValueKey('home'))
+          : const LoginScreen(key: ValueKey('login')),
     );
   }
 }
