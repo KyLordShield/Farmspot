@@ -35,6 +35,8 @@ Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
 
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
     Route::get('/listings', [ListingController::class, 'index'])->name('listings');
+    Route::get('/listings/create', [ListingController::class, 'create'])->name('listings.create');
+    Route::post('/listings', [ListingController::class, 'store'])->name('listings.store');
     Route::get('/listings/{id}/edit', [ListingController::class, 'edit'])->name('listings.edit');
     Route::get('/listings/{id}', [ListingController::class, 'show'])->name('listings.show');
     Route::put('/listings/{id}', [ListingController::class, 'update'])->name('listings.update');

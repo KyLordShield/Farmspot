@@ -2,8 +2,10 @@
 
 @section('title', 'Appeal Details')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-detail">
 @php
     $isListing = $appeal->RRQ_TARGET_TYPE === \App\Models\ReviewRequest::TARGET_LISTING;
     $targetLabel = $isListing ? 'Crop listing' : 'User account';
@@ -31,6 +33,9 @@
 
 <div class="page-head">
     <div>
+        <nav class="admin-refresh-crumb" aria-label="Breadcrumb">
+            <a href="{{ route('appeals') }}">Appeals</a><span aria-hidden="true">/</span><span aria-current="page">Appeal details</span>
+        </nav>
         <h1 class="page-title">Appeal Details</h1>
         <div class="page-desc">
             Appeal <span class="id-cell">{{ $appeal->RRQ_ID }}</span>
@@ -58,9 +63,9 @@
     </div>
 @endif
 
-<div class="row g-4">
+<div class="admin-refresh-split">
 
-    <div class="col-lg-8">
+    <div class="admin-refresh-stack">
 
         <div class="panel">
             <div class="panel-header">
@@ -74,36 +79,36 @@
                 <span class="badge {{ $statusClass }}">{{ $statusLabel }}</span>
             </div>
             <div class="panel-body p-0">
-                <table class="detail-table">
-                    <tr>
-                        <th>Appeal ID</th>
-                        <td><span class="id-cell">{{ $appeal->RRQ_ID }}</span></td>
-                    </tr>
-                    <tr>
-                        <th>Target</th>
-                        <td>
+                <dl class="admin-refresh-fields">
+                    <div>
+                        <dt>Appeal ID</dt>
+                        <dd><span class="id-cell">{{ $appeal->RRQ_ID }}</span></dd>
+                    </div>
+                    <div>
+                        <dt>Target</dt>
+                        <dd>
                             <span class="badge badge-soft-neutral">{{ $targetLabel }}</span>
                             <span class="id-cell ms-2">{{ $appeal->RRQ_TARGET_ID }}</span>
                             @if($targetName)
                                 <div class="cell-secondary mt-1">{{ $targetName }}</div>
                             @endif
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Requester</th>
-                        <td>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Requester</dt>
+                        <dd>
                             {{ $appeal->user?->USR_NAME ?? '-' }}
                             @if($appeal->user?->USR_EMAIL)
                                 <div class="cell-secondary">{{ $appeal->user->USR_EMAIL }}</div>
                             @endif
                             <span class="id-cell ms-2">{{ $appeal->USR_ID }}</span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Submitted</th>
-                        <td class="cell-secondary">{{ $submittedAt->format('M d, Y h:i A') }}</td>
-                    </tr>
-                </table>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Submitted</dt>
+                        <dd class="cell-secondary">{{ $submittedAt->format('M d, Y h:i A') }}</dd>
+                    </div>
+                </dl>
             </div>
         </div>
 
@@ -119,7 +124,7 @@
             </div>
             <div class="panel-body">
                 @if($appeal->RRQ_REASON)
-                    <div class="appeal-quote">{{ $appeal->RRQ_REASON }}</div>
+                    <blockquote class="admin-refresh-quote">{{ $appeal->RRQ_REASON }}</blockquote>
                 @else
                     <p class="cell-faint mb-0">No reason was provided.</p>
                 @endif
@@ -143,26 +148,26 @@
                     @endif
                 </div>
                 <div class="panel-body p-0">
-                    <table class="detail-table">
-                        <tr>
-                            <th>Listing ID</th>
-                            <td><span class="id-cell">{{ $appeal->listing?->LST_ID ?? $appeal->RRQ_TARGET_ID }}</span></td>
-                        </tr>
-                        <tr>
-                            <th>Crop</th>
-                            <td>{{ $appeal->listing?->LST_CROP_ICON ?: '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Category</th>
-                            <td>{{ $appeal->listing?->category?->CAT_NAME ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Farm</th>
-                            <td>{{ $appeal->listing?->farm?->FRM_NAME ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Listing status</th>
-                            <td>
+                    <dl class="admin-refresh-fields">
+                        <div>
+                            <dt>Listing ID</dt>
+                            <dd><span class="id-cell">{{ $appeal->listing?->LST_ID ?? $appeal->RRQ_TARGET_ID }}</span></dd>
+                        </div>
+                        <div>
+                            <dt>Crop</dt>
+                            <dd>{{ $appeal->listing?->LST_CROP_ICON ?: '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Category</dt>
+                            <dd>{{ $appeal->listing?->category?->CAT_NAME ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Farm</dt>
+                            <dd>{{ $appeal->listing?->farm?->FRM_NAME ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Listing status</dt>
+                            <dd>
                                 @php $listingStatus = $appeal->listing?->LST_STATUS; @endphp
                                 @if($listingStatus === 'AVAILABLE_NOW')
                                     <span class="badge badge-soft-success">Available now</span>
@@ -173,11 +178,11 @@
                                 @else
                                     -
                                 @endif
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Availability</th>
-                            <td>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Availability</dt>
+                            <dd>
                                 @php $availability = $appeal->listing?->LST_AVAILABILITY; @endphp
                                 @if($availability === 'ACTIVE')
                                     <span class="badge badge-soft-success">Active</span>
@@ -188,23 +193,23 @@
                                 @else
                                     -
                                 @endif
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Takedown reason</th>
-                            <td class="cell-secondary">{{ $appeal->listing?->LST_TAKEDOWN_REASON ?? '-' }}</td>
-                        </tr>
+                            </dd>
+                        </div>
+                        <div class="admin-refresh-wide">
+                            <dt>Takedown reason</dt>
+                            <dd class="cell-secondary">{{ $appeal->listing?->LST_TAKEDOWN_REASON ?? '-' }}</dd>
+                        </div>
                         @if($appeal->listing?->LST_IMAGE)
-                            <tr>
-                                <th>Photo</th>
-                                <td>
+                            <div class="admin-refresh-wide">
+                                <dt>Photo</dt>
+                                <dd>
                                     <img src="{{ $appeal->listing->LST_IMAGE }}"
                                          alt="Listing photo"
                                          class="appeal-thumb">
-                                </td>
-                            </tr>
+                                </dd>
+                            </div>
                         @endif
-                    </table>
+                    </dl>
                 </div>
             </div>
         @else
@@ -224,26 +229,26 @@
                     @endif
                 </div>
                 <div class="panel-body p-0">
-                    <table class="detail-table">
-                        <tr>
-                            <th>Account ID</th>
-                            <td><span class="id-cell">{{ $appeal->RRQ_TARGET_ID }}</span></td>
-                        </tr>
-                        <tr>
-                            <th>Name</th>
-                            <td>{{ $appeal->account?->USR_NAME ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Email</th>
-                            <td>{{ $appeal->account?->USR_EMAIL ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Mobile number</th>
-                            <td>{{ $appeal->account?->USR_MOBILE_NUMBER ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Account status</th>
-                            <td>
+                    <dl class="admin-refresh-fields">
+                        <div>
+                            <dt>Account ID</dt>
+                            <dd><span class="id-cell">{{ $appeal->RRQ_TARGET_ID }}</span></dd>
+                        </div>
+                        <div>
+                            <dt>Name</dt>
+                            <dd>{{ $appeal->account?->USR_NAME ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Email</dt>
+                            <dd>{{ $appeal->account?->USR_EMAIL ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Mobile number</dt>
+                            <dd>{{ $appeal->account?->USR_MOBILE_NUMBER ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Account status</dt>
+                            <dd>
                                 @php $accountStatus = $appeal->account?->USR_STATUS; @endphp
                                 @if($accountStatus === 'ACTIVE')
                                     <span class="badge badge-soft-success">Active</span>
@@ -254,23 +259,23 @@
                                 @else
                                     -
                                 @endif
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Takedown reason</th>
-                            <td class="cell-secondary">{{ $appeal->account?->USR_TAKEDOWN_REASON ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Registered</th>
-                            <td class="cell-secondary">
+                            </dd>
+                        </div>
+                        <div class="admin-refresh-wide">
+                            <dt>Takedown reason</dt>
+                            <dd class="cell-secondary">{{ $appeal->account?->USR_TAKEDOWN_REASON ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Registered</dt>
+                            <dd class="cell-secondary">
                                 @if($appeal->account?->USR_CREATED_AT)
                                     {{ \Carbon\Carbon::parse($appeal->account->USR_CREATED_AT)->timezone($displayTz)->format('M d, Y h:i A') }}
                                 @else
                                     -
                                 @endif
-                            </td>
-                        </tr>
-                    </table>
+                            </dd>
+                        </div>
+                    </dl>
                 </div>
             </div>
         @endif
@@ -288,37 +293,37 @@
                     <span class="badge {{ $statusClass }}">{{ $statusLabel }}</span>
                 </div>
                 <div class="panel-body p-0">
-                    <table class="detail-table">
-                        <tr>
-                            <th>Outcome</th>
-                            <td><span class="badge {{ $statusClass }}">{{ $statusLabel }}</span></td>
-                        </tr>
-                        <tr>
-                            <th>Decided at</th>
-                            <td class="cell-secondary">{{ $decidedAt?->format('M d, Y h:i A') ?? '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Decided by</th>
-                            <td>{{ $appeal->decidedBy?->USR_NAME ?? 'an admin' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Admin note</th>
-                            <td>
+                    <dl class="admin-refresh-fields">
+                        <div>
+                            <dt>Outcome</dt>
+                            <dd><span class="badge {{ $statusClass }}">{{ $statusLabel }}</span></dd>
+                        </div>
+                        <div>
+                            <dt>Decided at</dt>
+                            <dd class="cell-secondary">{{ $decidedAt?->format('M d, Y h:i A') ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Decided by</dt>
+                            <dd>{{ $appeal->decidedBy?->USR_NAME ?? 'an admin' }}</dd>
+                        </div>
+                        <div class="admin-refresh-wide">
+                            <dt>Admin note</dt>
+                            <dd>
                                 @if($appeal->RRQ_ADMIN_NOTE)
                                     <div class="appeal-quote is-note">{{ $appeal->RRQ_ADMIN_NOTE }}</div>
                                 @else
                                     <span class="cell-faint">No note was recorded.</span>
                                 @endif
-                            </td>
-                        </tr>
-                    </table>
+                            </dd>
+                        </div>
+                    </dl>
                 </div>
             </div>
         @endif
 
     </div>
 
-    <div class="col-lg-4">
+    <div class="admin-refresh-sidebar">
 
         <div class="panel">
             <div class="panel-header">
@@ -373,64 +378,62 @@
             </div>
         @endif
 
-    </div>
+        @if($appeal->isPending())
+            <div class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h5 class="panel-title">
+                            <i class="bi bi-check2-square"></i>
+                            Decide appeal
+                        </h5>
+                        <div class="panel-sub">Choose one outcome. The requester is notified either way.</div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="decision-grid">
 
+                        <form method="POST"
+                              action="{{ route('appeals.approve', $appeal->RRQ_ID) }}"
+                              data-auto-spinner
+                              data-confirm-title="Approve appeal?"
+                              data-confirm-text="The target is restored and the reports against it are dismissed.">
+                            @csrf
+                            <label class="form-label" for="note-approve">Admin note (optional)</label>
+                            <textarea id="note-approve"
+                                      name="note"
+                                      rows="2"
+                                      maxlength="500"
+                                      class="form-control mb-2"
+                                      placeholder="Shown to the requester or kept for the audit trail">{{ old('note') }}</textarea>
+                            <button type="submit" class="btn btn-farm">
+                                <i class="bi bi-check-lg me-1"></i> Approve &amp; restore
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ route('appeals.deny', $appeal->RRQ_ID) }}"
+                              data-auto-spinner
+                              data-confirm-title="Deny appeal?"
+                              data-confirm-text="This keeps the takedown in place. The decision is final until a new takedown occurs."
+                              data-confirm-tone="danger">
+                            @csrf
+                            <label class="form-label" for="note-deny">Admin note (optional)</label>
+                            <textarea id="note-deny"
+                                      name="note"
+                                      rows="2"
+                                      maxlength="500"
+                                      class="form-control mb-2"
+                                      placeholder="Reason to keep the decision in place">{{ old('note') }}</textarea>
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="bi bi-x-lg me-1"></i> Deny appeal
+                            </button>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
 </div>
-
-@if($appeal->isPending())
-    <div class="panel">
-        <div class="panel-header">
-            <div>
-                <h5 class="panel-title">
-                    <i class="bi bi-check2-square"></i>
-                    Decide appeal
-                </h5>
-                <div class="panel-sub">Choose one outcome. The requester is notified either way.</div>
-            </div>
-        </div>
-        <div class="panel-body">
-            <div class="decision-grid">
-
-                <form method="POST"
-                      action="{{ route('appeals.approve', $appeal->RRQ_ID) }}"
-                      data-auto-spinner
-                      data-confirm-title="Approve appeal?"
-                      data-confirm-text="The target is restored and the reports against it are dismissed.">
-                    @csrf
-                    <label class="form-label" for="note-approve">Admin note (optional)</label>
-                    <textarea id="note-approve"
-                              name="note"
-                              rows="2"
-                              maxlength="500"
-                              class="form-control mb-2"
-                              placeholder="Shown to the requester or kept for the audit trail">{{ old('note') }}</textarea>
-                    <button type="submit" class="btn btn-farm">
-                        <i class="bi bi-check-lg me-1"></i> Approve &amp; restore
-                    </button>
-                </form>
-
-                <form method="POST"
-                      action="{{ route('appeals.deny', $appeal->RRQ_ID) }}"
-                      data-auto-spinner
-                      data-confirm-title="Deny appeal?"
-                      data-confirm-text="This keeps the takedown in place. The decision is final until a new takedown occurs."
-                      data-confirm-tone="danger">
-                    @csrf
-                    <label class="form-label" for="note-deny">Admin note (optional)</label>
-                    <textarea id="note-deny"
-                              name="note"
-                              rows="2"
-                              maxlength="500"
-                              class="form-control mb-2"
-                              placeholder="Reason to keep the decision in place">{{ old('note') }}</textarea>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-x-lg me-1"></i> Deny appeal
-                    </button>
-                </form>
-
-            </div>
-        </div>
-    </div>
-@endif
-
+</div>
 @endsection

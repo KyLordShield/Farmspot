@@ -2,170 +2,252 @@
 
 @section('title', 'Listing Details')
 
-@section('content')
+@push('styles')
+    <link rel="stylesheet" href="{{ asset('css/listing-details.css') }}?v={{ filemtime(public_path('css/listing-details.css')) }}">
+@endpush
 
-<div class="page-head">
-    <div>
-        <h1 class="page-title">Listing Details</h1>
-        <div class="page-desc">{{ $listing->LST_ID }}</div>
-    </div>
-    <div class="page-actions">
-        <a href="{{ route('listings') }}" class="btn btn-ghost">
-            <i class="bi bi-arrow-left me-1"></i> Back to Listings
-        </a>
-        <a href="{{ route('listings.edit', $listing->LST_ID) }}" class="btn btn-farm">
-            <i class="bi bi-pencil me-1"></i> Edit Listing
-        </a>
-    </div>
-</div>
-
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-basket"></i>
-            {{ $listing->LST_ID }}
-        </h5>
-    </div>
-    <div class="panel-body p-0">
-        <table class="detail-table">
-
-            <tr>
-                <th>Categories</th>
-                <td>{{ $listing->category?->CAT_NAME ?? '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Crop Name</th>
-                <td>{{ $listing->LST_CROP_ICON ?: '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Farmer</th>
-                <td>{{ $listing->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Farm</th>
-                <td>{{ $listing->farm?->FRM_NAME ?? '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Farm Barangay</th>
-                <td>{{ $listing->farm?->FRM_BARANGAY ?? '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Status</th>
-                <td>
-                    @if($listing->LST_STATUS == 'AVAILABLE_NOW')
-                        <span class="badge badge-soft-success">Available Now</span>
-                    @elseif($listing->LST_STATUS == 'SOON_TO_HARVEST')
-                        <span class="badge badge-soft-warning">Soon to Harvest</span>
-                    @else
-                        <span class="badge badge-soft-neutral">Not Available</span>
-                    @endif
-                </td>
-            </tr>
-
-            <tr>
-                <th>Availability</th>
-                <td>
-                    @if($listing->LST_AVAILABILITY == 'ACTIVE')
-                        <span class="badge badge-soft-success">Active</span>
-                    @elseif($listing->LST_AVAILABILITY == 'NOT_AVAILABLE')
-                        <span class="badge badge-soft-neutral">Not Available</span>
-                    @else
-                        <span class="badge badge-soft-neutral">{{ $listing->LST_AVAILABILITY }}</span>
-                    @endif
-                </td>
-            </tr>
-
-            <tr>
-                <th>Harvest Date</th>
-                <td>{{ $listing->LST_HARVEST_DATE ?: '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Expiry Date</th>
-                <td>{{ $listing->LST_EXPIRY_DATE ?: '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Created</th>
-                <td class="cell-secondary">{{ $listing->LST_CREATED_AT ?: '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Last Updated</th>
-                <td class="cell-secondary">{{ $listing->LST_UPDATED_AT ?: '-' }}</td>
-            </tr>
-
-            <tr>
-                <th>Last Renewed</th>
-                <td class="cell-secondary">{{ $listing->LST_LAST_RENEWED_AT ?: 'Never' }}</td>
-            </tr>
-
-            <tr>
-                <th>Renewals</th>
-                <td>
-                    @if((int) $listing->LST_RENEWAL_COUNT > 0)
-                        <span class="badge badge-soft-warning">{{ (int) $listing->LST_RENEWAL_COUNT }} time(s)</span>
-                    @else
-                        <span class="badge badge-soft-neutral">Never</span>
-                    @endif
-                </td>
-            </tr>
-
-        </table>
-    </div>
-</div>
+@push('scripts')
+    <script src="{{ asset('js/listing-details.js') }}?v={{ filemtime(public_path('js/listing-details.js')) }}" defer></script>
+@endpush
 
 @php
-    // LST_IMAGE is only a cached copy of the primary photo, so the gallery is
-    // built from the listing_photo rows. Older listings predate that table and
-    // carry nothing but LST_IMAGE, which is still worth showing.
-    $photoUrls = $listing->photos->pluck('LPHOTO_FILE_PATH');
+    $crop = trim((string) $listing->LST_CROP_ICON);
+    $title = $crop ?: 'Listing Details';
+    $now = now()->startOfSecond();
+    $relative = function ($value) use ($now) {
+        $duration = $value->diffForHumans($now, \Carbon\CarbonInterface::DIFF_ABSOLUTE);
 
-    if ($photoUrls->isEmpty() && $listing->LST_IMAGE) {
-        $photoUrls = collect([$listing->LST_IMAGE]);
+        return $value->greaterThan($now) ? "in {$duration}" : "{$duration} ago";
+    };
+    $date = fn ($value) => blank($value) ? null : \Illuminate\Support\Carbon::parse($value);
+    $harvest = $date($listing->LST_HARVEST_DATE);
+    $expiry = $date($listing->LST_EXPIRY_DATE);
+    $renewed = $date($listing->LST_LAST_RENEWED_AT);
+    $renewals = (int) $listing->LST_RENEWAL_COUNT;
+
+    [$status, $statusTone] = match ($listing->LST_STATUS) {
+        'AVAILABLE_NOW' => ['Available Now', 'green'],
+        'SOON_TO_HARVEST' => ['Soon to Harvest', 'amber'],
+        'EXPIRED' => ['Expired', 'red'],
+        default => [filled($listing->LST_STATUS) ? 'Not Available' : 'Not provided', 'gray'],
+    };
+    [$availability, $availabilityTone] = match ($listing->LST_AVAILABILITY) {
+        'ACTIVE' => ['Active', 'green'],
+        'EXPIRED' => ['Expired', 'red'],
+        default => [filled($listing->LST_AVAILABILITY)
+            ? \Illuminate\Support\Str::headline(strtolower($listing->LST_AVAILABILITY)) : 'Not provided', 'gray'],
+    };
+
+    $expired = $expiry?->lessThanOrEqualTo($now);
+    $expiryTone = $expired ? 'red' : ($expiry?->lessThan($now->copy()->addDays(3)) ? 'amber' : 'gray');
+    $countdown = $expiry ? ($expired ? 'Expired' : 'Expires '.$relative($expiry)) : null;
+
+    $photos = $listing->photos->sortByDesc('LPHOTO_IS_PRIMARY')->pluck('LPHOTO_FILE_PATH')->filter()->values();
+    if ($photos->isEmpty() && filled($listing->LST_IMAGE)) {
+        $photos = collect([$listing->LST_IMAGE]);
     }
+
+    $details = [
+        'Product' => [
+            'Category' => $listing->category?->CAT_NAME,
+            'Crop Name' => $crop,
+            'Description' => $listing->LST_DESCRIPTION,
+        ],
+        'Farm & Farmer' => [
+            'Farmer' => $listing->farmer?->buyer?->user?->USR_NAME,
+            'Farm' => $listing->farm?->FRM_NAME,
+            'Barangay' => $listing->farm?->FRM_BARANGAY,
+        ],
+    ];
+    $dates = [
+        'Harvest Date' => [$harvest, false],
+        'Expiry Date' => [$expiry, false],
+        'Created' => [$date($listing->LST_CREATED_AT), true],
+        'Last Updated' => [$date($listing->LST_UPDATED_AT), true],
+        'Last Renewed' => [$renewed, true],
+    ];
 @endphp
 
-@if($photoUrls->isNotEmpty())
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-images"></i>
-            Photos
-            <span class="badge badge-soft-neutral ms-1">{{ $photoUrls->count() }}</span>
-        </h5>
-    </div>
-    <div class="panel-body">
-        <div class="row g-3 photo-grid">
-            @foreach($photoUrls as $photoUrl)
-                @php
-                    $photoExtension = strtolower(pathinfo((string) parse_url($photoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
-                @endphp
-                <div class="col-6 col-md-3">
-                    <button type="button"
-                            class="btn-photo"
-                            data-bs-toggle="modal"
-                            data-bs-target="#documentModal"
-                            data-document-url="{{ $photoUrl }}"
-                            data-document-title="{{ $listing->LST_CROP_ICON ?: 'Listing photo' }} — photo {{ $loop->iteration }}"
-                            data-document-kind="{{ in_array($photoExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? 'image' : 'file' }}">
-                        <img src="{{ $photoUrl }}"
-                             alt="Listing photo {{ $loop->iteration }}"
-                             class="photo-thumb"
-                             loading="lazy">
-                    </button>
+@section('content')
+<div class="listing-details" id="listing-details">
+    <header class="ld-header">
+        <div>
+            <nav aria-label="Breadcrumb" class="ld-breadcrumb">
+                <a href="{{ route('listings') }}">Listings</a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">{{ $title }}</span>
+            </nav>
+            <div class="ld-title">
+                <h1>{{ $title }}</h1>
+                @if(filled($listing->LST_STATUS))
+                    <span class="ld-pill ld-{{ $statusTone }}">{{ $status }}</span>
+                @else
+                    <em class="ld-muted">Not provided</em>
+                @endif
+            </div>
+            <button type="button" class="ld-copy" data-copy-id="{{ $listing->LST_ID }}"
+                    aria-label="Copy listing ID {{ $listing->LST_ID }}">
+                <span data-id-value>{{ $listing->LST_ID }}</span> <i class="bi bi-copy" aria-hidden="true"></i>
+            </button>
+            <span class="ld-muted" role="status" data-copy-feedback></span>
+        </div>
+        <div class="ld-actions">
+            <a href="{{ route('listings') }}" class="ld-button">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to Listings
+            </a>
+            <a href="{{ route('listings.edit', $listing->LST_ID) }}" class="ld-button ld-primary">
+                <i class="bi bi-pencil" aria-hidden="true"></i> Edit Listing
+            </a>
+        </div>
+    </header>
+
+    @if($photos->isNotEmpty())
+        <section class="ld-card ld-gallery" aria-label="Listing photos">
+            <a class="ld-photo ld-hero" href="{{ $photos->first() }}" data-photo-index="0">
+                <img src="{{ $photos->first() }}" alt="{{ $title }} — photo 1">
+                <span class="ld-photo-count"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>
+                    1 / {{ $photos->count() }}</span>
+            </a>
+            @if($photos->count() > 1)
+                <div class="ld-thumbnails">
+                    @foreach($photos->slice(1) as $index => $url)
+                        <a class="ld-photo ld-thumbnail" href="{{ $url }}" data-photo-index="{{ $index }}">
+                            <img src="{{ $url }}" alt="{{ $title }} — photo {{ $index + 1 }}" loading="lazy">
+                        </a>
+                    @endforeach
                 </div>
+            @endif
+        </section>
+
+        <dialog class="ld-lightbox" aria-labelledby="ld-lightbox-title" data-lightbox>
+            <div class="ld-lightbox-heading">
+                <h2 id="ld-lightbox-title">Listing photos</h2>
+                <button type="button" class="ld-button" data-close-photo autofocus aria-label="Close photo viewer">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+            <img data-lightbox-image alt="">
+            <div class="ld-lightbox-nav">
+                @if($photos->count() > 1)
+                    <button type="button" class="ld-button" data-photo-step="-1" aria-label="Previous photo">
+                        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                    </button>
+                @endif
+                <span role="status" data-photo-caption></span>
+                @if($photos->count() > 1)
+                    <button type="button" class="ld-button" data-photo-step="1" aria-label="Next photo">
+                        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                    </button>
+                @endif
+            </div>
+            <a class="ld-original" data-original-photo target="_blank" rel="noopener">Open original</a>
+        </dialog>
+    @endif
+
+    @if(session('success'))
+        <div class="alert alert-success" role="status">{{ session('success') }}</div>
+    @endif
+
+    <div class="ld-columns">
+        <aside class="ld-card ld-summary" aria-labelledby="ld-summary-title">
+            <h2 id="ld-summary-title">Listing Summary</h2>
+            <dl class="ld-fields">
+                <div>
+                    <dt>Crop Status</dt>
+                    <dd>
+                        @if(filled($listing->LST_STATUS))
+                            <span class="ld-pill ld-{{ $statusTone }}">{{ $status }}</span>
+                        @else
+                            <em class="ld-muted">Not provided</em>
+                        @endif
+                    </dd>
+                </div>
+                <div>
+                    <dt>Listing Availability</dt>
+                    <dd>
+                        @if(filled($listing->LST_AVAILABILITY))
+                            <span class="ld-pill ld-{{ $availabilityTone }}">{{ $availability }}</span>
+                        @else
+                            <em class="ld-muted">Not provided</em>
+                        @endif
+                    </dd>
+                </div>
+                <div>
+                    <dt>Harvest Date</dt>
+                    <dd>@include('listings._detail-date', ['value' => $harvest, 'withTime' => false])</dd>
+                </div>
+                <div>
+                    <dt>Expiry</dt>
+                    <dd>
+                        @if($countdown)
+                            <span class="ld-pill ld-{{ $expiryTone }}">{{ $countdown }}</span>
+                        @else
+                            <em class="ld-muted">Not provided</em>
+                        @endif
+                    </dd>
+                </div>
+            </dl>
+        </aside>
+
+        <div class="ld-main">
+            @foreach($details as $heading => $fields)
+                <section class="ld-card">
+                    <h2>{{ $heading }}</h2>
+                    <dl class="ld-fields">
+                        @foreach($fields as $label => $value)
+                            <div @class(['lf-wide' => $label === 'Description'])>
+                                <dt>{{ $label }}</dt>
+                                <dd>
+                                    @if(filled($value))
+                                        @if($label === 'Barangay')
+                                            <i class="bi bi-geo-alt ld-map-pin" aria-hidden="true"></i>
+                                        @endif
+                                        @if($label === 'Description')<span class="ld-description">{{ $value }}</span>@else{{ $value }}@endif
+                                    @else
+                                        <em class="ld-muted">Not provided</em>
+                                    @endif
+                                </dd>
+                            </div>
+                        @endforeach
+                    </dl>
+                </section>
             @endforeach
+
+            <section class="ld-card">
+                <h2>Dates</h2>
+                <dl class="ld-fields">
+                    @foreach($dates as $label => [$value, $withTime])
+                        <div>
+                            <dt>{{ $label }}</dt>
+                            <dd>@include('listings._detail-date', ['missing' => $label === 'Last Renewed' ? 'Never' : null])</dd>
+                        </div>
+                    @endforeach
+                </dl>
+            </section>
+
+            <section class="ld-card">
+                <h2>Renewals</h2>
+                <dl class="ld-fields">
+                    <div>
+                        <dt>Renewal Count</dt>
+                        <dd>{{ $renewals }}</dd>
+                    </div>
+                    <div>
+                        <dt>Renewal History</dt>
+                        <dd>
+                            @if($renewed)
+                                <span class="ld-muted">Most recent renewal</span><br>
+                                @include('listings._detail-date', ['value' => $renewed, 'withTime' => true])
+                            @elseif($renewals === 0)
+                                <span class="ld-muted">Never</span>
+                            @else
+                                <em class="ld-muted">Not provided</em>
+                            @endif
+                        </dd>
+                    </div>
+                </dl>
+            </section>
         </div>
     </div>
 </div>
-@endif
-
-@include('partials._media-modal')
-
 @endsection

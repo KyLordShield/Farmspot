@@ -2,10 +2,15 @@
 
 @section('title', 'Seller Request Details')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-detail">
 <div class="page-head">
     <div>
+        <nav class="admin-refresh-crumb" aria-label="Breadcrumb">
+            <a href="{{ route('seller-requests') }}">Seller Requests</a><span aria-hidden="true">/</span><span aria-current="page">Request details</span>
+        </nav>
         <h1 class="page-title">Seller Request Details</h1>
         <div class="page-desc">{{ $farm->FRM_NAME }} · Farm #{{ $farm->FRM_ID }}</div>
     </div>
@@ -30,197 +35,203 @@
     </div>
 @endif
 
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-house"></i>
-            {{ $farm->FRM_NAME }}
-        </h5>
-    </div>
-    <div class="panel-body p-0">
-        <table class="detail-table">
+<div class="admin-refresh-split">
+    <div class="admin-refresh-stack">
+        <div class="panel">
+            <div class="panel-header">
+                <h5 class="panel-title">
+                    <i class="bi bi-house"></i>
+                    {{ $farm->FRM_NAME }}
+                </h5>
+            </div>
+            <div class="panel-body p-0">
+                <dl class="admin-refresh-fields">
 
-            <tr>
-                <th>Status</th>
-                <td>
-                    @if($farm->FRM_STATUS == 'APPROVED')
-                        <span class="badge badge-soft-success">Approved</span>
-                    @elseif($farm->FRM_STATUS == 'REJECTED')
-                        <span class="badge badge-soft-danger">Rejected</span>
-                    @else
-                        <span class="badge badge-soft-warning">Pending Review</span>
-                    @endif
-                </td>
-            </tr>
+                    <div>
+                        <dt>Status</dt>
+                        <dd>
+                            @if($farm->FRM_STATUS == 'APPROVED')
+                                <span class="badge badge-soft-success">Approved</span>
+                            @elseif($farm->FRM_STATUS == 'REJECTED')
+                                <span class="badge badge-soft-danger">Rejected</span>
+                            @else
+                                <span class="badge badge-soft-warning">Pending Review</span>
+                            @endif
+                        </dd>
+                    </div>
 
-            <tr>
-                <th>Farm Name</th>
-                <td>{{ $farm->FRM_NAME }}</td>
-            </tr>
+                    <div>
+                        <dt>Farm Name</dt>
+                        <dd>{{ $farm->FRM_NAME }}</dd>
+                    </div>
 
-            <tr>
-                <th>Description</th>
-                <td>{{ $farm->FRM_DESCRIPTION ?? '-' }}</td>
-            </tr>
+                    <div class="admin-refresh-wide">
+                        <dt>Description</dt>
+                        <dd>{{ $farm->FRM_DESCRIPTION ?? '-' }}</dd>
+                    </div>
 
-            <tr>
-                <th>Barangay</th>
-                <td>{{ $farm->FRM_BARANGAY }}</td>
-            </tr>
+                    <div>
+                        <dt>Barangay</dt>
+                        <dd>{{ $farm->FRM_BARANGAY }}</dd>
+                    </div>
 
-            <tr>
-                <th>Coordinates</th>
-                <td><span class="id-cell">{{ $farm->FRM_LATITUDE }}, {{ $farm->FRM_LONGITUDE }}</span></td>
-            </tr>
+                    <div>
+                        <dt>Coordinates</dt>
+                        <dd><span class="id-cell">{{ $farm->FRM_LATITUDE }}, {{ $farm->FRM_LONGITUDE }}</span></dd>
+                    </div>
 
-            <tr>
-                <th>Submitted At</th>
-                <td class="cell-secondary">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}</td>
-            </tr>
+                    <div>
+                        <dt>Submitted At</dt>
+                        <dd class="cell-secondary">{{ \Carbon\Carbon::parse($farm->FRM_CREATED_AT)->timezone(config('farmspot.display_timezone'))->format('M d, Y h:i A') }}</dd>
+                    </div>
 
-        </table>
-    </div>
-</div>
+                </dl>
+            </div>
+        </div>
 
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-person"></i>
-            Owner Information
-        </h5>
-    </div>
-    <div class="panel-body p-0">
-        <table class="detail-table">
+        <div class="panel">
+            <div class="panel-header">
+                <h5 class="panel-title">
+                    <i class="bi bi-person"></i>
+                    Owner Information
+                </h5>
+            </div>
+            <div class="panel-body p-0">
+                <dl class="admin-refresh-fields">
 
-            <tr>
-                <th>Owner Name</th>
-                <td>{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</td>
-            </tr>
+                    <div>
+                        <dt>Owner Name</dt>
+                        <dd>{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</dd>
+                    </div>
 
-            <tr>
-                <th>Email</th>
-                <td>{{ $farm->farmer?->buyer?->user?->USR_EMAIL ?? '-' }}</td>
-            </tr>
+                    <div>
+                        <dt>Email</dt>
+                        <dd>{{ $farm->farmer?->buyer?->user?->USR_EMAIL ?? '-' }}</dd>
+                    </div>
 
-            <tr>
-                <th>Mobile Number</th>
-                <td>{{ $farm->farmer?->buyer?->user?->USR_MOBILE_NUMBER ?? '-' }}</td>
-            </tr>
+                    <div>
+                        <dt>Mobile Number</dt>
+                        <dd>{{ $farm->farmer?->buyer?->user?->USR_MOBILE_NUMBER ?? '-' }}</dd>
+                    </div>
 
-        </table>
-    </div>
-</div>
+                </dl>
+            </div>
+        </div>
 
-@if($farm->photos->isNotEmpty())
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-images"></i>
-            Farm Photos
-        </h5>
-    </div>
-    <div class="panel-body">
-        <div class="row g-3 photo-grid">
-            @foreach($farm->photos as $photo)
-                <div class="col-6 col-md-3">
+        @if($farm->photos->isNotEmpty())
+        <div class="panel">
+            <div class="panel-header">
+                <h5 class="panel-title">
+                    <i class="bi bi-images"></i>
+                    Farm Photos
+                </h5>
+            </div>
+            <div class="panel-body">
+                <div class="row g-3 photo-grid">
+                    @foreach($farm->photos as $photo)
+                        <div class="col-6 col-md-3">
+                            <button type="button"
+                                    class="btn-photo"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#documentModal"
+                                    data-document-url="{{ $photo->FPHOTO_FILE_PATH }}"
+                                    data-document-title="Farm photo"
+                                    data-document-kind="image">
+                                <img src="{{ $photo->FPHOTO_FILE_PATH }}"
+                                     alt="Farm photo"
+                                     class="photo-thumb">
+                            </button>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+        @endif
+
+        @php
+            $viewerDocuments = [];
+
+            if ($farm->FRM_VERIFICATION_DOC_PATH) {
+                $viewerDocuments[] = [
+                    'label' => 'Valid ID Document',
+                    'url'   => $farm->FRM_VERIFICATION_DOC_PATH,
+                ];
+            }
+
+            if ($farm->FRM_FARM_CERTIFICATE_PATH) {
+                $viewerDocuments[] = [
+                    'label' => 'Farm Permit / Certificate',
+                    'url'   => $farm->FRM_FARM_CERTIFICATE_PATH,
+                ];
+            }
+        @endphp
+
+        @foreach($viewerDocuments as $document)
+            @php
+                $documentExtension = strtolower(pathinfo(parse_url($document['url'], PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+            @endphp
+            <div class="panel">
+                <div class="panel-header">
+                    <h5 class="panel-title">
+                        <i class="bi bi-file-earmark-check"></i>
+                        {{ $document['label'] }}
+                    </h5>
+                </div>
+                <div class="panel-body">
                     <button type="button"
-                            class="btn-photo"
+                            class="btn btn-ghost"
                             data-bs-toggle="modal"
                             data-bs-target="#documentModal"
-                            data-document-url="{{ $photo->FPHOTO_FILE_PATH }}"
-                            data-document-title="Farm photo"
-                            data-document-kind="image">
-                        <img src="{{ $photo->FPHOTO_FILE_PATH }}"
-                             alt="Farm photo"
-                             class="photo-thumb">
+                            data-document-url="{{ $document['url'] }}"
+                            data-document-title="{{ $document['label'] }}"
+                            data-document-kind="{{ in_array($documentExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? 'image' : 'file' }}">
+                        <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
                     </button>
                 </div>
-            @endforeach
-        </div>
+            </div>
+        @endforeach
     </div>
+    @if($farm->FRM_STATUS == 'PENDING_REVIEW')
+    <aside class="admin-refresh-sidebar" aria-label="Seller request decision">
+        <div class="panel">
+            <div class="panel-header">
+                <h5 class="panel-title">
+                    <i class="bi bi-check2-square"></i>
+                    Decision
+                </h5>
+            </div>
+            <div class="panel-body">
+                <div class="decision-grid">
+
+                    <form method="POST" action="{{ route('seller-requests.approve', $farm->FRM_ID) }}"
+                          data-confirm-title="Approve seller request?"
+                          data-confirm-text="Approve {{ $farm->FRM_NAME }}? The farm goes live for the owner immediately.">
+                        @csrf
+                        <button type="submit" class="btn btn-farm">
+                            <i class="bi bi-check-circle me-1"></i> Approve
+                        </button>
+                    </form>
+
+                    <form method="POST" action="{{ route('seller-requests.reject', $farm->FRM_ID) }}"
+                          data-confirm-title="Reject seller request?"
+                          data-confirm-text="Reject {{ $farm->FRM_NAME }}? The owner is notified of the rejection."
+                          data-confirm-tone="danger">
+                        @csrf
+                        <label for="seller-rejection-reason" class="form-label">Reason for rejection (optional)</label>
+                        <textarea id="seller-rejection-reason" name="reason" class="form-control mb-2" rows="2"
+                                  placeholder="Reason for rejection (optional)">{{ old('reason') }}</textarea>
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-x-circle me-1"></i> Reject
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </aside>
+    @endif
 </div>
-@endif
-
-@php
-    $viewerDocuments = [];
-
-    if ($farm->FRM_VERIFICATION_DOC_PATH) {
-        $viewerDocuments[] = [
-            'label' => 'Valid ID Document',
-            'url'   => $farm->FRM_VERIFICATION_DOC_PATH,
-        ];
-    }
-
-    if ($farm->FRM_FARM_CERTIFICATE_PATH) {
-        $viewerDocuments[] = [
-            'label' => 'Farm Permit / Certificate',
-            'url'   => $farm->FRM_FARM_CERTIFICATE_PATH,
-        ];
-    }
-@endphp
-
-@foreach($viewerDocuments as $document)
-    @php
-        $documentExtension = strtolower(pathinfo(parse_url($document['url'], PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
-    @endphp
-    <div class="panel">
-        <div class="panel-header">
-            <h5 class="panel-title">
-                <i class="bi bi-file-earmark-check"></i>
-                {{ $document['label'] }}
-            </h5>
-        </div>
-        <div class="panel-body">
-            <button type="button"
-                    class="btn btn-ghost"
-                    data-bs-toggle="modal"
-                    data-bs-target="#documentModal"
-                    data-document-url="{{ $document['url'] }}"
-                    data-document-title="{{ $document['label'] }}"
-                    data-document-kind="{{ in_array($documentExtension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? 'image' : 'file' }}">
-                <i class="bi bi-file-earmark-arrow-down me-1"></i> View Document
-            </button>
-        </div>
-    </div>
-@endforeach
-
-@if($farm->FRM_STATUS == 'PENDING_REVIEW')
-<div class="panel">
-    <div class="panel-header">
-        <h5 class="panel-title">
-            <i class="bi bi-check2-square"></i>
-            Decision
-        </h5>
-    </div>
-    <div class="panel-body">
-        <div class="decision-grid">
-
-            <form method="POST" action="{{ route('seller-requests.approve', $farm->FRM_ID) }}"
-                  data-confirm-title="Approve seller request?"
-                  data-confirm-text="Approve {{ $farm->FRM_NAME }}? The farm goes live for the owner immediately.">
-                @csrf
-                <button type="submit" class="btn btn-farm">
-                    <i class="bi bi-check-circle me-1"></i> Approve
-                </button>
-            </form>
-
-            <form method="POST" action="{{ route('seller-requests.reject', $farm->FRM_ID) }}"
-                  data-confirm-title="Reject seller request?"
-                  data-confirm-text="Reject {{ $farm->FRM_NAME }}? The owner is notified of the rejection."
-                  data-confirm-tone="danger">
-                @csrf
-                <textarea name="reason" class="form-control mb-2" rows="2"
-                          placeholder="Reason for rejection (optional)">{{ old('reason') }}</textarea>
-                <button type="submit" class="btn btn-danger">
-                    <i class="bi bi-x-circle me-1"></i> Reject
-                </button>
-            </form>
-
-        </div>
-    </div>
-</div>
-@endif
 
 @include('partials._media-modal')
-
+</div>
 @endsection

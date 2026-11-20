@@ -2,8 +2,10 @@
 
 @section('title', 'Dashboard')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh">
 <div class="page-head">
 
     <div>
@@ -597,7 +599,7 @@
     </div>
 
 </div>
-
+</div>
 @endsection
 
 @push('scripts')

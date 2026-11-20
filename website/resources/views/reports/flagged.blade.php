@@ -2,10 +2,15 @@
 
 @section('title', 'Mass Report Alerts')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-queue">
 <div class="page-head">
     <div>
+        <nav class="admin-refresh-crumb" aria-label="Breadcrumb">
+            <a href="{{ route('reports') }}">Reports</a><span aria-hidden="true">/</span><span aria-current="page">Mass-report alerts</span>
+        </nav>
         <h1 class="page-title">Mass Report Alerts</h1>
         <div class="page-desc">
             Targets that reached {{ $threshold }} distinct reporters while still open
@@ -106,5 +111,5 @@
     </div>
 
 @endforelse
-
+</div>
 @endsection

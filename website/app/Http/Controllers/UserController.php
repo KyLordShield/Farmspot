@@ -148,14 +148,17 @@ class UserController extends Controller
                 Rule::unique('user', 'USR_EMAIL')->ignore($user->USR_ID, 'USR_ID'),
             ],
             'USR_MOBILE_NUMBER' => ['required', 'string', 'max:20'],
-            'USR_ROLE' => ['required', 'in:GENERAL_USER,ADMIN'],
+            'USR_ROLE' => ['prohibited'],
             'USR_STATUS' => ['required', 'in:ACTIVE,PENDING_VERIFICATION,DEACTIVATED'],
             // A deactivation from this panel is a takedown: the owner gets a
             // reason they can read at the refused login and a re-evaluation they
             // can request, exactly like one that arrives through the reports
             // queue. Required only when the save is actually deactivating, so
             // fixing a typo in a name never demands a reason.
-            'USR_TAKEDOWN_REASON' => ['nullable', 'string', 'max:500', 'required_if:USR_STATUS,DEACTIVATED'],
+            'USR_TAKEDOWN_REASON' => [
+                Rule::excludeIf($previousStatus === 'DEACTIVATED' || $request->input('USR_STATUS') !== 'DEACTIVATED'),
+                'required', 'string', 'max:500',
+            ],
         ]);
 
         $newStatus = $validated['USR_STATUS'];
@@ -164,11 +167,10 @@ class UserController extends Controller
             'USR_NAME' => $validated['USR_NAME'],
             'USR_EMAIL' => $validated['USR_EMAIL'],
             'USR_MOBILE_NUMBER' => $validated['USR_MOBILE_NUMBER'],
-            'USR_ROLE' => $validated['USR_ROLE'],
             'USR_STATUS' => $newStatus,
         ]);
 
-        if ($newStatus === 'DEACTIVATED') {
+        if ($newStatus === 'DEACTIVATED' && $previousStatus !== 'DEACTIVATED') {
             $user->update([
                 'USR_TAKEDOWN_REASON' => $validated['USR_TAKEDOWN_REASON'],
                 'USR_TAKEDOWN_AT' => now(),

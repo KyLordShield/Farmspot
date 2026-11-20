@@ -2,8 +2,10 @@
 
 @section('title', 'Listings')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-queue">
 <div class="page-head">
     <div>
         <h1 class="page-title">Listings</h1>
@@ -13,6 +15,9 @@
     {{-- Categories live here rather than on their own page: a category is only
          ever looked at next to the listings it classifies. --}}
     <div class="page-actions">
+        <a href="{{ route('listings.create') }}" class="btn btn-farm">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i> Add Listing
+        </a>
         <button type="button"
                 class="btn btn-ghost"
                 data-bs-toggle="modal"
@@ -201,5 +206,5 @@
 </div>
 
 @include('partials._category-panel')
-
+</div>
 @endsection

@@ -1,0 +1,244 @@
+.content:has(.listing-details) {
+    background: #f6f7f9;
+}
+
+.listing-details {
+    --ld-border: #e5e7eb;
+    --ld-muted: #4b5563;
+    color: #111827;
+    font: 400 14px/1.5 var(--font-sans);
+    max-width: 1440px;
+    margin-inline: auto;
+}
+
+.ld-header,
+.ld-actions,
+.ld-title,
+.ld-breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.ld-header {
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.ld-title {
+    margin: 8px 0;
+}
+
+.ld-title h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.ld-breadcrumb, .ld-muted, .ld-relative {
+    color: var(--ld-muted);
+    font-size: 13px;
+}
+
+.ld-breadcrumb a, .ld-map-pin {
+    color: var(--green, #1b6b2c);
+}
+
+.ld-button, .ld-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--ld-border);
+    border-radius: 8px;
+    background: #fff;
+    color: #111827;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background-color 150ms, border-color 150ms;
+}
+
+.ld-button {
+    font-size: 13.5px;
+    min-height: 40px;
+    padding: 6px 14px;
+}
+
+.ld-copy {
+    min-height: 30px;
+    padding: 3px 8px;
+    font: 600 13px/1.5 ui-monospace, monospace;
+}
+
+.ld-button:hover, .ld-copy:hover { background: #f3f4f6; color: #111827; }
+.ld-primary { background: var(--green, #1b6b2c); border-color: var(--green, #1b6b2c); color: #fff; }
+.ld-primary:hover { background: #145523; border-color: #145523; color: #fff; }
+
+.listing-details :focus-visible {
+    outline: 3px solid var(--green, #1b6b2c);
+    outline-offset: 3px;
+}
+
+.ld-card {
+    background: #fff;
+    border: 1px solid var(--ld-border);
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgb(17 24 39 / 4%);
+    padding: 24px;
+    min-width: 0;
+}
+
+.ld-card h2, .ld-lightbox h2 {
+    font-size: 14px;
+    font-weight: 650;
+    margin: 0 0 16px;
+}
+
+.ld-columns, .ld-main {
+    display: grid;
+    gap: 24px;
+    min-width: 0;
+}
+
+.ld-columns {
+    grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
+    align-items: start;
+}
+
+.ld-main { grid-column: 1; grid-row: 1; }
+.ld-summary { grid-column: 2; grid-row: 1; position: sticky; top: 24px; }
+
+.ld-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 24px;
+    margin: 0;
+}
+
+.ld-fields dt {
+    color: var(--ld-muted);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.ld-fields dd { font-size: 13.5px; margin: 0; overflow-wrap: anywhere; }
+.ld-relative { display: inline-block; margin-inline-start: 4px; }
+.ld-summary .ld-fields { grid-template-columns: minmax(0, 1fr); }
+.ld-summary .ld-fields > div + div { border-top: 1px solid var(--ld-border); padding-top: 14px; }
+
+.ld-pill {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ld-pill::before {
+    content: '';
+    flex: 0 0 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.ld-green { background: #dcfce7; color: #166534; }
+.ld-red { background: #fee2e2; color: #991b1b; }
+.ld-amber { background: #fef3c7; color: #92400e; }
+.ld-gray { background: #f3f4f6; color: #374151; }
+
+.ld-gallery { margin-bottom: 24px; }
+.ld-photo {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #eef1ef;
+}
+
+.ld-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 150ms ease;
+}
+
+.ld-photo:hover img { transform: scale(1.025); }
+.ld-hero { height: clamp(220px, 34vw, 440px); }
+.ld-hero img { object-fit: contain; }
+.ld-thumbnails { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.ld-thumbnail { width: 88px; aspect-ratio: 4 / 3; }
+
+.ld-photo-count {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    color: #fff;
+    background: #111827;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+}
+
+.ld-lightbox {
+    width: min(900px, calc(100% - 32px));
+    max-height: calc(100% - 32px);
+    color: #111827;
+    background: #fff;
+    border: 1px solid var(--ld-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.ld-lightbox::backdrop { background: rgb(17 24 39 / 80%); }
+.ld-lightbox-heading, .ld-lightbox-nav { display: flex; align-items: center; gap: 16px; }
+.ld-lightbox-heading { justify-content: space-between; margin-bottom: 12px; }
+.ld-lightbox-heading h2 { margin: 0; }
+.ld-lightbox-nav { justify-content: center; margin-top: 12px; }
+.ld-lightbox img {
+    display: block;
+    width: 100%;
+    height: min(65dvh, 620px);
+    object-fit: contain;
+    border-radius: 8px;
+    background: #eef1ef;
+}
+
+@media (width < 1024px) {
+    .ld-columns { grid-template-columns: minmax(0, 1fr); }
+    .ld-main, .ld-summary { grid-column: auto; grid-row: auto; }
+    .ld-summary { position: static; }
+    .ld-summary .ld-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ld-summary .ld-fields > div + div { border-top: 0; padding-top: 0; }
+}
+
+@media (width < 768px) {
+    .ld-card { padding: 16px; }
+    .ld-fields, .ld-summary .ld-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ld-photo img, .ld-button, .ld-copy { transition: none; }
+    .ld-photo:hover img { transform: none; }
+}
+
+.ld-original { display: table; margin: 12px auto 0; color: var(--green, #1b6b2c); }
+
+.lf-layout { display: grid; gap: 24px; max-width: 900px; }
+.lf-wide { grid-column: 1 / -1; }
+.listing-form .form-label { font-weight: 600; }
+.listing-form .form-text { color: var(--ld-muted); }
+.listing-form .ld-primary:disabled { opacity: .65; cursor: not-allowed; }
+
+.ld-description { white-space: pre-wrap; }

@@ -1,0 +1,142 @@
+.content:has(.admin-refresh) {
+    background: #f6f7f9;
+}
+
+.admin-refresh {
+    --admin-card-border: #e5e7eb;
+    --admin-card-shadow: 0 2px 6px rgb(17 24 39 / 4%);
+    max-width: 1440px;
+    margin-inline: auto;
+}
+
+.admin-refresh .page-head { margin-bottom: 24px; }
+.admin-refresh .panel,
+.admin-refresh .stat-card {
+    border: 1px solid var(--admin-card-border);
+    border-radius: 12px;
+    box-shadow: var(--admin-card-shadow);
+}
+
+.admin-refresh .panel-header { padding: 20px 24px 0; border-bottom: 0; }
+.admin-refresh .panel-body { padding: 20px 24px 24px; }
+.admin-refresh .stat-card { padding: 20px 24px; }
+.admin-refresh .stat-grid { gap: 24px; margin-bottom: 24px; }
+.admin-refresh .panel-header + .table-responsive { margin-top: 16px; }
+
+.admin-refresh-crumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: #4b5563;
+    font-size: 13px;
+}
+.admin-refresh-crumb a { color: var(--green, #1b6b2c); }
+
+.admin-refresh .page-actions .btn,
+.admin-refresh-form .form-card .btn,
+.admin-refresh-sidebar .decision-grid .btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+}
+
+.admin-refresh-queue .filter-bar {
+    gap: 12px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--admin-card-border);
+}
+
+.admin-refresh-queue .table-responsive { max-height: min(68vh, 760px); }
+.admin-refresh-queue .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f6f7f9;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 600;
+}
+.admin-refresh-queue .data-table td { height: 56px; padding-block: 8px; }
+.admin-refresh-queue .data-table tbody tr:hover { background: #f4faf5; }
+
+.admin-refresh-split {
+    display: grid;
+    grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
+    align-items: start;
+    gap: 24px;
+}
+.admin-refresh-split:not(:has(.admin-refresh-sidebar)) { grid-template-columns: minmax(0, 1fr); }
+.admin-refresh-stack,
+.admin-refresh-sidebar {
+    display: grid;
+    gap: 24px;
+    min-width: 0;
+}
+.admin-refresh-stack > .panel,
+.admin-refresh-sidebar > .panel { margin: 0; }
+.admin-refresh-sidebar {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow: auto;
+    padding: 4px;
+    margin: -4px;
+}
+.admin-refresh-sidebar .decision-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+.admin-refresh-sidebar .decision-grid > form + form {
+    border-top: 1px solid var(--admin-card-border);
+    padding-top: 16px;
+}
+.admin-refresh-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin: 0;
+    padding: 20px 24px 24px;
+}
+.admin-refresh-fields dt {
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 4px;
+}
+.admin-refresh-fields dd { margin: 0; overflow-wrap: anywhere; }
+.admin-refresh-wide { grid-column: 1 / -1; }
+.admin-refresh-form .form-card { max-width: 900px; }
+.admin-refresh-quote {
+    margin: 0;
+    padding: 14px 16px;
+    background: #f3f4f6;
+    border-left: 3px solid #cbd5e1;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.admin-refresh :is(a, button, input, select, textarea):focus-visible {
+    outline: 2px solid var(--green, #1b6b2c);
+    outline-offset: 2px;
+}
+
+@media (max-width: 1023px) {
+    .admin-refresh-split { grid-template-columns: minmax(0, 1fr); }
+    .admin-refresh-sidebar { position: static; max-height: none; overflow: visible; }
+}
+
+@media (max-width: 767px) {
+    .admin-refresh .stat-grid { gap: 12px; }
+    .admin-refresh-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .admin-refresh .panel-header,
+    .admin-refresh .panel-body,
+    .admin-refresh-fields,
+    .admin-refresh-queue .filter-bar { padding-inline: 16px; }
+}
+
+.admin-form-divider { border-top: 1px solid var(--admin-card-border); padding-top: 20px; }

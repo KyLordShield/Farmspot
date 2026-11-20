@@ -53,6 +53,10 @@ class ReportController extends Controller
             // Lets the list show which reports have actually been acted on, so
             // "Resolved" is distinguishable from "we did something about it".
             ->withCount(['liveActions as live_actions_count'])
+            ->when($request->filled('reporter'), function ($query) use ($request) {
+                $query->where('USR_ID', $request->string('reporter')->toString())
+                    ->when($request->filled('except'), fn ($query) => $query->where('RPT_ID', '!=', $request->string('except')->toString()));
+            })
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('RPT_STATUS', $request->status);
             })
@@ -68,7 +72,8 @@ class ReportController extends Controller
             ->when($request->filled('search'), function ($query) use ($request) {
                 $query->where(function ($q) use ($request) {
                     $term = '%'.$request->search.'%';
-                    $q->where('RPT_REASON', 'like', $term)
+                    $q->where('RPT_ID', 'like', $term)
+                      ->orWhere('RPT_REASON', 'like', $term)
                       ->orWhere('RPT_DETAILS', 'like', $term)
                       ->orWhere('RPT_TARGET_ID', 'like', $term)
                       ->orWhereHas('user', function ($uq) use ($term) {
@@ -368,7 +373,13 @@ class ReportController extends Controller
         // labels are passed in rather than read off the model in the template:
         // Blade compiles without a namespace, so a bare Report:: in a view
         // resolves to the global class and 500s the page.
+        $reporterCount = $report->RPT_FLAGGED_AT && in_array($report->RPT_STATUS, ['New', 'Reviewing'], true)
+            ? Report::open()->forSameTarget($report)->whereNotNull('RPT_FLAGGED_AT')
+                ->distinct()->count('USR_ID')
+            : 0;
+
         return view('reports.show', [
+            'reporterCount' => $reporterCount,
             'report' => $report,
             'options' => $this->availableActions($report),
             'blocked' => $this->blockedReasons($report),

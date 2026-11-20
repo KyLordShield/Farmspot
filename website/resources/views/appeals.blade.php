@@ -2,8 +2,10 @@
 
 @section('title', 'Appeals')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-queue">
 @php
     $activeStatus = request('status');
     $totalAppeals = $counts->sum();
@@ -180,5 +182,5 @@
         {{ $appeals->links() }}
     </div>
 </div>
-
+</div>
 @endsection

@@ -2,8 +2,10 @@
 
 @section('title', 'Users')
 
-@section('content')
+@include('partials._admin-refresh')
 
+@section('content')
+<div class="admin-refresh admin-refresh-queue">
 <div class="page-head">
 
     <div>
@@ -212,5 +214,5 @@
     </div>
 
 </div>
-
+</div>
 @endsection

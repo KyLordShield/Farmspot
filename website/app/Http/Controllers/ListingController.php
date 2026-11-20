@@ -3,10 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\CropCategory;
+use App\Models\Farm;
 use App\Models\Listing;
 use App\Services\NotificationService;
+use App\Support\CloudinaryImage;
+use App\Support\InputLimits;
+use App\Support\ListingName;
+use App\Support\PhotoLimits;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ListingController extends Controller
 {
@@ -67,12 +78,25 @@ class ListingController extends Controller
         return view('listings.show', compact('listing'));
     }
 
+    public function create()
+    {
+        $listing = new Listing(['LST_STATUS' => 'AVAILABLE_NOW']);
+        $categories = CropCategory::orderBy('CAT_NAME')->get();
+        $farms = Farm::with('farmer.buyer.user')
+            ->whereHas('farmer', fn ($query) => $query->where('FMR_SELLER_MODE_ACTIVE', 1))
+            ->orderBy('FRM_NAME')->get();
+
+        return view('listings.edit', compact('listing', 'categories', 'farms'));
+    }
+
+    public function store(Request $request)
+    {
+        return $this->saveListing($request);
+    }
+
     public function edit($id)
     {
-        $listing = Listing::with(['farmer.buyer.user', 'farm', 'category'])
-            ->where('LST_ID', $id)
-            ->firstOrFail();
-
+        $listing = Listing::with(['farmer.buyer.user', 'farm', 'photos'])->findOrFail($id);
         $categories = CropCategory::orderBy('CAT_NAME')->get();
 
         return view('listings.edit', compact('listing', 'categories'));
@@ -80,33 +104,141 @@ class ListingController extends Controller
 
     public function update(Request $request, $id)
     {
-        $listing = Listing::where('LST_ID', $id)->firstOrFail();
+        return $this->saveListing($request, $id);
+    }
 
+    private function saveListing(Request $request, ?string $id = null)
+    {
+        $creating = $id === null;
         $validated = $request->validate([
-            'LST_CROP_ICON' => ['nullable', 'string', 'max:255'],
+            'LST_CROP_ICON' => [$creating ? 'required' : 'nullable', 'string', 'max:'.($creating ? InputLimits::CROP_NAME : 255)],
+            'LST_DESCRIPTION' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
             'LST_STATUS' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
-            'LST_AVAILABILITY' => ['required', 'in:ACTIVE,NOT_AVAILABLE,REMOVED'],
-            'LST_HARVEST_DATE' => ['nullable', 'date'],
+            'LST_AVAILABILITY' => [$creating ? 'prohibited' : 'required', 'in:ACTIVE,NOT_AVAILABLE,REMOVED'],
+            'LST_HARVEST_DATE' => ['exclude_unless:LST_STATUS,SOON_TO_HARVEST', 'required', 'date_format:Y-m-d'],
             'CAT_ID' => ['required', 'exists:crop_category,CAT_ID'],
+            'FRM_ID' => [$creating ? 'required' : 'prohibited', 'string'],
+            'photos' => ['nullable', 'array', 'max:'.PhotoLimits::LISTING],
+            'photos.*' => ['image', 'max:5120'],
+        ], [], [
+            'LST_CROP_ICON' => 'crop name',
+            'LST_DESCRIPTION' => 'description',
+            'LST_STATUS' => 'crop status',
+            'LST_AVAILABILITY' => 'listing availability',
+            'LST_HARVEST_DATE' => 'harvest date',
+            'CAT_ID' => 'category',
+            'FRM_ID' => 'farm',
+            'photos.*' => 'photo',
         ]);
 
-        // Read before the write, so the notification below can tell a genuine
-        // takedown from re-submitting the form for a listing that was already
-        // off sale.
-        $previousAvailability = $listing->LST_AVAILABILITY;
+        $uploads = [];
+        try {
+            [$listing, $previousAvailability] = DB::transaction(function () use ($id, $creating, $validated, &$uploads) {
+                $listing = $creating ? new Listing : Listing::findOrFail($id);
+                $farm = Farm::whereKey($creating ? $validated['FRM_ID'] : $listing->FRM_ID)
+                    ->lockForUpdate()->first();
+                if ($creating && (int) $farm?->farmer?->FMR_SELLER_MODE_ACTIVE !== 1) {
+                    throw ValidationException::withMessages(['FRM_ID' => 'Choose a farm with an active seller.']);
+                }
 
-        $listing->update([
-            'LST_CROP_ICON' => $validated['LST_CROP_ICON'],
-            'LST_STATUS' => $validated['LST_STATUS'],
-            'LST_AVAILABILITY' => $validated['LST_AVAILABILITY'],
-            'LST_HARVEST_DATE' => $validated['LST_HARVEST_DATE'],
-            'CAT_ID' => $validated['CAT_ID'],
-            'LST_UPDATED_AT' => now(),
-        ]);
+                if (! $creating) {
+                    $listing = Listing::lockForUpdate()->findOrFail($id);
+                }
+
+                $fields = Arr::except($validated, ['FRM_ID', 'photos']);
+                $name = $fields['LST_CROP_ICON'] ?? null;
+                if ($creating || (filled($name) && $name !== $listing->LST_CROP_ICON && $farm)) {
+                    try {
+                        ListingName::ensureUnique($farm->FRM_ID, $name, $id);
+                    } catch (HttpResponseException $exception) {
+                        throw ValidationException::withMessages([
+                            'LST_CROP_ICON' => $exception->getResponse()->getData()->message,
+                        ]);
+                    }
+                }
+
+                $previousAvailability = $listing->LST_AVAILABILITY;
+                if ($creating) {
+                    $listing->forceFill([
+                        'LST_ID' => $this->uniqueId('listing', 'LST_ID'),
+                        'FMR_ID' => $farm->FMR_ID,
+                        'FRM_ID' => $farm->FRM_ID,
+                        'LST_AVAILABILITY' => 'ACTIVE',
+                        'LST_CREATED_AT' => now(),
+                        'LST_EXPIRY_DATE' => now()->addDays(3),
+                    ]);
+                }
+
+                $listing->fill($fields);
+                $listing->LST_UPDATED_AT = now();
+                $listing->save();
+
+                if (! empty($validated['photos'])) {
+                    $this->appendPhotos($listing, $validated['photos'], $uploads);
+                }
+
+                return [$listing, $previousAvailability];
+            });
+        } catch (\Throwable $exception) {
+            foreach ($uploads as $url) {
+                CloudinaryImage::deleteByUrl($url);
+            }
+
+            throw $exception;
+        }
 
         $this->notifyIfRemovedByModerator($listing, $previousAvailability);
 
-        return redirect()->route('listings')->with('success', 'Listing updated successfully.');
+        return redirect()->route('listings.show', $listing->LST_ID)
+            ->with('success', $creating ? 'Listing added successfully.' : 'Listing updated successfully.');
+    }
+
+    private function appendPhotos(Listing $listing, array $photos, array &$uploads): void
+    {
+        $existing = $listing->photos()->count();
+        $legacyPhoto = $existing === 0 ? $listing->LST_IMAGE : null;
+        PhotoLimits::ensure($existing + (int) filled($legacyPhoto), count($photos), PhotoLimits::LISTING, 'listing');
+
+        if ($legacyPhoto) {
+            $this->addPhotoRow($listing, $legacyPhoto, true);
+            $existing++;
+        }
+
+        $disk = Storage::disk('cloudinary');
+        foreach ($photos as $photo) {
+            $path = "listing-photos/{$listing->LST_ID}/".Str::uuid().'.'.$photo->extension();
+            if (! $disk->put($path, $photo->getRealPath())) {
+                throw ValidationException::withMessages(['photos' => 'The photos could not be uploaded. Try again.']);
+            }
+
+            $url = $disk->url($path);
+            $uploads[] = $url;
+            $primary = $existing === 0;
+            $this->addPhotoRow($listing, $url, $primary);
+            if ($primary) {
+                $listing->update(['LST_IMAGE' => $url]);
+            }
+            $existing++;
+        }
+    }
+
+    private function addPhotoRow(Listing $listing, string $url, bool $primary): void
+    {
+        $listing->photos()->create([
+            'LPHOTO_ID' => $this->uniqueId('listing_photo', 'LPHOTO_ID'),
+            'LPHOTO_FILE_PATH' => $url,
+            'LPHOTO_IS_PRIMARY' => $primary,
+            'LPHOTO_UPLOADED_AT' => now(),
+        ]);
+    }
+
+    private function uniqueId(string $table, string $column): string
+    {
+        do {
+            $id = strtoupper(Str::random(6));
+        } while (DB::table($table)->where($column, $id)->exists());
+
+        return $id;
     }
 
     public function destroy($id)

@@ -1,0 +1,1 @@
+<span class="badge {{ ['New' => 'badge-soft-info', 'Reviewing' => 'badge-soft-warning', 'Resolved' => 'badge-soft-success', 'Dismissed' => 'badge-soft-neutral'][$status] ?? 'badge-soft-neutral' }}">{{ $status }}</span>
