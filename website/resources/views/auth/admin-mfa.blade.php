@@ -5,7 +5,7 @@
 
 @push('head')
     <link rel="stylesheet" href="{{ asset('css/admin-verification.css') }}">
-    <script src="{{ asset('js/admin-verification.js') }}" defer></script>
+    <script src="{{ asset('js/admin-verification.js') }}?v={{ filemtime(public_path('js/admin-verification.js')) }}" defer></script>
 @endpush
 
 @section('content')
@@ -49,7 +49,14 @@
                     @endfor
                 </div>
             </div>
-            <button type="submit" class="btn btn-farmspot verification-submit" @disabled(isset($retryAfter))>Verify and sign in</button>
+            <button type="submit" class="btn btn-farmspot verification-submit" @disabled(isset($retryAfter))>
+                <span data-verify-label>Verify and sign in</span>
+                <span data-verify-loading hidden>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    Verifying…
+                </span>
+            </button>
+            <span class="visually-hidden" role="status" data-verify-status></span>
         </form>
     @endif
 
