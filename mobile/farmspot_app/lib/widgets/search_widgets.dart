@@ -160,13 +160,10 @@ class SearchResultGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
+    return SliverLayoutBuilder(
+      builder: (context, constraints) => SliverGrid.builder(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: listingGridColumns(constraints.maxWidth),
+          crossAxisCount: listingGridColumns(constraints.crossAxisExtent),
           mainAxisSpacing: gap,
           crossAxisSpacing: gap,
           childAspectRatio: cardAspectRatio,

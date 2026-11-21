@@ -237,6 +237,27 @@ class ListingService {
   }
 
   /// Fetches a single listing's detail by ID.
+  static Future<List<Map<String, dynamic>>> fetchMapMatches(
+    Set<String> terms, {
+    String? category,
+    String? status,
+  }) async {
+    final uri = Uri.parse('$baseUrl/listings').replace(
+      queryParameters: {
+        'view': 'map',
+        for (final (index, term) in terms.indexed) 'terms[$index]': term,
+        if (category != null) 'category': category,
+        if (status != null) 'status': status,
+      },
+    );
+    final response = await http
+        .get(uri, headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) throw Exception('Could not load map.');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (data['matches'] as List).cast<Map<String, dynamic>>();
+  }
+
   static Future<Listing> fetchListing(String id) async {
     try {
       final response = await http.get(

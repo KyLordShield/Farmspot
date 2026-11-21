@@ -87,29 +87,34 @@ class ListingController extends Controller
         // the query is built, because ranking reads this user's search history.
         $user = $request->user('sanctum');
 
-        // withRatingSummary() folds the average + count into this same query as
-        // two subqueries, so rating_average / rating_count reach every card on
-        // the feed at the cost of nothing extra per listing.
-        $query = Listing::with(['farm', 'category', 'farmer.buyer.user', 'photos'])
-            ->withRatingSummary()
+        $mapView = $request->query('view') === 'map';
+        $terms = $mapView
+            ? $request->validate([
+                'terms' => ['sometimes', 'array', 'max:50'],
+                'terms.*' => ['required', 'string', 'max:200'],
+                'search' => ['sometimes', 'string', 'max:200'],
+            ])['terms'] ?? ($search ? [$search] : [])
+            : ($search ? [$search] : []);
+
+        if ($mapView && $terms === []) {
+            return response()->json(['matches' => []]);
+        }
+
+        $query = Listing::query()
             ->where('LST_AVAILABILITY', 'ACTIVE')
             ->where('LST_STATUS', '!=', 'NOT_AVAILABLE')
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('LST_CROP_ICON', 'LIKE', "%{$search}%")
-                        ->orWhereHas('farm', function ($fq) use ($search) {
-                            $fq->where('FRM_NAME', 'LIKE', "%{$search}%");
-                        })->orWhereHas('category', function ($cq) use ($search) {
-                            $cq->where('CAT_NAME', 'LIKE', "%{$search}%");
-                        })->orWhere('LST_DESCRIPTION', 'LIKE', "%{$search}%")
-                        // Seller name: a search for a person ("Aling Nena") should
-                        // surface the crops they sell, the same way a farm-name
-                        // search already does. Reached through the same
-                        // farmer.buyer.user chain the feed eager-loads, so this
-                        // adds no query of its own beyond the whereExists.
-                        ->orWhereHas('farmer.buyer.user', function ($uq) use ($search) {
-                            $uq->where('USR_NAME', 'LIKE', "%{$search}%");
+            ->when($terms, function ($query, $terms) {
+                $query->where(function ($matches) use ($terms) {
+                    foreach ($terms as $term) {
+                        $pattern = "%{$term}%";
+                        $matches->orWhere(function ($listing) use ($pattern) {
+                            $listing->where('LST_CROP_ICON', 'LIKE', $pattern)
+                                ->orWhere('LST_DESCRIPTION', 'LIKE', $pattern)
+                                ->orWhereHas('farm', fn ($farm) => $farm->where('FRM_NAME', 'LIKE', $pattern))
+                                ->orWhereHas('category', fn ($category) => $category->where('CAT_NAME', 'LIKE', $pattern))
+                                ->orWhereHas('farmer.buyer.user', fn ($seller) => $seller->where('USR_NAME', 'LIKE', $pattern));
                         });
+                    }
                 });
             })
             ->when($category, fn ($q) => $q->where('CAT_ID', $category))
@@ -117,6 +122,31 @@ class ListingController extends Controller
                 in_array($status, $allowedStatuses, true),
                 fn ($q) => $q->where('LST_STATUS', $status)
             );
+
+        if ($mapView) {
+            $matches = $query
+                ->whereHas('farm', fn ($farm) => $farm->where('FRM_STATUS', 'APPROVED')
+                    ->whereBetween('FRM_LATITUDE', [-90, 90])
+                    ->whereBetween('FRM_LONGITUDE', [-180, 180])
+                    ->where(fn ($point) => $point->where('FRM_LATITUDE', '!=', 0)
+                        ->orWhere('FRM_LONGITUDE', '!=', 0)))
+                ->with('farm:FRM_ID,FRM_NAME,FRM_LATITUDE,FRM_LONGITUDE')
+                ->orderBy('LST_ID')
+                ->get(['LST_ID', 'LST_CROP_ICON', 'LST_STATUS', 'FRM_ID'])
+                ->map(fn (Listing $listing) => [
+                    'id' => $listing->LST_ID,
+                    'crop' => $listing->LST_CROP_ICON,
+                    'status' => $listing->LST_STATUS,
+                    'farm_id' => $listing->FRM_ID,
+                    'farm' => $listing->farm->FRM_NAME,
+                    'lat' => (float) $listing->farm->FRM_LATITUDE,
+                    'lng' => (float) $listing->farm->FRM_LONGITUDE,
+                ]);
+
+            return response()->json(['matches' => $matches]);
+        }
+
+        $query->with(['farm', 'category', 'farmer.buyer.user', 'photos'])->withRatingSummary();
 
         // Each sort needs a different leading column, and only "popular" needs
         // a join, so the three are built separately rather than through one
@@ -225,7 +255,7 @@ class ListingController extends Controller
         // original: same insert, same fields, same counting.
         $isSuggestion = $request->query('suggest') === '1';
 
-        if ($search && $user && !$isSuggestion) {
+        if ($search && $user && !$isSuggestion && ($paging['page'] ?? 1) === 1) {
             do {
                 $searchId = strtoupper(Str::random(6));
             } while (SearchLog::where('SRCH_ID', $searchId)->exists());

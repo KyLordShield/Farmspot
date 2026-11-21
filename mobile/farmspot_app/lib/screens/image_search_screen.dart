@@ -11,7 +11,6 @@ import '../models/search_crop_group.dart';
 import '../services/farm_service.dart';
 import '../services/gallery_service.dart';
 import '../services/image_detect_service.dart';
-import '../services/listing_service.dart';
 import '../services/live_camera.dart';
 import '../services/location_service.dart';
 import '../theme.dart';
@@ -466,8 +465,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
             for (final crop in crops)
               (SearchCropGroup.resolve(crop.name).title, crop.confidence),
           ],
-          loadResults:
-              widget.loadResults ?? (t) => ListingService.fetchListings(search: t),
+          loadResults: widget.loadResults,
           loadFarms: widget.loadFarms ?? FarmService.fetchPublicFarms,
           loadBuyerPosition:
               widget.loadBuyerPosition ?? LocationService.tryBuyerPosition,

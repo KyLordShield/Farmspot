@@ -72,13 +72,15 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: SingleChildScrollView(
-                child: SearchResultGrid(
-                  items: items,
-                  cardAspectRatio: 0.72,
-                  gap: 4,
-                  onTap: (item) => tapped = item,
-                ),
+              body: CustomScrollView(
+                slivers: [
+                  SearchResultGrid(
+                    items: items,
+                    cardAspectRatio: 0.72,
+                    gap: 4,
+                    onTap: (item) => tapped = item,
+                  ),
+                ],
               ),
             ),
           ),

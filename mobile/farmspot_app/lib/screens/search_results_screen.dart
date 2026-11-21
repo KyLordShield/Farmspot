@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/crop_category.dart';
 import '../models/farm_pin.dart';
+import '../models/home_feed_page.dart';
 import '../models/listing.dart';
 import '../models/listing_review.dart';
 import '../models/search_crop_group.dart';
@@ -14,6 +16,7 @@ import '../services/search_service.dart';
 import '../theme.dart';
 import '../utils/crop_icons.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/map_tile_layer.dart';
 import '../widgets/search_widgets.dart';
 import '../widgets/lottie_loader.dart';
 import 'farm_profile_screen.dart';
@@ -89,7 +92,8 @@ class SearchResultsScreen extends StatefulWidget {
   /// then fall back to the group's position and sort purely by distance.
   final List<(String, double)> detectionConfidences;
 
-  final Future<List<Listing>> Function(String term) loadResults;
+  final Future<List<Listing>> Function(String term)? loadResults;
+  final Future<HomeFeedPage> Function(String term, int page) loadPage;
 
   final Future<List<FarmPin>> Function() loadFarms;
 
@@ -112,7 +116,8 @@ class SearchResultsScreen extends StatefulWidget {
     required this.query,
     this.groups = const [],
     this.detectionConfidences = const [],
-    this.loadResults = _defaultLoadResults,
+    this.loadResults,
+    this.loadPage = _defaultLoadPage,
     this.loadFarms = FarmService.fetchPublicFarms,
     this.loadPreviews = _defaultLoadPreviews,
     this.loadBuyerPosition = LocationService.tryBuyerPosition,
@@ -122,11 +127,12 @@ class SearchResultsScreen extends StatefulWidget {
   State<SearchResultsScreen> createState() => _SearchResultsScreenState();
 }
 
-/// Default results loader: the existing feed search WITHOUT the ?suggest=1
-/// opt-out, so a real submitted search logs into search_log exactly as before.
-Future<List<Listing>> _defaultLoadResults(String term) {
-  return ListingService.fetchListings(search: term);
-}
+Future<HomeFeedPage> _defaultLoadPage(String term, int page) =>
+    ListingService.fetchListingsPage(
+      search: term,
+      page: page,
+      personalized: false,
+    );
 
 /// Default farm/seller previews for the submitted term. Capped at the same
 /// number the typeahead uses so the preview and "See all" agree.
@@ -210,6 +216,284 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// derived from distances that have not arrived yet.
   bool _locating = false;
 
+  Map<String, int> _nextPages = const {};
+  bool _loadingMore = false;
+  bool _loadMoreFailed = false;
+
+  Future<Map<String, HomeFeedPage>> _fetchPages(
+    Map<String, int> requests,
+  ) async {
+    final results = await Future.wait(
+      requests.entries.map((request) async {
+        final loader = widget.loadResults;
+        final page = loader == null
+            ? await widget.loadPage(request.key, request.value)
+            : HomeFeedPage.unpaged(await loader(request.key));
+        return MapEntry(request.key, page);
+      }),
+    );
+    return Map.fromEntries(results);
+  }
+
+  void _appendPages(Map<String, HomeFeedPage> pages) {
+    _nextPages = {
+      for (final entry in pages.entries)
+        if (entry.value.hasMore) entry.key: entry.value.currentPage + 1,
+    };
+    if (!_multi) {
+      final rows = {for (final row in _rows) row.listing.listingId: row};
+      for (final listing in pages.values.expand((page) => page.listings)) {
+        rows.putIfAbsent(
+          listing.id,
+          () => _ResultRow(listing: listing.toCropListing()),
+        );
+      }
+      _rows = rows.values.toList();
+      return;
+    }
+
+    final confidenceByTitle = {
+      for (final crop in widget.detectionConfidences.reversed) crop.$1: crop.$2,
+    };
+    final best = {for (final row in _imageResults) row.listing.listingId: row};
+    for (final group in widget.groups) {
+      final confidence = confidenceByTitle[group.title] ?? 0;
+      for (final term in group.terms) {
+        for (final listing in pages[term]?.listings ?? const <Listing>[]) {
+          final existing = best[listing.id];
+          if (existing != null && existing.confidence >= confidence) continue;
+          best[listing.id] = _ImageResult(
+            listing: existing?.listing ?? listing.toCropListing(),
+            cropTitle: group.title,
+            confidence: confidence,
+          );
+        }
+      }
+    }
+    _imageResults = best.values.toList();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || _nextPages.isEmpty) return;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
+    try {
+      final pages = await _fetchPages(_nextPages);
+      if (!mounted) return;
+      setState(() {
+        _appendPages(pages);
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMore = false;
+        _loadMoreFailed = true;
+      });
+    }
+  }
+
+  bool _showMap = false;
+  LatLng? _buyerPosition;
+  Future<List<Map<String, dynamic>>>? _mapMatches;
+
+  void _loadMap() {
+    final terms = _multi
+        ? widget.groups.expand((group) => group.terms).toSet()
+        : {widget.query};
+    final status = switch (_sort) {
+      SearchSortMode.nearest => null,
+      SearchSortMode.available => 'AVAILABLE_NOW',
+      SearchSortMode.soonToHarvest => 'SOON_TO_HARVEST',
+    };
+    _mapMatches = ListingService.fetchMapMatches(
+      terms,
+      category: _activeCategoryId,
+      status: status,
+    );
+  }
+
+  Widget _buildMap() => FutureBuilder<List<Map<String, dynamic>>>(
+    future: _mapMatches,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const Center(child: FarmLottieLoading());
+      }
+      if (snapshot.hasError) {
+        return Center(
+          child: TextButton(
+            onPressed: () => setState(_loadMap),
+            child: const Text('Could not load map. Try again'),
+          ),
+        );
+      }
+      final farms = <String, List<Map<String, dynamic>>>{};
+      for (final match in snapshot.data!) {
+        (farms[match['farm_id'] as String] ??= []).add(match);
+      }
+      final position = _buyerPosition;
+      if (farms.isEmpty && position == null) {
+        return const Center(
+          child: Text('No matching farms with a map location.'),
+        );
+      }
+
+      final markers = [
+        for (final farm in farms.values)
+          Marker(
+            point: LatLng(
+              (farm.first['lat'] as num).toDouble(),
+              (farm.first['lng'] as num).toDouble(),
+            ),
+            width: 48,
+            height: 48,
+            child: IconButton(
+              tooltip: farm.first['farm'] as String,
+              color: AppColors.primaryGreen,
+              iconSize: 34,
+              icon: const Icon(Icons.location_on),
+              onPressed: () => _showFarmMatches(farm),
+            ),
+          ),
+      ];
+      final points = {
+        for (final marker in markers) marker.point,
+        ?position,
+      };
+      return FlutterMap(
+        key: ObjectKey(snapshot.data),
+        options: MapOptions(
+          initialCenter: points.first,
+          initialZoom: 14,
+          initialCameraFit: points.length > 1
+              ? CameraFit.bounds(
+                  bounds: LatLngBounds.fromPoints(points.toList()),
+                  padding: const EdgeInsets.all(40),
+                  maxZoom: 15,
+                )
+              : null,
+        ),
+        children: [
+          const MapTileLayer(panBuffer: 1),
+          MarkerLayer(
+            markers: [
+              ...markers,
+              if (position != null)
+                Marker(
+                  point: position,
+                  width: 28,
+                  height: 28,
+                  child: const Tooltip(
+                    message: 'You are here',
+                    child: Icon(Icons.my_location, color: Colors.blue),
+                  ),
+                ),
+            ],
+          ),
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: Builder(
+              builder: (mapContext) => FilledButton.tonalIcon(
+                icon: const Icon(Icons.my_location),
+                label: Text(
+                  position == null ? 'Location unavailable' : 'My location',
+                ),
+                onPressed: position == null
+                    ? null
+                    : () => MapController.of(mapContext).move(position, 15),
+              ),
+            ),
+          ),
+          if (farms.isEmpty)
+            const Align(
+              alignment: Alignment.topCenter,
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('No matching farms with a map location.'),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+
+  void _showFarmMatches(List<Map<String, dynamic>> matches) {
+    final farm = matches.first;
+    final position = _buyerPosition;
+    final distance = position == null
+        ? null
+        : LocationService.distanceKm(
+            position,
+            LatLng(
+              (farm['lat'] as num).toDouble(),
+              (farm['lng'] as num).toDouble(),
+            ),
+          );
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              matches.first['farm'] as String,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          if (distance != null)
+            Text('${distance.toStringAsFixed(1)} km away (straight line)'),
+          Expanded(
+            child: ListView.builder(
+              itemCount: matches.length,
+              itemBuilder: (context, index) {
+                final match = matches[index];
+                return ListTile(
+                  title: Text(match['crop'] as String),
+                  subtitle: Text(
+                    match['status'] == 'SOON_TO_HARVEST'
+                        ? 'Soon to harvest'
+                        : 'Available now',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _openMapListing(match['id'] as String);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openMapListing(String id) async {
+    try {
+      final listing = await ListingService.fetchListing(id);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ProductDetailScreen(listing: listing.toCropListing()),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open this listing. Try again.'),
+        ),
+      );
+    }
+  }
+
   bool _loading = true;
   String? _error;
 
@@ -244,78 +528,24 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     });
 
     try {
-      // Category list for the Filters sheet. Failure-tolerant: an empty list
-      // just leaves the sheet with "All" only, results still render fine.
-      var categories = <CropCategory>[];
-      try {
-        categories = await ListingService.fetchCropCategories();
-      } catch (_) {}
-
-      // Distance data behind the "Nearest" sort: buyer position + public farm
-      // pins. Both calls are failure-tolerant (fallback position / empty list),
-      // so results still render when distances can't be resolved. Loaded AFTER
-      // the results themselves so a slow/failed term lookup fails fast.
-      var rows = const <_ResultRow>[];
-      var imageResults = const <_ImageResult>[];
-      var previews = SearchSuggestions.empty;
-
-      // Detection confidence per group title. The detector returns crops
-      // already sorted strongest-first, so the first occurrence wins.
-      final confidenceByTitle = <String, double>{};
-      for (final crop in widget.detectionConfidences) {
-        confidenceByTitle.putIfAbsent(crop.$1, () => crop.$2);
-      }
-
-      if (_multi) {
-        // Flatten EVERY detected crop into ONE list, like a lens search.
-        // Alias terms are still fetched per group (so a "kamatis" surfaces
-        // "Tomato" listings) but dedup is now GLOBAL rather than per-section,
-        // so a listing matched by two crops shows once, keeping the crop with
-        // the higher detection confidence.
-        final bestByListingId = <String, _ImageResult>{};
-        for (final group in widget.groups) {
-          final confidence = confidenceByTitle[group.title] ?? 0;
-          final seenInGroup = <String>{};
-          for (final term in group.terms) {
-            final listings = await widget.loadResults(term);
-            for (final listing in listings) {
-              // Same listing twice from this group's own aliases: skip.
-              if (!seenInGroup.add(listing.id)) continue;
-              final crop = listing.toCropListing();
-              final existing = bestByListingId[listing.id];
-              // Already found via another crop: keep the higher confidence.
-              if (existing != null && existing.confidence >= confidence) {
-                continue;
-              }
-              bestByListingId[listing.id] = _ImageResult(
-                listing: crop,
-                cropTitle: group.title,
-                confidence: confidence,
-              );
-            }
-          }
-        }
-        imageResults = bestByListingId.values.toList();
-      } else {
-        // Farms/sellers for the preview run in parallel with the crop fetch.
-        // Failure-tolerant: a search that cannot resolve previews still shows
-        // its crop results.
-        final previewsFuture = widget.loadPreviews(widget.query);
-        final listings = await widget.loadResults(widget.query);
-        // Only the listing is kept. The card payload is built at render time by
-        // [_itemFor], because the distance on it is not knowable until the farms
-        // endpoint has answered — a card built here had nothing to show but a
-        // placeholder.
-        rows = listings
-            .map((listing) => _ResultRow(listing: listing.toCropListing()))
-            .toList();
-        try {
-          previews = await previewsFuture;
-        } catch (_) {
-          previews = SearchSuggestions.empty;
-        }
-      }
-
+      final categoriesFuture = ListingService.fetchCropCategories().onError(
+        (_, _) => <CropCategory>[],
+      );
+      final farmsFuture = widget.loadFarms().onError((_, _) => <FarmPin>[]);
+      final requests = <String, int>{
+        if (_multi)
+          for (final group in widget.groups)
+            for (final term in group.terms) term: 1
+        else
+          widget.query: 1,
+      };
+      final previewsFuture = _multi
+          ? Future.value(SearchSuggestions.empty)
+          : widget
+                .loadPreviews(widget.query)
+                .onError((_, _) => SearchSuggestions.empty);
+      final pages = await _fetchPages(requests);
+      final previews = await previewsFuture;
       // Both lists ask for a REAL fix, so neither measures from the Cebu
       // fallback anchor. Image search worked this way already; text search used
       // to resolve a position that always came back as that fallback, so a buyer
@@ -328,14 +558,14 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       // So results render now with no distances, and [_applyBuyerPosition] fills
       // them in when the lookup settles.
       final positionLookup = widget.loadBuyerPosition();
-      final farms = await widget.loadFarms();
+      final farms = await farmsFuture;
+      final categories = await categoriesFuture;
 
       if (!mounted) return;
       setState(() {
-        _rows = rows;
-        if (_multi) {
-          _imageResults = imageResults;
-        }
+        _rows = const [];
+        _imageResults = const [];
+        _appendPages(pages);
         _previews = previews;
         _categories = categories;
         if (_activeCategoryId != null &&
@@ -380,6 +610,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       };
       setState(() {
         _distances = distances;
+        _buyerPosition = fix;
         _hasLocation = fix != null;
         _locating = false;
       });
@@ -672,7 +903,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     );
 
     if (picked == null || !mounted) return;
-    setState(() => _activeCategoryId = picked.isEmpty ? null : picked);
+    setState(() {
+      _activeCategoryId = picked.isEmpty ? null : picked;
+      _mapMatches = null;
+    });
   }
 
   /// The Filters chip: shows "Filters" normally, or the active category name
@@ -737,7 +971,44 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         child: Column(
           children: [
             _buildHeader(),
-            Expanded(child: _buildBody()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: false,
+                      label: Text('List'),
+                      icon: Icon(Icons.view_list_outlined),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      label: Text('Map'),
+                      icon: Icon(Icons.map_outlined),
+                    ),
+                  ],
+                  selected: {_showMap},
+                  onSelectionChanged: (selection) => setState(() {
+                    _showMap = selection.single;
+                    if (_showMap && _mapMatches == null) _loadMap();
+                  }),
+                ),
+              ),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _showMap ? 1 : 0,
+                sizing: StackFit.expand,
+                children: [
+                  TickerMode(enabled: !_showMap, child: _buildBody()),
+                  if (_mapMatches != null)
+                    TickerMode(enabled: _showMap, child: _buildMap())
+                  else
+                    const SizedBox.shrink(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -783,7 +1054,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     final children = <Widget>[
       SearchResultsToolbar(
         sort: _sort,
-        onSortChanged: (mode) => setState(() => _sort = mode),
+        onSortChanged: (mode) => setState(() {
+          _sort = mode;
+          _mapMatches = null;
+        }),
         trailing: _buildFilterChip(),
       ),
       const SizedBox(height: 14),
@@ -806,7 +1080,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Center(
             child: Text(
-              _sort != SearchSortMode.nearest
+              _nextPages.isNotEmpty
+                  ? 'No matches in the results loaded so far.'
+                  : _sort != SearchSortMode.nearest
                   ? 'No listings match this availability filter.'
                   : _activeCategoryId != null && _rows.isNotEmpty
                   ? 'No ${(_activeCategoryName ?? 'crop').toLowerCase()} '
@@ -857,7 +1133,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       } else if (near.isEmpty && other.isNotEmpty) {
         children.add(
           Text(
-            'No farms selling $_displayTitle within $_searchRadiusLabel of you',
+            _nextPages.isNotEmpty
+                ? 'No nearby farms in the results loaded so far.'
+                : 'No farms selling $_displayTitle within $_searchRadiusLabel of you',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
         );
@@ -886,9 +1164,55 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       children.add(_resultGrid(rows.map(_itemFor).toList(growable: false)));
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      children: children,
+    return _pagedList(children, const EdgeInsets.fromLTRB(20, 12, 20, 24));
+  }
+
+  Widget _pagedList(List<Widget> children, EdgeInsets padding) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0 &&
+            notification is ScrollUpdateNotification &&
+            (notification.scrollDelta ?? 0) > 0 &&
+            notification.metrics.extentAfter < 400 &&
+            !_loadMoreFailed) {
+          _loadMore();
+        }
+        return false;
+      },
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: padding,
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                for (final child in children)
+                  if (child is SearchResultGrid)
+                    child
+                  else
+                    SliverToBoxAdapter(child: child),
+                if (_nextPages.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: _loadingMore
+                            ? const CircularProgressIndicator()
+                            : TextButton(
+                                onPressed: _loadMore,
+                                child: Text(
+                                  _loadMoreFailed
+                                      ? 'Retry loading more'
+                                      : 'Load more',
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -927,12 +1251,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       children.add(const SizedBox(height: 6));
       if (ordering.inRange.isEmpty) {
         children.add(_buildImageEmptyState());
-        return ListView(padding: _imageListPadding, children: children);
+        return _pagedList(children, _imageListPadding);
       }
       children.add(
         _imageGrid(_imageItems(ordering.inRange, showDistance: false)),
       );
-      return ListView(padding: _imageListPadding, children: children);
+      return _pagedList(children, _imageListPadding);
     }
 
     children.add(const SizedBox(height: 8));
@@ -950,7 +1274,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       } else {
         children.add(_imageGrid(_imageItems(ordering.outOfRange)));
       }
-      return ListView(padding: _imageListPadding, children: children);
+      return _pagedList(children, _imageListPadding);
     }
 
     children.add(_imageGrid(_imageItems(ordering.inRange)));
@@ -962,7 +1286,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       children.add(_imageGrid(_imageItems(ordering.outOfRange)));
     }
 
-    return ListView(padding: _imageListPadding, children: children);
+    return _pagedList(children, _imageListPadding);
   }
 
   /// One image-search grid, always with the same density. Every grid in
@@ -1085,7 +1409,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$count $noun selling $cropNoun $suffix',
+            '$count $noun selling $cropNoun $suffix'
+            '',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
         ),
@@ -1122,7 +1447,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$count $noun selling $_displayTitle $suffix',
+            '$count $noun selling $_displayTitle $suffix'
+            '',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
         ),
