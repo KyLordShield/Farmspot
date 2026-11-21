@@ -113,26 +113,57 @@
             <div class="panel-body">
 
                 @if($plannerReady)
-                    <form method="POST" action="{{ route('planner.store') }}" id="eventForm" class="event-form" hidden data-auto-spinner>
+                    <form method="POST" action="{{ route('planner.store') }}" id="eventForm" class="event-form" @if(old('APL_TYPE') !== 'EVENT') hidden @endif data-auto-spinner>
                         @csrf
                         <input type="hidden" name="APL_TYPE" value="EVENT">
 
                         <div class="row g-2">
-                            <div class="col-md-6">
-                                <input type="text" name="APL_TITLE" class="form-control form-control-sm"
-                                       placeholder="Event title" maxlength="150" required>
+                            <div class="col-12">
+                                <label for="eventTitle" class="form-label">Event title</label>
+                                <input type="text" name="APL_TITLE" id="eventTitle" class="form-control"
+                                       placeholder="Event title" maxlength="150" value="{{ old('APL_TYPE') === 'EVENT' ? old('APL_TITLE') : '' }}" required>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-12">
+                                <div id="eventDateFallback">
+                                <label for="eventDate" class="form-label">Date and time (Philippine time)</label>
                                 <input type="datetime-local" name="APL_DATETIME" id="eventDate"
-                                       class="form-control form-control-sm" required>
+                                       class="form-control form-control-sm @error('APL_DATETIME') is-invalid @enderror"
+                                       min="{{ now('Asia/Manila')->format('Y-m-d') }}T00:00"
+                                       value="{{ old('APL_TYPE') === 'EVENT' ? old('APL_DATETIME') : '' }}" required>
+                                </div>
+                                <fieldset id="eventSchedule" class="event-schedule" hidden>
+                                    <legend class="visually-hidden">Event date and time</legend>
+                                    <div class="event-schedule-field">
+                                        <label for="eventDay"><i class="bi bi-calendar3" aria-hidden="true"></i> Date</label>
+                                        <input type="date" id="eventDay" class="form-control" min="{{ now('Asia/Manila')->toDateString() }}">
+                                        <div class="event-quick-choices" aria-label="Quick dates">
+                                            <button type="button" class="event-choice" data-event-day="0" aria-pressed="false">Today</button>
+                                            <button type="button" class="event-choice" data-event-day="1" aria-pressed="false">Tomorrow</button>
+                                            <button type="button" class="event-choice" data-event-day="7" aria-pressed="false">In a week</button>
+                                        </div>
+                                    </div>
+                                    <div class="event-schedule-field">
+                                        <label for="eventTime"><i class="bi bi-clock" aria-hidden="true"></i> Time</label>
+                                        <input type="time" id="eventTime" class="form-control" step="60">
+                                        <div class="event-quick-choices" aria-label="Quick times">
+                                            <button type="button" class="event-choice" data-event-time="09:00" aria-pressed="false">9:00 AM</button>
+                                            <button type="button" class="event-choice" data-event-time="13:00" aria-pressed="false">1:00 PM</button>
+                                            <button type="button" class="event-choice" data-event-time="15:00" aria-pressed="false">3:00 PM</button>
+                                        </div>
+                                    </div>
+                                    <p class="event-schedule-preview" id="eventSchedulePreview" role="status" aria-live="polite"></p>
+                                </fieldset>
+                                @error('APL_DATETIME')
+                                    <div class="text-danger small mt-2">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-12">
                                 <input type="text" name="APL_BODY" class="form-control form-control-sm"
-                                       placeholder="Details (optional)" maxlength="2000">
+                                       placeholder="Details (optional)" maxlength="2000" value="{{ old('APL_TYPE') === 'EVENT' ? old('APL_BODY') : '' }}">
                             </div>
                             <div class="col-12">
                                 <label class="form-check">
-                                    <input type="checkbox" name="APL_NOTIFY_FARMERS" value="1" class="form-check-input" checked>
+                                    <input type="checkbox" name="APL_NOTIFY_FARMERS" value="1" class="form-check-input" @checked(old('APL_TYPE') !== 'EVENT' || old('APL_NOTIFY_FARMERS') === '1')>
                                     <span class="form-check-label">Notify farmers about this event</span>
                                 </label>
                                 <small class="text-muted">Times are Philippine time. Farmers receive one announcement, delivered in background batches. Uncheck for a private event.</small>
@@ -603,5 +634,6 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/event-schedule.js') }}?v={{ filemtime(public_path('js/event-schedule.js')) }}"></script>
 <script src="{{ asset('js/dashboard.js') }}?v={{ filemtime(public_path('js/dashboard.js')) }}"></script>
 @endpush

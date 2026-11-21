@@ -29,8 +29,15 @@
             .replace(/[&<>"']/g, function (ch) { return '&#' + ch.charCodeAt(0) + ';'; });
     }
 
-    var today = new Date();
-    var todayKey = key(today);
+    function philippineToday() {
+        var parts = {};
+        new Intl.DateTimeFormat('en', {
+            timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date()).forEach(function (part) { parts[part.type] = part.value; });
+        return parts.year + '-' + parts.month + '-' + parts.day;
+    }
+    var todayKey = philippineToday();
+    var today = new Date(todayKey + 'T12:00:00');
     var view = new Date(today.getFullYear(), today.getMonth(), 1);
     var selected = todayKey;
 
@@ -149,14 +156,35 @@
         }
         eventForm.hidden = !show;
         if (show) {
+            todayKey = philippineToday();
+            if (dateInput) dateInput.min = todayKey + 'T00:00';
             if (dateInput && !dateInput.value) {
-                dateInput.value = selected + 'T09:00';
+                dateInput.value = (selected < todayKey ? todayKey : selected) + 'T09:00';
             }
+            if (dateInput) dateInput.dispatchEvent(new Event('change', { bubbles: true }));
             var titleInput = eventForm.querySelector('input[name="APL_TITLE"]');
             if (titleInput) {
                 titleInput.focus();
             }
         }
+    }
+
+    if (eventForm) {
+        eventForm.addEventListener('submit', function (event) {
+            if (dateInput) dateInput.min = philippineToday() + 'T00:00';
+            var dayInput = document.getElementById('eventDay');
+            if (dayInput) dayInput.min = philippineToday();
+            if (!eventForm.checkValidity()) {
+                event.preventDefault();
+                // The global spinner may already have run in the capture phase.
+                eventForm.querySelectorAll('button[type="submit"]').forEach(function (button) {
+                    button.disabled = false;
+                    var spinner = button.querySelector('.spinner-border');
+                    if (spinner) spinner.remove();
+                });
+                eventForm.reportValidity();
+            }
+        });
     }
 
     if (addBtn) {

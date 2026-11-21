@@ -88,6 +88,17 @@ class UserController extends Controller
         return view('users.show', compact('user', 'farmer'));
     }
 
+    public function farm(string $id, string $farmId)
+    {
+        $farmOwner = User::findOrFail($id);
+        $farm = \App\Models\Farm::with(['farmer.buyer.user', 'photos'])
+            ->whereKey($farmId)
+            ->whereHas('farmer.buyer', fn ($buyer) => $buyer->where('USR_ID', $farmOwner->USR_ID))
+            ->firstOrFail();
+
+        return view('seller-requests.show', compact('farm', 'farmOwner'));
+    }
+
     public function create()
     {
         return view('users.create');

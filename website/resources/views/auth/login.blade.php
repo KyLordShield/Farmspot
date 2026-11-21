@@ -154,7 +154,7 @@
                 <div class="alert alert-success py-2">{{ session('status') }}</div>
             @endif
 
-            <form method="POST" action="{{ route('login') }}">
+            <form method="POST" action="{{ route('login') }}" id="adminLoginForm">
                 @csrf
 
                 <!-- Email -->
@@ -191,8 +191,9 @@
                     @enderror
                 </div>
 
-                <button type="submit" class="btn btn-login w-100">
-                    Sign In
+                <button type="submit" class="btn btn-login w-100" id="adminLoginSubmit">
+                    <span id="adminLoginSpinner" class="spinner-border spinner-border-sm me-2 d-none" aria-hidden="true"></span>
+                    <span id="adminLoginLabel" role="status" aria-live="polite">Sign In</span>
                 </button>
             </form>
 

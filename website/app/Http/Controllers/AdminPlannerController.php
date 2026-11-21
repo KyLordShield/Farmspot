@@ -46,9 +46,14 @@ class AdminPlannerController extends Controller
             'APL_DATETIME' => [$type === AdminPlanner::TYPE_EVENT ? 'required' : 'nullable', 'date'],
         ];
 
+        if ($type === AdminPlanner::TYPE_EVENT) {
+            $rules['APL_DATETIME'][] = 'after_or_equal:'.now('Asia/Manila')->toDateString();
+        }
+
         $validated = $request->validate($rules, [
             'APL_TITLE.required' => 'Give it a title first.',
             'APL_DATETIME.required' => 'Pick a date for the event.',
+            'APL_DATETIME.after_or_equal' => 'Choose today or a future date for the event (Philippine time).',
         ]);
 
         $notify = $type === AdminPlanner::TYPE_EVENT && $request->boolean('APL_NOTIFY_FARMERS');

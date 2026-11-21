@@ -14,10 +14,13 @@ class ProfileController extends Controller
     /**
      * Display the user's profile form.
      */
-    public function edit(Request $request): View
+    public function edit(Request $request, \App\Services\AdminPasswordReset $reset): View
     {
         return view('profile.edit', [
             'user' => $request->user(),
+            'resetCodeSent' => $reset->active($request),
+            'resetVerified' => $reset->authorized($request),
+            'resetReference' => $request->session()->get('admin_password.reference'),
         ]);
     }
 
@@ -28,7 +31,7 @@ class ProfileController extends Controller
     {
         $request->user()->update([
             'USR_NAME' => $request->validated('name'),
-            'USR_EMAIL' => $request->validated('email'),
+            'USR_MOBILE_NUMBER' => $request->validated('phone', $request->user()->USR_MOBILE_NUMBER),
         ]);
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');

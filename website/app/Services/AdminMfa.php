@@ -49,7 +49,7 @@ class AdminMfa
                 throw new \RuntimeException('Admin sign-in requires a valid admin email.');
             }
 
-            $this->deliver($user, new AdminSignInCode($code, $reference));
+            $this->deliverCode($user, new AdminSignInCode($code, $reference));
         } catch (\Exception $exception) {
             Log::warning('Admin sign-in code delivery failed.', ['exception_type' => $exception::class]);
 
@@ -69,7 +69,7 @@ class AdminMfa
         return '';
     }
 
-    private function deliver(User $user, AdminSignInCode $notification): void
+    public function deliverCode(User $user, AdminSignInCode $notification): void
     {
         $apiKey = config('services.brevo.admin_mail_key');
         $from = config('services.brevo.admin_mail_from');

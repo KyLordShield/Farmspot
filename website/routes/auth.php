@@ -43,6 +43,8 @@ Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store'])->middleware('throttle:login');
 
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
+    Route::post('profile/password/code', [PasswordController::class, 'sendCode'])->block(30, 10)->name('profile.password.code');
+    Route::post('profile/password/verify', [PasswordController::class, 'verifyCode'])->block(30, 10)->name('profile.password.verify');
 });
 
 Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])

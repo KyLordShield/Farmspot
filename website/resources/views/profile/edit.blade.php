@@ -1,106 +1,108 @@
 @extends('layouts.app')
-
-@section('title', 'Profile')
+@section('title', 'My Profile')
 @include('partials._admin-refresh')
 
 @section('content')
 <div class="admin-refresh admin-refresh-form">
     <div class="page-head">
         <div>
-            <nav class="admin-refresh-crumb" aria-label="Breadcrumb">
-                <a href="{{ route('dashboard') }}">Dashboard</a><span aria-hidden="true">/</span><span aria-current="page">Profile</span>
-            </nav>
-            <h1 class="page-title">Profile</h1>
+            <nav class="admin-refresh-crumb" aria-label="Breadcrumb"><a href="{{ route('dashboard') }}">Dashboard</a><span aria-hidden="true">/</span><span aria-current="page">My Profile</span></nav>
+            <h1 class="page-title">My Profile</h1>
+            <p class="page-desc">Your administrator account and password security.</p>
         </div>
     </div>
 
-    @if(in_array(session('status'), ['profile-updated', 'password-updated', 'verification-link-sent'], true))
-        <div class="alert alert-success" role="status">{{ match (session('status')) {
-            'profile-updated' => 'Profile updated.',
-            'password-updated' => 'Password updated.',
-            default => 'Verification link sent.',
-        } }}</div>
-    @endif
-
     <section class="panel form-card">
-        <div class="panel-header"><h2 class="panel-title">Contact details</h2></div>
+        <div class="panel-header"><h2 class="panel-title"><i class="bi bi-person-circle me-2" aria-hidden="true"></i>Account details</h2></div>
         <div class="panel-body">
+            @if(session('status') === 'profile-updated')<div class="alert alert-success" role="status">Profile updated.</div>@endif
             <form action="{{ route('profile.update') }}" method="POST" data-auto-spinner>
                 @csrf
                 @method('PATCH')
                 <div class="row g-3 mb-3">
-                    @foreach(['name' => ['Name', 'text', $user->USR_NAME, 'name'], 'email' => ['Email', 'email', $user->USR_EMAIL, 'username']] as $key => [$label, $type, $value, $autocomplete])
-                        <div class="col-md-6">
-                            <label class="form-label" for="profile-{{ $key }}">{{ $label }}</label>
-                            <input class="form-control @error($key) is-invalid @enderror" id="profile-{{ $key }}"
-                                   name="{{ $key }}" type="{{ $type }}" value="{{ old($key, $value) }}"
-                                   autocomplete="{{ $autocomplete }}" required>
-                            @error($key)<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    @endforeach
+                    <div class="col-md-6">
+                        <label for="profile-name" class="form-label">Name</label>
+                        <input id="profile-name" name="name" class="form-control @error('name') is-invalid @enderror" value="{{ old('name', $user->USR_NAME) }}" maxlength="{{ \App\Rules\PersonName::MAX_LENGTH }}" autocomplete="name" required>
+                        @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-6">
+                        <label for="profile-phone" class="form-label">Contact number</label>
+                        <input id="profile-phone" name="phone" type="tel" class="form-control @error('phone') is-invalid @enderror" value="{{ old('phone', $user->USR_MOBILE_NUMBER) }}" inputmode="numeric" maxlength="11" pattern="09[0-9]{9}" placeholder="09XXXXXXXXX" autocomplete="tel-national">
+                        @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="form-text">11 digits, starting with 09.</div>
+                    </div>
+                    <div class="col-12">
+                        <label for="profile-email" class="form-label">Registered email</label>
+                        <input id="profile-email" name="email" type="email" class="form-control @error('email') is-invalid @enderror" value="{{ $user->USR_EMAIL }}" readonly>
+                        <div class="form-text">Used for sign-in and security verification.</div>
+                        @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
                 </div>
-                <button class="btn btn-farm" type="submit">Save changes</button>
+                <button class="btn btn-farm" type="submit">Save profile</button>
             </form>
-            @if($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && !$user->hasVerifiedEmail())
-                <form action="{{ route('verification.send') }}" method="POST" class="mt-3">
+        </div>
+    </section>
+
+    <section class="panel form-card">
+        <div class="panel-header"><h2 class="panel-title"><i class="bi bi-shield-lock me-2" aria-hidden="true"></i>Reset password</h2></div>
+        <div class="panel-body">
+            <p class="admin-reset-step">{{ $resetVerified ? 'Step 2 of 2 · Set your new password' : 'Step 1 of 2 · Verify your email' }}</p>
+            <p class="text-muted">{{ $resetVerified ? 'Email verified. You can now enter your current password and choose a new one.' : 'Verify the code sent to your registered email before entering any passwords.' }}</p>
+            @if(session('status') === 'password-code-sent')
+                <div class="alert alert-success" role="status">A verification code was sent to {{ $user->USR_EMAIL }}. It expires in five minutes.</div>
+            @endif
+            @error('delivery', 'updatePassword')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
+            @if(!$resetCodeSent)
+                @error('code', 'updatePassword')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
+            @endif
+
+            @if($resetCodeSent && !$resetVerified)
+                <div class="admin-reset-reference mb-3">Email reference: <strong>{{ $resetReference }}</strong><br><small>Use the password reset email with this reference, not your sign-in code.</small></div>
+                <form action="{{ route('profile.password.verify') }}" method="POST" data-auto-spinner>
                     @csrf
-                    <p>Your email address is unverified.</p>
-                    <button class="btn btn-ghost" type="submit">Resend verification email</button>
+                    <div class="admin-reset-code-wrap mb-3">
+                        <label for="profile-code" id="profile-code-label" class="form-label">6-digit verification code</label>
+                        <input id="profile-code" name="code" class="form-control admin-reset-code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-describedby="profile-code-help">
+                        <div id="profile-code-boxes" class="admin-reset-code-boxes" role="group" aria-labelledby="profile-code-label" hidden>
+                            @for($digit = 1; $digit <= 6; $digit++)
+                                <input class="form-control" type="text" inputmode="numeric" pattern="[0-9]" maxlength="6" autocomplete="{{ $digit === 1 ? 'one-time-code' : 'off' }}" aria-label="Digit {{ $digit }} of 6" data-code-digit>
+                            @endfor
+                        </div>
+                        <p id="profile-code-help" class="form-text mb-0">Numbers only. You can paste the full code.</p>
+                        @error('code', 'updatePassword')<div class="text-danger small mt-2" role="alert">{{ $message }}</div>@enderror
+                    </div>
+                    <button class="btn btn-farm" type="submit">Verify code &amp; continue</button>
                 </form>
+            @endif
+            @if($resetVerified)
+                <form action="{{ route('password.update') }}" method="POST" data-auto-spinner>
+                    @csrf
+                    @method('PUT')
+                    <div class="row g-3 mb-3">
+                        @foreach(['current_password' => 'Current password', 'password' => 'New password', 'password_confirmation' => 'Confirm new password'] as $key => $label)
+                            <div class="col-md-6">
+                                <label class="form-label" for="profile-{{ $key }}">{{ $label }}</label>
+                                <input class="form-control @error($key, 'updatePassword') is-invalid @enderror" id="profile-{{ $key }}" name="{{ $key }}" type="password" autocomplete="{{ $key === 'current_password' ? 'current-password' : 'new-password' }}" @if($key !== 'current_password') minlength="8" @endif required>
+                                @error($key, 'updatePassword')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                        @endforeach
+                    </div>
+                    <p class="small text-muted">Use at least 8 characters. After resetting, you will need to sign in again.</p>
+                    <button class="btn btn-farm" type="submit">Reset password</button>
+                </form>
+            @endif
+            @if(!$resetVerified)
+            <form action="{{ route('profile.password.code') }}" method="POST" class="{{ $resetCodeSent ? 'mt-3' : '' }}" data-auto-spinner>
+                @csrf
+                <button class="btn {{ $resetCodeSent ? 'btn-ghost' : 'btn-farm' }}" type="submit">{{ $resetCodeSent ? 'Send a new code' : 'Send verification code' }}</button>
+                @if($resetCodeSent)<span class="small text-muted ms-2">You can request another code after one minute.</span>@endif
+            </form>
             @endif
         </div>
     </section>
-
-    <section class="panel form-card">
-        <div class="panel-header"><h2 class="panel-title">Password</h2></div>
-        <div class="panel-body">
-            <form action="{{ route('password.update') }}" method="POST" data-auto-spinner>
-                @csrf
-                @method('PUT')
-                <div class="row g-3 mb-3">
-                    @foreach(['current_password' => 'Current password', 'password' => 'New password', 'password_confirmation' => 'Confirm new password'] as $key => $label)
-                        <div class="col-md-6">
-                            <label class="form-label" for="profile-{{ $key }}">{{ $label }}</label>
-                            <input class="form-control @error($key, 'updatePassword') is-invalid @enderror" id="profile-{{ $key }}"
-                                   name="{{ $key }}" type="password" autocomplete="{{ $key === 'current_password' ? 'current-password' : 'new-password' }}" required>
-                            @error($key, 'updatePassword')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    @endforeach
-                </div>
-                <button class="btn btn-farm" type="submit">Update password</button>
-            </form>
-        </div>
-    </section>
-
-    <section class="panel form-card">
-        <div class="panel-header"><h2 class="panel-title">Delete account</h2></div>
-        <div class="panel-body">
-            <p>Deleting your account is permanent.</p>
-            @error('password', 'userDeletion')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
-            <button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#profile-delete-modal">Delete account</button>
-        </div>
-    </section>
-
-    <div class="modal fade" id="profile-delete-modal" tabindex="-1" aria-labelledby="profile-delete-title" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <form class="modal-content" action="{{ route('profile.destroy') }}" method="POST">
-                @csrf
-                @method('DELETE')
-                <div class="modal-header">
-                    <h2 class="modal-title fs-6" id="profile-delete-title">Delete your account?</h2>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Enter your password to confirm permanent deletion.</p>
-                    <label class="form-label" for="profile-delete-password">Password</label>
-                    <input class="form-control" id="profile-delete-password" name="password" type="password" autocomplete="current-password" required>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Delete account</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('js/admin-profile.js') }}?v={{ filemtime(public_path('js/admin-profile.js')) }}"></script>
+@endpush

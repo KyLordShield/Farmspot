@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Seller Request Details')
+@section('title', isset($farmOwner) ? 'Farm Details' : 'Seller Request Details')
 
 @include('partials._admin-refresh')
 
@@ -9,14 +9,20 @@
 <div class="page-head">
     <div>
         <nav class="admin-refresh-crumb" aria-label="Breadcrumb">
-            <a href="{{ route('seller-requests') }}">Seller Requests</a><span aria-hidden="true">/</span><span aria-current="page">Request details</span>
+            @if(isset($farmOwner))
+                <a href="{{ route('users') }}">Users</a><span aria-hidden="true">/</span>
+                <a href="{{ route('users.show', $farmOwner->USR_ID) }}">{{ $farmOwner->USR_NAME }}</a><span aria-hidden="true">/</span>
+                <span aria-current="page">Farm details</span>
+            @else
+                <a href="{{ route('seller-requests') }}">Seller Requests</a><span aria-hidden="true">/</span><span aria-current="page">Request details</span>
+            @endif
         </nav>
-        <h1 class="page-title">Seller Request Details</h1>
+        <h1 class="page-title">{{ isset($farmOwner) ? 'Farm Details' : 'Seller Request Details' }}</h1>
         <div class="page-desc">{{ $farm->FRM_NAME }} · Farm #{{ $farm->FRM_ID }}</div>
     </div>
     <div class="page-actions">
-        <a href="{{ route('seller-requests') }}" class="btn btn-ghost">
-            <i class="bi bi-arrow-left me-1"></i> Back to Seller Requests
+        <a href="{{ isset($farmOwner) ? route('users.show', $farmOwner->USR_ID) : route('seller-requests') }}" class="btn btn-ghost">
+            <i class="bi bi-arrow-left me-1"></i> {{ isset($farmOwner) ? 'Back to User Profile' : 'Back to Seller Requests' }}
         </a>
     </div>
 </div>

@@ -16,6 +16,9 @@ class EventNotificationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Planner tests exercise authenticated admin actions; MFA is covered
+        // separately by AdminMfaTest rather than simulated in every fixture.
+        $this->withoutMiddleware(\App\Http\Middleware\EnsureAdminMfa::class);
         // The legacy base tables are supplied by a MySQL dump, not migrations.
         // Build only this suite's dependencies in a fresh, isolated SQLite DB.
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
@@ -113,6 +116,7 @@ class EventNotificationTest extends TestCase
 
     public function test_saving_an_event_only_queues_and_private_notes_do_not_broadcast(): void
     {
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-01 12:00:00', 'Asia/Manila'));
         $this->sellers(1);
         $admin = $this->admin();
         $this->actingAs($admin)->post('/planner', ['APL_TYPE' => 'EVENT', 'APL_TITLE' => 'Meeting',
@@ -123,6 +127,28 @@ class EventNotificationTest extends TestCase
         $this->post('/planner', ['APL_TYPE' => 'NOTE', 'APL_TITLE' => 'Private', 'APL_NOTIFY_FARMERS' => '1'])->assertRedirect();
         $this->post('/planner', ['APL_TYPE' => 'EVENT', 'APL_TITLE' => 'Private event', 'APL_DATETIME' => '2026-11-05T09:00'])->assertRedirect();
         $this->assertDatabaseCount('event_notice', 1);
+    }
+
+    public function test_new_events_require_today_or_later_in_philippine_time(): void
+    {
+        // UTC is still Nov 21, but it is already Nov 22 in the Philippines.
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-21 16:30:00', 'UTC'));
+        $this->actingAs($this->admin());
+        $payload = ['APL_TYPE' => 'EVENT', 'APL_TITLE' => 'Meeting'];
+        $this->postJson('/planner', $payload + ['APL_DATETIME' => '2026-11-21T23:59'])
+            ->assertUnprocessable()->assertJsonValidationErrors('APL_DATETIME')
+            ->assertJsonPath('errors.APL_DATETIME.0', 'Choose today or a future date for the event (Philippine time).');
+        $this->assertDatabaseCount('admin_planner', 0);
+        foreach (['2026-11-22T00:00', '2026-11-23T09:00'] as $date) {
+            $this->postJson('/planner', $payload + ['APL_DATETIME' => $date])
+                ->assertRedirect(route('dashboard'));
+        }
+        $this->assertDatabaseCount('admin_planner', 2);
+        $this->postJson('/planner', [
+            'APL_TYPE' => 'NOTE', 'APL_TITLE' => 'Older reminder', 'APL_DATETIME' => '2026-11-20',
+        ])->assertRedirect(route('dashboard'));
+        $this->assertDatabaseCount('admin_planner', 3);
+        Http::assertNothingSent();
     }
 
     public function test_fanout_is_bounded_and_deduplicated_with_one_push_per_batch(): void

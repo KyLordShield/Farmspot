@@ -81,6 +81,7 @@ Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
     Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::get('/users/{id}', [UserController::class, 'show'])->name('users.show');
+    Route::get('/users/{id}/farms/{farmId}', [UserController::class, 'farm'])->name('users.farms.show');
 
     // Reviews. Only /reviews and /reviews/{id}/visibility exist — a review can
     // be hidden or shown again and nothing else. No create/edit/delete, which

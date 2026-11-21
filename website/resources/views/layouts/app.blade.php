@@ -46,7 +46,7 @@
             </div>
         </div>
 
-        <div class="admin-profile">
+        <a class="admin-profile admin-profile-link" href="{{ route('profile.edit') }}" aria-label="Open administrator profile" @if(request()->routeIs('profile.edit')) aria-current="page" @endif>
 
             <div class="avatar">
                 {{ strtoupper(substr(Auth::user()->USR_NAME, 0, 2)) }}
@@ -57,7 +57,7 @@
                 <small>Administrator</small>
             </div>
 
-        </div>
+        </a>
 
         <ul class="menu">
 

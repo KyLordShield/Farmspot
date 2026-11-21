@@ -204,7 +204,7 @@
                                 </td>
                                 <td>
                                     <div class="actions">
-                                        <a href="{{ route('seller-requests.show', $farm->FRM_ID) }}"
+                                        <a href="{{ route('users.farms.show', ['id' => $user->USR_ID, 'farmId' => $farm->FRM_ID]) }}"
                                            class="btn-icon" title="View farm" aria-label="View farm">
                                             <i class="bi bi-eye"></i>
                                         </a>

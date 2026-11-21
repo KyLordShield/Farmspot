@@ -4,11 +4,15 @@
     $editing = $listing->exists;
     $showHarvest = old('LST_STATUS', $listing->LST_STATUS) === 'SOON_TO_HARVEST';
     $title = $editing ? 'Edit Listing' : 'Add Listing';
-    $photos = $editing ? $listing->photos->pluck('LPHOTO_FILE_PATH')->filter() : collect();
+    $photos = $editing ? $listing->photos->filter(fn ($photo) => filled($photo->LPHOTO_FILE_PATH))
+        ->map(fn ($photo) => ['id' => $photo->LPHOTO_ID, 'url' => $photo->LPHOTO_FILE_PATH, 'primary' => (bool) $photo->LPHOTO_IS_PRIMARY]) : collect();
     if ($editing && $photos->isEmpty() && filled($listing->LST_IMAGE)) {
-        $photos = collect([$listing->LST_IMAGE]);
+        $photos = collect([['id' => null, 'url' => $listing->LST_IMAGE, 'primary' => true]]);
     }
     $photoSlots = max(0, \App\Support\PhotoLimits::LISTING - $photos->count());
+    $markedPhotos = (array) old('remove_photos', []);
+    $markedLegacy = (bool) old('remove_legacy_photo', false);
+    $photoSlots += $photos->filter(fn ($photo) => $photo['id'] ? in_array($photo['id'], $markedPhotos, true) : $markedLegacy)->count();
     $statuses = ['AVAILABLE_NOW' => 'Available Now', 'SOON_TO_HARVEST' => 'Soon to Harvest', 'NOT_AVAILABLE' => 'Not Available'];
     $availability = ['ACTIVE' => 'Active', 'NOT_AVAILABLE' => 'Not Available', 'REMOVED' => 'Removed'];
 @endphp
@@ -64,7 +68,7 @@
             @method('PUT')
         @endif
 
-        <section class="ld-card">
+        <section class="ld-card lf-product">
             <h2>Product</h2>
             <div class="ld-fields">
                 <div>
@@ -104,7 +108,7 @@
             </div>
         </section>
 
-        <section class="ld-card">
+        <section class="ld-card lf-farm">
             <h2>Farm &amp; Farmer</h2>
             @if($editing)
                 <dl class="ld-fields">
@@ -135,7 +139,7 @@
             @endif
         </section>
 
-        <section class="ld-card">
+        <section class="ld-card lf-availability">
             <h2>Availability &amp; Dates</h2>
             <div class="ld-fields">
                 <div>
@@ -185,28 +189,32 @@
             </div>
         </section>
 
-        <section class="ld-card">
+        <section class="ld-card lf-photos" data-listing-photos data-photo-limit="{{ \App\Support\PhotoLimits::LISTING }}" data-existing-count="{{ $photos->count() }}">
             <h2>Photos</h2>
             @if($photos->isNotEmpty())
                 <div class="ld-thumbnails mb-3">
-                    @foreach($photos as $url)
-                        <a href="{{ $url }}" class="ld-photo ld-thumbnail" target="_blank" rel="noopener">
-                            <img src="{{ $url }}" alt="{{ $listing->LST_CROP_ICON ?: 'Listing' }} photo {{ $loop->iteration }}" loading="lazy">
-                        </a>
+                    @foreach($photos as $photo)
+                        <div class="lf-photo-item">
+                            <a href="{{ $photo['url'] }}" class="ld-photo ld-thumbnail" target="_blank" rel="noopener">
+                                <img src="{{ $photo['url'] }}" alt="{{ $listing->LST_CROP_ICON ?: 'Listing' }} photo {{ $loop->iteration }}" loading="lazy">
+                            </a>
+                            <span class="lf-photo-caption">Photo {{ $loop->iteration }}{{ $photo['primary'] ? ' · Cover' : '' }}</span>
+                            <label class="lf-remove-photo">
+                                <input type="checkbox" data-remove-photo name="{{ $photo['id'] ? 'remove_photos[]' : 'remove_legacy_photo' }}" value="{{ $photo['id'] ?? '1' }}" @checked($photo['id'] ? in_array($photo['id'], $markedPhotos, true) : $markedLegacy)>
+                                Remove<span class="visually-hidden"> photo {{ $loop->iteration }}</span>
+                            </label>
+                        </div>
                     @endforeach
                 </div>
             @endif
-            @if($photoSlots > 0)
+            @if($photos->isNotEmpty())<p class="form-text">Select Remove, then Save Changes to delete a photo. Uncheck to keep it.</p>@endif
                 <label for="photos" class="form-label">Add Photos</label>
                 <input type="file" class="form-control" id="photos" name="photos[]" accept="image/*"
-                       aria-describedby="photos-hint" @if($photoSlots > 1) multiple @endif>
-                <div id="photos-hint" class="form-text">Up to {{ $photoSlots }} {{ Str::plural('photo', $photoSlots) }}, 5 MB each.</div>
-            @else
-                <p class="ld-muted mb-0">This listing has reached the photo limit.</p>
-            @endif
+                       aria-describedby="photos-hint" multiple @disabled($photoSlots === 0)>
+                <div id="photos-hint" class="form-text" role="status">{{ $photoSlots ? "You can add up to {$photoSlots} more photos, 5 MB each." : 'Photo limit reached. Select a photo to remove before adding another.' }}</div>
         </section>
 
-        <div class="ld-card ld-actions">
+        <div class="ld-card ld-actions lf-actions">
             <button type="submit" class="ld-button ld-primary" @disabled(!$editing && ($farms->isEmpty() || $categories->isEmpty()))>
                 <i class="bi bi-check-lg" aria-hidden="true"></i> {{ $editing ? 'Save Changes' : 'Add Listing' }}
             </button>

@@ -120,6 +120,9 @@ class ListingController extends Controller
             'FRM_ID' => [$creating ? 'required' : 'prohibited', 'string'],
             'photos' => ['nullable', 'array', 'max:'.PhotoLimits::LISTING],
             'photos.*' => ['image', 'max:5120'],
+            'remove_photos' => [$creating ? 'prohibited' : 'sometimes', 'array', 'max:'.PhotoLimits::LISTING],
+            'remove_photos.*' => ['required', 'string', 'size:6', 'distinct'],
+            'remove_legacy_photo' => [$creating ? 'prohibited' : 'sometimes', 'boolean'],
         ], [], [
             'LST_CROP_ICON' => 'crop name',
             'LST_DESCRIPTION' => 'description',
@@ -132,8 +135,9 @@ class ListingController extends Controller
         ]);
 
         $uploads = [];
+        $removedUrls = [];
         try {
-            [$listing, $previousAvailability] = DB::transaction(function () use ($id, $creating, $validated, &$uploads) {
+            [$listing, $previousAvailability] = DB::transaction(function () use ($id, $creating, $validated, &$uploads, &$removedUrls) {
                 $listing = $creating ? new Listing : Listing::findOrFail($id);
                 $farm = Farm::whereKey($creating ? $validated['FRM_ID'] : $listing->FRM_ID)
                     ->lockForUpdate()->first();
@@ -145,7 +149,7 @@ class ListingController extends Controller
                     $listing = Listing::lockForUpdate()->findOrFail($id);
                 }
 
-                $fields = Arr::except($validated, ['FRM_ID', 'photos']);
+                $fields = Arr::except($validated, ['FRM_ID', 'photos', 'remove_photos', 'remove_legacy_photo']);
                 $name = $fields['LST_CROP_ICON'] ?? null;
                 if ($creating || (filled($name) && $name !== $listing->LST_CROP_ICON && $farm)) {
                     try {
@@ -173,6 +177,10 @@ class ListingController extends Controller
                 $listing->LST_UPDATED_AT = now();
                 $listing->save();
 
+                if (!$creating) {
+                    $this->removeSelectedPhotos($listing, $validated['remove_photos'] ?? [], (bool) ($validated['remove_legacy_photo'] ?? false), $removedUrls);
+                }
+
                 if (! empty($validated['photos'])) {
                     $this->appendPhotos($listing, $validated['photos'], $uploads);
                 }
@@ -187,10 +195,42 @@ class ListingController extends Controller
             throw $exception;
         }
 
+        // Only clean up storage after the entire save (including uploads) commits.
+        foreach (array_unique($removedUrls) as $url) {
+            if (!\App\Models\ListingPhoto::where('LPHOTO_FILE_PATH', $url)->exists()
+                && !Listing::where('LST_IMAGE', $url)->exists()) {
+                CloudinaryImage::deleteByUrl($url);
+            }
+        }
         $this->notifyIfRemovedByModerator($listing, $previousAvailability);
 
         return redirect()->route('listings.show', $listing->LST_ID)
             ->with('success', $creating ? 'Listing added successfully.' : 'Listing updated successfully.');
+    }
+
+    private function removeSelectedPhotos(Listing $listing, array $ids, bool $legacy, array &$removedUrls): void
+    {
+        if ($ids === [] && !$legacy) return;
+        $photos = $listing->photos()->lockForUpdate()->get();
+        $selected = $photos->whereIn('LPHOTO_ID', $ids);
+        if ($selected->count() !== count($ids)
+            || ($legacy && ($photos->isNotEmpty() || blank($listing->LST_IMAGE)))) {
+            throw ValidationException::withMessages(['remove_photos' => 'The selected photos have changed or do not belong to this listing. Reload and try again.']);
+        }
+        if ($legacy) {
+            $removedUrls[] = $listing->LST_IMAGE;
+            $listing->update(['LST_IMAGE' => null]);
+            return;
+        }
+        foreach ($selected as $photo) {
+            $removedUrls[] = $photo->LPHOTO_FILE_PATH;
+            $photo->delete();
+        }
+        $remaining = $photos->whereNotIn('LPHOTO_ID', $ids);
+        $primary = $remaining->firstWhere('LPHOTO_IS_PRIMARY', 1) ?? $remaining->first();
+        $listing->photos()->update(['LPHOTO_IS_PRIMARY' => 0]);
+        $primary?->update(['LPHOTO_IS_PRIMARY' => 1]);
+        $listing->update(['LST_IMAGE' => $primary?->LPHOTO_FILE_PATH]);
     }
 
     private function appendPhotos(Listing $listing, array $photos, array &$uploads): void
