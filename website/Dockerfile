@@ -31,7 +31,7 @@ RUN composer install --no-dev --optimize-autoloader \
 # ---------------------------------------------------------------------------
 FROM php:8.3-cli-alpine
 
-RUN apk add --no-cache oniguruma-dev libzip-dev icu-dev \
+RUN apk add --no-cache oniguruma-dev libzip-dev icu-dev python3 \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli mbstring fileinfo
 
 WORKDIR /app

@@ -1192,6 +1192,8 @@ class SellerBottomNav extends StatelessWidget {
     return BottomAppBar(
       color: Colors.white,
       elevation: 8,
+      height: MediaQuery.textScalerOf(context).scale(11) > 15 ? 108 : null,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: SizedBox(
         height: 60,
         child: Row(
@@ -1199,19 +1201,24 @@ class SellerBottomNav extends StatelessWidget {
           children: List.generate(kSellerTabs.length, (i) {
             final selected = i == currentIndex;
             final color = selected ? AppColors.primaryGreen : Colors.black45;
-            return GestureDetector(
-              onTap: () => onTap(i),
-              behavior: HitTestBehavior.opaque,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(kSellerTabs[i].$1, color: color, size: 22),
-                  const SizedBox(height: 2),
-                  Text(
-                    kSellerTabs[i].$2,
-                    style: TextStyle(color: color, fontSize: 10),
-                  ),
-                ],
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => onTap(i),
+                behavior: HitTestBehavior.opaque,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(kSellerTabs[i].$1, color: color, size: 22),
+                    const SizedBox(height: 2),
+                    Text(
+                      kSellerTabs[i].$2,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: color, fontSize: 10),
+                    ),
+                  ],
+                ),
               ),
             );
           }),

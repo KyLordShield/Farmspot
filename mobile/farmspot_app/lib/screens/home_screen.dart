@@ -1,3 +1,4 @@
+import '../widgets/loading_pulse.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../theme.dart';
@@ -875,7 +876,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // so when the real cards replace them nothing jumps.
     if (_isLoading) {
       return const [
-        SliverToBoxAdapter(child: CropLadderSkeleton()),
+        SliverToBoxAdapter(child: LoadingPulse(child: CropLadderSkeleton())),
         SliverToBoxAdapter(child: SizedBox(height: 24)),
       ];
     }

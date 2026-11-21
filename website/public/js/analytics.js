@@ -1,13 +1,22 @@
 const range = document.getElementById('analytics-range');
 const custom = document.getElementById('analytics-custom');
+const applyLabel = document.getElementById('analytics-apply-label');
 
 function syncRange() {
     custom.hidden = range.value !== 'custom';
     custom.disabled = custom.hidden;
+    applyLabel.textContent = custom.hidden ? 'Refresh' : 'Apply dates';
     custom.querySelectorAll('input').forEach(input => { input.required = !custom.hidden; });
 }
 
-range.addEventListener('change', syncRange);
+range.addEventListener('change', () => {
+    syncRange();
+    if (custom.hidden) {
+        range.form.requestSubmit();
+    } else {
+        custom.querySelector('input').focus();
+    }
+});
 syncRange();
 
 const updated = document.getElementById('analytics-updated');

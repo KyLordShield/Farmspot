@@ -33,7 +33,7 @@
             <label for="analytics-range" class="visually-hidden">Top Searches date range</label>
             <select id="analytics-range" name="range" class="form-select" aria-describedby="analytics-range-scope">
                 @foreach(['week' => 'This week', 'today' => 'Today', '7' => 'Last 7 days', '30' => 'Last 30 days', 'custom' => 'Custom'] as $value => $label)
-                    <option value="{{ $value }}" @selected(old('range', $range) === $value)>{{ $label }}</option>
+                    <option value="{{ $value }}" @selected((string) old('range', $range) === (string) $value)>{{ $label }}</option>
                 @endforeach
             </select>
             <fieldset id="analytics-custom" class="analytics-custom">
@@ -41,9 +41,9 @@
                 <label>From <input class="form-control" name="from" type="date" value="{{ old('from', $filters['from'] ?? '') }}"></label>
                 <label>To <input class="form-control" name="to" type="date" value="{{ old('to', $filters['to'] ?? '') }}"></label>
             </fieldset>
-            <button type="submit" class="btn btn-ghost"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh</button>
+            <button type="submit" class="btn btn-ghost"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> <span id="analytics-apply-label">{{ old('range', $range) === 'custom' ? 'Apply dates' : 'Refresh' }}</span></button>
             <button type="submit" name="export" value="csv" class="btn btn-farm"><i class="bi bi-download" aria-hidden="true"></i> Export CSV</button>
-            <small class="analytics-muted" id="analytics-range-scope">Date range applies to Top Searches.</small>
+            <small class="analytics-muted" id="analytics-range-scope">Filters Top Searches. For a custom range, enter both dates and select Apply dates.</small>
         </form>
     </header>
 

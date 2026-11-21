@@ -149,6 +149,9 @@ class _AuthGateState extends State<AuthGate> {
   /// what stops the bottom nav from painting a buyer nav and then swapping to
   /// the seller nav once the role resolves.
   Future<void> _bootstrap() async {
+    final minimumSplash = WidgetsBinding.instance.endOfFrame.then(
+      (_) => Future<void>.delayed(const Duration(seconds: 3)),
+    );
     String? token;
     try {
       final results = await Future.wait<Object?>([
@@ -161,6 +164,7 @@ class _AuthGateState extends State<AuthGate> {
       token = null;
     }
 
+    await minimumSplash;
     if (!mounted) return;
     setState(() {
       _token = token;

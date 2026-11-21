@@ -28,7 +28,7 @@ class AnalyticsController extends Controller
             'today' => $localNow->copy()->startOfDay(),
             '7', '30' => $localNow->copy()->subDays((int) $range - 1)->startOfDay(),
             'custom' => Carbon::parse($filters['from'], 'Asia/Manila')->startOfDay(),
-            default => $now->copy()->startOfWeek(),
+            default => $localNow->copy()->startOfWeek(),
         };
         $searchEnd = $range === 'custom'
             ? Carbon::parse($filters['to'], 'Asia/Manila')->endOfDay()->min($localNow)

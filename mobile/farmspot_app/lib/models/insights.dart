@@ -76,10 +76,12 @@ class SeasonalTrend {
 class InsightsPayload {
   final List<InsightSection> sections;
   final List<SeasonalTrend> seasonalTrends;
+  final Map<String, dynamic> searchInterest;
 
   const InsightsPayload({
     required this.sections,
     required this.seasonalTrends,
+    this.searchInterest = const {},
   });
 
   factory InsightsPayload.fromJson(Map<String, dynamic> json) {
@@ -87,9 +89,16 @@ class InsightsPayload {
       sections: (json['insights'] as List<dynamic>? ?? [])
           .map((e) => InsightSection.fromJson(e as Map<String, dynamic>))
           .toList(),
+      searchInterest:
+          json['search_interest'] as Map<String, dynamic>? ?? const {},
       seasonalTrends: (json['seasonal_trends'] as List<dynamic>? ?? [])
           .map((e) => SeasonalTrend.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
 }
+
+List<Map<String, dynamic>> insightRows(
+  Map<String, dynamic> snapshot,
+  String key,
+) => (snapshot[key] as List? ?? const []).cast<Map<String, dynamic>>();

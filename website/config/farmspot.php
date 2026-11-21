@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'insights_python' => env('FARMSPOT_INSIGHTS_PYTHON', PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3'),
+    'insights_demo' => env('FARMSPOT_INSIGHTS_DEMO', false),
+
 
     'profile_listings' => env('FARMSPOT_PROFILE_LISTINGS', false),
 

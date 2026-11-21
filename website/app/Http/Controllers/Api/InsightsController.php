@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Listing;
 use App\Models\SearchLog;
 use App\Models\Trend;
+use App\Services\CropSearchInsights;
 use Illuminate\Support\Facades\DB;
 
 class InsightsController extends Controller
@@ -33,7 +34,7 @@ class InsightsController extends Controller
      * This keeps counter-style insights fresh while the Python pipeline owns
      * the analytical/heavier work.
      */
-    public function show()
+    public function show(CropSearchInsights $searchInterest)
     {
         $topSearched = $this->topSearched();
         $byCategory = $this->byCategory();
@@ -59,6 +60,7 @@ class InsightsController extends Controller
                 ],
             ],
             'seasonal_trends' => $trends,
+            'search_interest' => rescue(fn () => $searchInterest->snapshot(), null),
         ]);
     }
 
