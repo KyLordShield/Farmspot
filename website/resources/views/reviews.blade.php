@@ -2,6 +2,10 @@
 
 @section('title', 'Reviews')
 
+@push('scripts')
+    <script src="{{ asset('js/reviews.js') }}?v={{ filemtime(public_path('js/reviews.js')) }}" defer></script>
+@endpush
+
 @section('content')
 
 <div class="page-head">
@@ -154,9 +158,28 @@
                         </span>
                         <div class="cell-faint">{{ $review->LRV_RATING }} / 5</div>
                     </td>
-                    <td class="cell-secondary">
+                    <td class="cell-secondary review-comment">
                         @if($review->LRV_COMMENT)
-                            {{ \Illuminate\Support\Str::limit($review->LRV_COMMENT, 90) }}
+                            @php
+                                $comment = $review->LRV_COMMENT;
+                                $isLong = mb_strlen($comment) > 90;
+                                $hasParagraphs = preg_match('/\R/', $comment) === 1;
+                            @endphp
+                            {{-- The preview keeps the column narrow. Anything
+                                 longer than the preview, or written in
+                                 paragraphs, gets a "Read full" trigger that
+                                 opens the whole comment in a dialog instead of
+                                 stretching this cell across the table. --}}
+                            <span class="review-comment-preview">{{ \Illuminate\Support\Str::limit($comment, 90) }}</span>
+                            @if($isLong || $hasParagraphs)
+                                <button type="button"
+                                        class="review-comment-more"
+                                        data-comment-full="{{ $comment }}"
+                                        data-comment-meta="{{ $review->reviewerName() }} &middot; {{ $review->listing?->LST_CROP_ICON ?? 'Listing' }} &middot; {{ $review->LRV_ID }}"
+                                        aria-label="Read the full comment from {{ $review->reviewerName() }}">
+                                    Read full
+                                </button>
+                            @endif
                         @else
                             <span class="cell-faint">No comment</span>
                         @endif

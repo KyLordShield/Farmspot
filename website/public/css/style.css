@@ -788,6 +788,58 @@ a.stat-card.is-active .stat-label {
     color: var(--text-faint);
 }
 
+/* Review comments: the cell is capped and wraps anywhere, so one long word
+   cannot widen the table and shove the other columns aside. The full text,
+   paragraphs included, opens from "Read full" instead. */
+.data-table .review-comment {
+    max-width: 340px;
+}
+
+.review-comment-preview {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.review-comment-more {
+    display: block;
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--brand-700);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.review-comment-more:hover {
+    color: var(--brand-800);
+}
+
+.review-comment-full {
+    max-height: min(55vh, 420px);
+    overflow-y: auto;
+    text-align: left;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    font-size: 14.5px;
+    line-height: 1.55;
+}
+
+.review-comment-meta {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 12.5px;
+    text-align: left;
+}
+
+.swal2-popup.review-comment-popup {
+    width: min(600px, 92vw);
+}
+
 .id-cell {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 12px;
