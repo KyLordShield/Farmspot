@@ -22,6 +22,8 @@
 }
 .mod-stat strong { font-size: 24px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.15; }
 .mod-stat span { font-size: 12.5px; color: var(--ld-muted); }
+.mod-stat .mod-stat-warning { display: inline-flex; align-items: center; gap: 6px; color: #92400e; font-weight: 600; margin-top: 5px; }
+.mod-stat .mod-stat-note { font-size: 12px; margin-top: 5px; }
 .mod-stat:hover, .mod-stat[aria-current] { border-color: var(--green, #1b6b2c); background: #f4faf5; color: #111827; }
 
 .mod-queue { padding: 0; }

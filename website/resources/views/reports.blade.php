@@ -7,10 +7,10 @@
     $filtered = request()->filled('search') || request()->filled('type') || request()->filled('status')
         || request()->filled('flagged') || request()->filled('reporter');
     $cards = [
-        ['Total reports', $totalReports, [], !$filtered],
-        ['Mass reported', $flaggedTargetCount, ['flagged' => 1], request()->filled('flagged')],
-        ['Resolved', $counts['Resolved'] ?? 0, ['status' => 'Resolved'], request('status') === 'Resolved'],
-        ['New', $counts['New'] ?? 0, ['status' => 'New'], request('status') === 'New'],
+        ['Total reports', $totalReports, route('reports'), !$filtered, false],
+        ['Mass reported', $flaggedTargetCount, route('reports.flagged'), false, true],
+        ['Resolved', $counts['Resolved'] ?? 0, route('reports', ['status' => 'Resolved']), request('status') === 'Resolved', false],
+        ['New', $counts['New'] ?? 0, route('reports', ['status' => 'New']), request('status') === 'New', false],
     ];
     $rows = $reports->getCollection()->groupBy(fn ($report) => $report->RPT_FLAGGED_AT
         ? $report->RPT_TARGET_TYPE.':'.$report->RPT_TARGET_ID
@@ -23,11 +23,18 @@
     </header>
     @include('reports._feedback')
 
-    <nav class="mod-stats" aria-label="Quick report filters">
-        @foreach($cards as [$label, $count, $query, $active])
-            <a class="ld-card mod-stat" href="{{ route('reports', $query) }}" @if($active) aria-current="true" @endif>
+    <nav class="mod-stats" aria-label="Report overview">
+        @foreach($cards as [$label, $count, $href, $active, $massAlert])
+            <a class="ld-card mod-stat" href="{{ $href }}" @if($active) aria-current="true" @endif>
                 <strong>{{ $count }}</strong>
                 <span>{{ $label }}</span>
+                @if($massAlert)
+                    @if($count > 0)
+                        <span class="mod-stat-warning"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Needs review</span>
+                    @else
+                        <span class="mod-stat-note">No active alerts</span>
+                    @endif
+                @endif
             </a>
         @endforeach
     </nav>

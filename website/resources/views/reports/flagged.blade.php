@@ -13,7 +13,7 @@
         </nav>
         <h1 class="page-title">Mass Report Alerts</h1>
         <div class="page-desc">
-            Targets that reached {{ $threshold }} distinct reporters while still open
+            Accounts and items reported by multiple people that need review
         </div>
     </div>
     <div class="page-actions">
@@ -40,11 +40,10 @@
 {{-- One row per target, not per report. This is the whole reason the page
      exists: a flat list of ten rows about the same account hides the fact that
      it is one account. --}}
-<div class="alert alert-warning" role="alert">
-    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-    A target is flagged when <strong>{{ $threshold }}</strong> different people have open reports
-    against it. The volume is a signal to look, not a verdict — open an alert to see who reported
-    it and why before deciding anything.
+<div class="admin-report-notice" role="note">
+    <i class="bi bi-info-circle" aria-hidden="true"></i>
+    <div>An alert appears after <strong>{{ $threshold }} different people</strong> report the same account or item.
+        <strong>Read the reports before taking action.</strong></div>
 </div>
 
 @forelse($alerts as $alert)

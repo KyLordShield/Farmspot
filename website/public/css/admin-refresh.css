@@ -140,6 +140,8 @@
 }
 
 .admin-form-divider { border-top: 1px solid var(--admin-card-border); padding-top: 20px; }
+.admin-report-notice { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; padding: 14px 16px; border: 1px solid #e2e3e5; border-radius: 10px; background: #f8f9fa; color: #374151; font-size: 14px; line-height: 1.65; }
+.admin-report-notice > i { flex-shrink: 0; color: #4b5563; margin-top: 2px; }
 .admin-profile-details dt { color: #66746b; font-size: 13px; font-weight: 500; margin-bottom: 5px; }
 .admin-profile-details dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .admin-reset-reference { padding: 12px 14px; background: #edf5ef; border-radius: 10px; color: #285a39; }

@@ -32,6 +32,34 @@ class ReportViewQaTest extends TestCase
         }
     }
 
+    public function test_mass_report_card_opens_alerts_and_warns_only_when_needed(): void
+    {
+        foreach ([0, 2] as $count) {
+            $html = view('reports', [
+                'reports' => new LengthAwarePaginator([], 0, 10), 'totalReports' => 20,
+                'flaggedTargetCount' => $count, 'counts' => collect(),
+            ])->render();
+            $dom = new \DOMDocument;
+            $previous = libxml_use_internal_errors(true);
+            $dom->loadHTML($html);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            $xpath = new \DOMXPath($dom);
+            $cards = $xpath->query('//a[contains(concat(" ", normalize-space(@class), " "), " mod-stat ")][.//span[normalize-space()="Mass reported"]]');
+            $this->assertCount(1, $cards);
+            $card = $cards->item(0);
+            $this->assertSame(route('reports.flagged'), $card->getAttribute('href'));
+            $this->assertStringContainsString((string) $count, $card->textContent);
+            if ($count > 0) {
+                $this->assertStringContainsString('Needs review', $card->textContent);
+                $this->assertCount(1, $xpath->query('.//i[contains(@class, "bi-exclamation-triangle-fill")]', $card));
+            } else {
+                $this->assertStringContainsString('No active alerts', $card->textContent);
+                $this->assertStringNotContainsString('Needs review', $card->textContent);
+            }
+        }
+    }
+
     public function test_report_details_render_without_related_accounts(): void
     {
         $report = new Report([
