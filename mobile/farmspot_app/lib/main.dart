@@ -134,6 +134,7 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool _ready = false;
+  final _introFinished = Completer<void>();
   String? _token;
 
   @override
@@ -149,9 +150,6 @@ class _AuthGateState extends State<AuthGate> {
   /// what stops the bottom nav from painting a buyer nav and then swapping to
   /// the seller nav once the role resolves.
   Future<void> _bootstrap() async {
-    final minimumSplash = WidgetsBinding.instance.endOfFrame.then(
-      (_) => Future<void>.delayed(const Duration(seconds: 3)),
-    );
     String? token;
     try {
       final results = await Future.wait<Object?>([
@@ -164,7 +162,7 @@ class _AuthGateState extends State<AuthGate> {
       token = null;
     }
 
-    await minimumSplash;
+    await _introFinished.future;
     if (!mounted) return;
     setState(() {
       _token = token;
@@ -192,13 +190,31 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    // Cross-fade from the startup loader to the next screen.
+    // Let the intro fade away while the next screen gently rises into place.
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 400),
-      switchInCurve: Curves.easeOut,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 700),
+      switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        final faded = FadeTransition(opacity: animation, child: child);
+        if (child.key == const ValueKey('splash')) return faded;
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, .04),
+            end: Offset.zero,
+          ).animate(animation),
+          child: faded,
+        );
+      },
       child: !_ready
-          ? const SplashScreen(key: ValueKey('splash'))
+          ? SplashScreen(
+              key: const ValueKey('splash'),
+              onFinished: () {
+                if (!_introFinished.isCompleted) _introFinished.complete();
+              },
+            )
           : _token != null
           ? const HomeScreen(key: ValueKey('home'))
           : const LoginScreen(key: ValueKey('login')),

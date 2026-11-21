@@ -369,10 +369,13 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const SetupHeader(
+            SetupHeader(
               title: 'Pin Your Farm',
               subtitle:
                   'Search, tap the map, or drag the pin to set the location',
+              onBack: () {
+                if (!_isSubmitting) Navigator.of(context).maybePop();
+              },
             ),
             StepProgress(
               // Additional farms come straight here, having skipped the

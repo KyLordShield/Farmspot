@@ -169,9 +169,10 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const SetupHeader(
+            SetupHeader(
               title: 'Set Up Your Farm',
               subtitle: 'Tell buyers about your farm',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
             StepProgress(
               step: 1,

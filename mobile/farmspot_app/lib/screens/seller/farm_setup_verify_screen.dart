@@ -228,9 +228,12 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const SetupHeader(
+            SetupHeader(
               title: 'Verify Identity',
               subtitle: 'For trust & community safety',
+              onBack: () {
+                if (!_checking) Navigator.of(context).maybePop();
+              },
             ),
             const StepProgress(
               step: 2,

@@ -24,6 +24,39 @@ Widget app(VoidCallback finished) => DefaultAssetBundle(
 );
 
 void main() {
+  testWidgets('FarmSpot letters bounce once in left-to-right order', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 740));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(app(() {}));
+    final lottie = tester.widget<LottieBuilder>(find.byType(LottieBuilder));
+    lottie.onLoaded!(intro());
+    await tester.pump();
+    double height(String letter) => tester
+        .widget<Transform>(
+          find
+              .ancestor(of: find.text(letter), matching: find.byType(Transform))
+              .first,
+        )
+        .transform
+        .storage[13];
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(height('F'), lessThan(0));
+    expect(height('a'), closeTo(0, .01));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(height('F'), lessThan(-8));
+    expect(
+      height('a'),
+      lessThan(-.1),
+      reason: 'the next letter starts before the first lands',
+    );
+    await tester.pump(const Duration(seconds: 2));
+    expect(height('t'), closeTo(0, .01));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('intro keeps full playback with disabled system animations', (
     tester,
   ) async {

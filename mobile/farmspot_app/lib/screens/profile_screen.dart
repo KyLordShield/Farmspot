@@ -296,8 +296,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildBecomeSellerCard(),
-                      const SizedBox(height: 12),
-                      _buildBusinessCard(),
+                      // Keep the plan card available, but hide its profile promotion.
+                      Visibility(visible: false, child: _buildBusinessCard()),
                       const SizedBox(height: 20),
                       const SectionHeader(title: 'BUSINESS TOOLS'),
                       const SizedBox(height: 4),
