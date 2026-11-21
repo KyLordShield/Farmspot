@@ -8,6 +8,8 @@ class FarmPin {
   final double latitude;
   final double longitude;
   final int activeListingsCount;
+  final double? ratingAverage;
+  final int ratingCount;
 
   /// First farm photo (small thumbnail on the map card / list row), or null
   /// when the farm has none uploaded.
@@ -21,6 +23,8 @@ class FarmPin {
     this.longitude = 0,
     this.activeListingsCount = 0,
     this.photoUrl,
+    this.ratingAverage,
+    this.ratingCount = 0,
   });
 
   factory FarmPin.fromJson(Map<String, dynamic> json) {
@@ -33,6 +37,8 @@ class FarmPin {
       activeListingsCount:
           (json['active_listings_count'] as num?)?.toInt() ?? 0,
       photoUrl: json['photo_url'] as String?,
+      ratingAverage: _toDouble(json['rating_average']),
+      ratingCount: (json['rating_count'] as num?)?.toInt() ?? 0,
     );
   }
 

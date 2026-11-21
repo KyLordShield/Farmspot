@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/farm_pin.dart';
 import '../services/session_state.dart';
 import '../services/farm_service.dart';
+import '../services/location_service.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
 import '../widgets/seller_widgets.dart';
 import '../widgets/farmspot_loader.dart';
+import '../widgets/map_camera_motion.dart';
 import '../widgets/map_tile_layer.dart';
 import '../widgets/save_farm_button.dart';
 import '../services/saved_farms_state.dart';
@@ -20,32 +21,15 @@ import 'insights_screen.dart';
 import 'profile_screen.dart';
 import 'seller/my_farm_screen.dart';
 
-/// Fallback buyer position — Cebu City when GPS is unavailable or denied.
-/// Never throws: any geolocator failure (permission denied, services off,
-/// missing plugin, no fix) falls back to this center so the map always renders.
-Future<LatLng> _defaultPosition() async {
-  try {
-    await GeolocatorPlatform.instance.isLocationServiceEnabled();
-    if (await GeolocatorPlatform.instance.checkPermission() ==
-        LocationPermission.deniedForever) {
-      return const LatLng(10.3178, 123.8742);
-    }
-    final pos = await GeolocatorPlatform.instance.getCurrentPosition();
-    return LatLng(pos.latitude, pos.longitude);
-  } catch (_) {
-    return const LatLng(10.3178, 123.8742);
-  }
-}
-
 class MapScreen extends StatefulWidget {
   /// Fetch the public farm feed (injectable for tests). Defaults to the real
   /// endpoint and is failure-tolerant — an unreachable backend yields an empty
   /// map, never a crash.
   final Future<List<FarmPin>> Function() loadFarms;
 
-  /// Resolve the buyer position (injectable for tests). Defaults to GPS with
-  /// the Cebu City fallback; never throws.
-  final Future<LatLng> Function() loadPosition;
+  /// Resolve the buyer position (injectable for tests). Returns a GPS fix, or
+  /// null when location is unavailable.
+  final Future<LatLng?> Function() loadPosition;
 
   /// Injectable hook for "Directions": tests substitute this to capture the
   /// farm instead of pushing the real turn-by-turn screen (whose default
@@ -59,7 +43,7 @@ class MapScreen extends StatefulWidget {
   const MapScreen({
     super.key,
     this.loadFarms = FarmService.fetchPublicFarms,
-    this.loadPosition = _defaultPosition,
+    this.loadPosition = LocationService.tryBuyerPosition,
     this.onDirectionsRequested,
     this.savedFarms,
   });
@@ -68,14 +52,15 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen>
+    with TickerProviderStateMixin, MapCameraMotion<MapScreen> {
   // 0 = Listing view toggle, 1 = Map view toggle.
   int _viewToggle = 1;
 
   final List<FarmPin> _farms = [];
   FarmPin? _selectedFarm;
   final Distance _distance = const Distance();
-  LatLng _position = const LatLng(10.3178, 123.8742);
+  LatLng? _position;
   final double _initialZoom = 14;
   bool _loadingFarms = true;
   bool _loadingPosition = true;
@@ -103,17 +88,26 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _loadPosition() async {
+  Future<void> _loadPosition([BuildContext? mapContext]) async {
+    LatLng? position;
     try {
-      final pos = await widget.loadPosition();
-      if (!mounted) return;
-      setState(() {
-        _position = pos;
-        _loadingPosition = false;
-      });
+      position = await widget.loadPosition();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingPosition = false);
+      // The map can still show farms when the device cannot get a fix.
+    }
+    if (!mounted) return;
+    setState(() {
+      _position = position ?? _position;
+      _loadingPosition = false;
+    });
+    if (mapContext == null || !mapContext.mounted || _viewToggle != 1) return;
+    final target = _position;
+    if (target != null) {
+      moveToLocation(MapController.of(mapContext), target, 15);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Turn on location access and try again.')),
+      );
     }
   }
 
@@ -176,12 +170,15 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  double _distanceKm(FarmPin farm) => _distance.as(
+    LengthUnit.Kilometer,
+    _position!,
+    LatLng(farm.latitude, farm.longitude),
+  );
+
   String _distanceLabel(FarmPin farm) {
-    final km = _distance.as(
-      LengthUnit.Kilometer,
-      _position,
-      LatLng(farm.latitude, farm.longitude),
-    );
+    if (_position == null) return 'Distance unavailable';
+    final km = _distanceKm(farm);
     if (km < 0.1) return 'under 100 m away';
     if (km < 10) return '${km.toStringAsFixed(1)} km away';
     return '${km.round()} km away';
@@ -228,7 +225,10 @@ class _MapScreenState extends State<MapScreen> {
           ),
           _ToggleGroup(
             selected: _viewToggle,
-            onChanged: (i) => setState(() => _viewToggle = i),
+            onChanged: (i) => setState(() {
+              if (i != _viewToggle) stopCameraMotion();
+              _viewToggle = i;
+            }),
           ),
         ],
       ),
@@ -242,14 +242,43 @@ class _MapScreenState extends State<MapScreen> {
           child: MapLoadingBackground(
             child: FlutterMap(
               options: MapOptions(
-                initialCenter: _position,
+                initialCenter: _position ?? LocationService.fallbackPosition,
                 initialZoom: _initialZoom,
                 onTap: (_, _) => setState(() => _selectedFarm = null),
               ),
               children: [
                 const MapTileLayer(),
                 MarkerLayer(
-                  markers: [_buildUserMarker(), ..._farms.map(_buildFarmMarker)],
+                  markers: [
+                    if (_position case final position?)
+                      _buildUserMarker(position),
+                    ..._farms.map(_buildFarmMarker),
+                  ],
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Builder(
+                    builder: (mapContext) => FilledButton.tonalIcon(
+                      icon: const Icon(Icons.my_location),
+                      label: const Text('My location'),
+                      onPressed: _loadingPosition
+                          ? null
+                          : () {
+                              final position = _position;
+                              if (position != null) {
+                                moveToLocation(
+                                  MapController.of(mapContext),
+                                  position,
+                                  15,
+                                );
+                              } else {
+                                setState(() => _loadingPosition = true);
+                                _loadPosition(mapContext);
+                              }
+                            },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -285,25 +314,31 @@ class _MapScreenState extends State<MapScreen> {
               distanceLabel: _distanceLabel(_selectedFarm!),
               onOpenProfile: () => _openFarmProfile(_selectedFarm!),
               onDirections: _openDirections,
-              saveButton: SaveFarmButton(farmId: _selectedFarm!.id, savedFarms: widget.savedFarms),
+              saveButton: SaveFarmButton(
+                farmId: _selectedFarm!.id,
+                savedFarms: widget.savedFarms,
+              ),
             ),
           ),
       ],
     );
   }
 
-  Marker _buildUserMarker() {
+  Marker _buildUserMarker(LatLng position) {
     return Marker(
       width: 30,
       height: 30,
-      point: _position,
+      point: position,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.blue, width: 2),
         ),
-        child: const Icon(Icons.navigation, color: Colors.blue, size: 18),
+        child: const Tooltip(
+          message: 'You are here',
+          child: Icon(Icons.navigation, color: Colors.blue, size: 18),
+        ),
       ),
     );
   }
@@ -340,11 +375,22 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
     }
+    final ordered = [
+      for (final farm in _farms)
+        (farm: farm, km: _position == null ? null : _distanceKm(farm)),
+    ];
+    if (_position != null) {
+      ordered.sort(
+        (a, b) => a.km!.compareTo(b.km!) != 0
+            ? a.km!.compareTo(b.km!)
+            : a.farm.name.compareTo(b.farm.name),
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
-      itemCount: _farms.length,
+      itemCount: ordered.length,
       itemBuilder: (context, index) {
-        final farm = _farms[index];
+        final farm = ordered[index].farm;
         return _FarmListTile(
           farm: farm,
           subtitle:
@@ -543,7 +589,7 @@ class _FarmCard extends StatelessWidget {
         width: 52,
         height: 52,
         fit: BoxFit.cover,
-        cacheWidth: 160,
+        cacheWidth: farmThumbnailCacheWidth,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );
@@ -627,6 +673,19 @@ class _FarmListTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    farm.ratingAverage == null
+                        ? 'No ratings yet'
+                        : '★ ${farm.ratingAverage!.toStringAsFixed(1)} (${farm.ratingCount})',
+                    semanticsLabel: farm.ratingAverage == null
+                        ? 'No ratings yet'
+                        : '${farm.ratingAverage!.toStringAsFixed(1)} out of 5, ${farm.ratingCount} reviews',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -652,7 +711,7 @@ class _FarmListTile extends StatelessWidget {
         width: 44,
         height: 44,
         fit: BoxFit.cover,
-        cacheWidth: 160,
+        cacheWidth: farmThumbnailCacheWidth,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
     );

@@ -16,6 +16,7 @@ import '../services/search_service.dart';
 import '../theme.dart';
 import '../utils/crop_icons.dart';
 import '../widgets/home_widgets.dart';
+import '../widgets/map_camera_motion.dart';
 import '../widgets/map_tile_layer.dart';
 import '../widgets/search_widgets.dart';
 import '../widgets/lottie_loader.dart';
@@ -193,7 +194,8 @@ class _ImageOrdering {
   });
 }
 
-class _SearchResultsScreenState extends State<SearchResultsScreen> {
+class _SearchResultsScreenState extends State<SearchResultsScreen>
+    with TickerProviderStateMixin, MapCameraMotion<SearchResultsScreen> {
   SearchSortMode _sort = SearchSortMode.nearest;
 
   List<_ResultRow> _rows = const [];
@@ -358,10 +360,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             ),
           ),
       ];
-      final points = {
-        for (final marker in markers) marker.point,
-        ?position,
-      };
+      final points = {for (final marker in markers) marker.point, ?position};
       return FlutterMap(
         key: ObjectKey(snapshot.data),
         options: MapOptions(
@@ -403,7 +402,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 ),
                 onPressed: position == null
                     ? null
-                    : () => MapController.of(mapContext).move(position, 15),
+                    : () => moveToLocation(
+                        MapController.of(mapContext),
+                        position,
+                        15,
+                      ),
               ),
             ),
           ),
@@ -627,8 +630,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   /// intact so switching back to Nearest restores every matching result.
   List<_ResultRow> get _visibleRows => _rows.where((row) {
     if (_activeCategoryId != null &&
-        row.listing.categoryId != _activeCategoryId)
+        row.listing.categoryId != _activeCategoryId) {
       return false;
+    }
     return switch (_sort) {
       SearchSortMode.nearest => true,
       SearchSortMode.available => row.listing.status == 'AVAILABLE_NOW',
@@ -990,6 +994,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                   ],
                   selected: {_showMap},
                   onSelectionChanged: (selection) => setState(() {
+                    stopCameraMotion();
                     _showMap = selection.single;
                     if (_showMap && _mapMatches == null) _loadMap();
                   }),

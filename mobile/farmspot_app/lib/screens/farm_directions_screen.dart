@@ -131,7 +131,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
 
   /// How far off the planned polyline counts as "off route". Tight enough to
   /// catch a wrong turn, loose enough to ignore normal GPS drift.
-  double get _offRouteThreshold => _mode == 'foot' ? 30 : 45;
+  static const double _offRouteThreshold = 45;
 
   /// A miss this many times the threshold cannot be GPS drift: reroute on the
   /// first fix instead of waiting for a second confirmation.
@@ -152,7 +152,6 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   final MapController _mapController = MapController();
 
   _Step _step = _Step.direction;
-  String _mode = 'foot';
 
   LatLng _current = _fallback;
   LatLng? _farmPos;
@@ -293,7 +292,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     super.dispose();
   }
 
-  RoutePlan? get _plan => _mode == 'foot' ? _footPlan : _carPlan;
+  RoutePlan? get _plan => _carPlan;
 
   bool _initializing = false;
 
@@ -566,7 +565,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     return idx;
   }
 
-  double get _arriveThreshold => _mode == 'foot' ? 25 : 45;
+  static const double _arriveThreshold = 45;
 
   List<double> _buildCumulative(RoutePlan? plan) {
     final geometry = plan?.geometry ?? const <LatLng>[];
@@ -854,17 +853,16 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
 
     _lastRerouteAt = now;
     _rerouteInFlight = true;
-    final profile = _mode;
     if (mounted) setState(() => _isRerouting = true);
 
     final fresh = await _routing.getRoute(
       from: pos,
       to: destination,
-      profile: profile,
+      profile: 'car',
     );
 
     _rerouteInFlight = false;
-    if (!mounted || _step != _Step.journey || profile != _mode) {
+    if (!mounted || _step != _Step.journey) {
       if (mounted) setState(() => _isRerouting = false);
       return;
     }
@@ -879,11 +877,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
     // traveller is now, not where they were when the request started.
     final nextStep = _firstUpcomingStep(fresh, _live);
     setState(() {
-      if (profile == 'foot') {
-        _footPlan = fresh;
-      } else {
-        _carPlan = fresh;
-      }
+      _carPlan = fresh;
       _cumulative = cumulative;
       _nextStepIndex = nextStep;
       _cachedRemaining = null;
@@ -1222,30 +1216,25 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                       Row(
                         children: [
                           Expanded(
-                            child: _ModePill(
-                              label: _planLabel(_footPlan),
-                              sub: _planSub(_footPlan, 'walking'),
-                              selected: _mode == 'foot',
-                              enabled: _footPlan != null,
-                              onTap: _footPlan == null
-                                  ? null
-                                  : () => setState(() => _mode = 'foot'),
+                            child: _JourneyStat(
+                              value: _planLabel(_carPlan),
+                              label: 'Riding',
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: _ModePill(
-                              label: _planLabel(_carPlan),
-                              sub: _planSub(_carPlan, 'riding'),
-                              selected: _mode == 'car',
-                              enabled: _carPlan != null,
-                              onTap: _carPlan == null
-                                  ? null
-                                  : () => setState(() => _mode = 'car'),
+                            child: _JourneyStat(
+                              value: _planLabel(_footPlan),
+                              label: 'Walking estimate',
                             ),
                           ),
                         ],
                       ),
+                      if (_carPlan == null)
+                        _BuildError(
+                          error: 'No riding route is available.',
+                          onRetry: _initialize,
+                        ),
                       const SizedBox(height: 24),
                       if (_plan?.hasFerry == true) ...[
                         _ferryWarning(),
@@ -1287,18 +1276,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
   String _planLabel(RoutePlan? plan) =>
       plan == null ? '—' : _formatDuration(plan.durationSeconds);
 
-  String _planSub(RoutePlan? plan, String modeLabel) => plan == null
-      ? modeLabel
-      : '${_formatDistance(plan.distanceMeters)} · $modeLabel';
-
-  /// Warns when the selected plan crosses water by boat, and offers the other
-  /// mode when it stays on roads/bridges. Walking still navigates as-is; the
-  /// buyer just knows to expect a ferry and can switch if they prefer.
   Widget _ferryWarning() {
-    final modeLabel = _mode == 'foot' ? 'walking' : 'riding';
-    final otherPlan = _mode == 'foot' ? _carPlan : _footPlan;
-    final otherModeLabel = _mode == 'foot' ? 'riding' : 'walking';
-    final canSwitch = otherPlan != null && otherPlan.hasFerry == false;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1327,30 +1305,10 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'This $modeLabel route boards a boat mid-route. Check schedules '
+            'This riding route includes a ferry. Check schedules '
             'and fares before you leave.',
             style: const TextStyle(fontSize: 12, color: Color(0xFF795548)),
           ),
-          if (canSwitch) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => setState(() {
-                  _mode = _mode == 'foot' ? 'car' : 'foot';
-                }),
-                icon: const Icon(Icons.signpost, size: 18),
-                label: Text(
-                  'Use the $otherModeLabel route (roads/bridge) instead',
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFF57F17),
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1655,10 +1613,7 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                             : _formatDistance(_remainingDistance!),
                         label: 'Remaining',
                       ),
-                      _JourneyStat(
-                        value: _mode == 'foot' ? 'Walking' : 'Riding',
-                        label: '',
-                      ),
+                      _JourneyStat(value: 'Riding', label: ''),
                     ],
                   ),
                   if (!_liveAvailable) ...[
@@ -2165,64 +2120,6 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
       default:
         return 'Not Available';
     }
-  }
-}
-
-class _ModePill extends StatelessWidget {
-  final String label;
-  final String sub;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  const _ModePill({
-    required this.label,
-    required this.sub,
-    required this.selected,
-    required this.enabled,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primaryGreen.withValues(alpha: 0.12)
-              : const Color(0xFFEAF6EC),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected
-                ? AppColors.primaryGreen
-                : AppColors.primaryGreen.withValues(alpha: 0.3),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: enabled ? Colors.black87 : Colors.black26,
-              ),
-            ),
-            Text(
-              sub,
-              style: TextStyle(
-                fontSize: 12,
-                color: enabled ? Colors.black54 : Colors.black26,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

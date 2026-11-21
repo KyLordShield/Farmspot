@@ -130,8 +130,7 @@ class FarmService {
 
       return {
         'success': false,
-        'message':
-            json['message'] ?? 'Something went wrong. Please try again.',
+        'message': json['message'] ?? 'Something went wrong. Please try again.',
       };
     } catch (e) {
       return {
@@ -225,35 +224,57 @@ class FarmService {
     }
   }
 
+  static const _publicFarmCacheLifetime = Duration(seconds: 30);
+  static final _publicFarmCacheAge = Stopwatch();
+  static List<FarmPin>? _publicFarmCache;
+  static Future<List<FarmPin>>? _publicFarmRequest;
+
   /// Fetches the approved, pin-active farms shown on the buyer-facing map
   /// (GET /api/farms/public — public, no auth needed). Parses the backend's
   /// decimal lat/lng strings into doubles. Failure-tolerant like [getFarms]:
   /// returns an empty list on any failure so the map degrades gracefully
   /// (showing just the buyer's own position) instead of crashing.
-  static Future<List<FarmPin>> fetchPublicFarms() async {
+  static Future<List<FarmPin>> fetchPublicFarms() {
+    final cached = _publicFarmCache;
+    if (cached != null &&
+        _publicFarmCacheAge.elapsed < _publicFarmCacheLifetime) {
+      return Future.value(List.of(cached));
+    }
+    return (_publicFarmRequest ??= _refreshPublicFarms()).then(List.of);
+  }
+
+  static Future<List<FarmPin>> _refreshPublicFarms() async {
     try {
       final response = await http.get(
         Uri.parse('${AuthService.baseUrl}/farms/public'),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return const [];
 
       final json = jsonDecode(response.body);
       final farms = json is Map ? json['farms'] : null;
       if (farms is! List) return const [];
 
-      return farms
+      final pins = farms
           .whereType<Map>()
           .map((farm) => FarmPin.fromJson(Map<String, dynamic>.from(farm)))
           .toList();
+      _publicFarmCache = pins;
+      _publicFarmCacheAge
+        ..reset()
+        ..start();
+      return pins;
     } catch (_) {
       return const [];
+    } finally {
+      _publicFarmRequest = null;
     }
   }
 
   /// Fetches the authenticated user's own farms (GET /api/farms).
   /// Returns an empty list when not logged in or on any failure — never throws.
-  static Future<List<Map<String, dynamic>>> getFarms() async {    final token = await AuthService.getToken();
+  static Future<List<Map<String, dynamic>>> getFarms() async {
+    final token = await AuthService.getToken();
     if (token == null) return const [];
 
     try {
@@ -280,9 +301,11 @@ class FarmService {
         ..sort((a, b) {
           final byStatus = _farmStatusRank(b).compareTo(_farmStatusRank(a));
           if (byStatus != 0) return byStatus;
-          return _createdEpochSeconds(b['FRM_CREATED_AT'] as String? ?? '')
-              .compareTo(
-                  _createdEpochSeconds(a['FRM_CREATED_AT'] as String? ?? ''));
+          return _createdEpochSeconds(
+            b['FRM_CREATED_AT'] as String? ?? '',
+          ).compareTo(
+            _createdEpochSeconds(a['FRM_CREATED_AT'] as String? ?? ''),
+          );
         });
     } catch (_) {
       return const [];

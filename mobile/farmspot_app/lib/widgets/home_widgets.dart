@@ -6,6 +6,10 @@ import 'rating_stars.dart';
 import 'seller_widgets.dart';
 import 'listing_grid_layout.dart';
 
+// Matching decode sizes let Flutter reuse the same cached image across screens.
+const cropThumbnailCacheWidth = 600;
+const farmThumbnailCacheWidth = 200;
+
 /// Data model for a crop listing shown in the Home feed.
 class CropListing {
   final String cropName;
@@ -547,7 +551,7 @@ class CropCard extends StatelessWidget {
     return Image.network(
       url,
       fit: BoxFit.cover,
-      cacheWidth: 600,
+      cacheWidth: cropThumbnailCacheWidth,
       errorBuilder: (context, error, stackTrace) => Container(
         color: AppColors.fieldBackground,
         child: Icon(

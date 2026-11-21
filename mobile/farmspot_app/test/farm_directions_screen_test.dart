@@ -25,7 +25,7 @@ const _farm = LatLng(10.3360, 123.8920);
 late final Distance _distance;
 late final double _leg1;
 late final double _leg2;
-late final double _footTotal;
+late final double _routeTotal;
 
 String _fmtDistance(double meters) {
   if (meters < 1000) return '${meters.round()} m';
@@ -107,10 +107,10 @@ RoutingService _routing({bool fail = false, bool ferry = false}) {
       if (fail) return http.Response('oops', 500);
       final path = request.url.path;
       if (path.contains('routed-foot')) {
-        return http.Response(_osrmBody(foot: true, ferry: ferry), 200);
+        return http.Response(_osrmBody(foot: true), 200);
       }
       if (path.contains('routed-car')) {
-        return http.Response(_osrmBody(foot: false), 200);
+        return http.Response(_osrmBody(foot: false, ferry: ferry), 200);
       }
       return http.Response('not found', 404);
     }),
@@ -283,7 +283,7 @@ void main() {
     _distance = const Distance();
     _leg1 = _distance.as(LengthUnit.Meter, _start, _mid);
     _leg2 = _distance.as(LengthUnit.Meter, _mid, _farm);
-    _footTotal = _leg1 + _leg2;
+    _routeTotal = _leg1 + _leg2;
   });
 
   testWidgets('Step 1 shows the real farm with real walking + riding ETAs', (
@@ -316,66 +316,38 @@ void main() {
       findsOneWidget,
       reason: 'real riding ETA from the routed-car plan',
     );
-    expect(find.textContaining('walking'), findsOneWidget);
-    expect(find.textContaining('riding'), findsOneWidget);
+    expect(find.text('Walking estimate'), findsOneWidget);
+    expect(find.text('Riding'), findsOneWidget);
     expect(find.text('Start Navigation'), findsOneWidget);
   });
 
   testWidgets(
-    'a ferry plan warns and offers the road/bridge riding route instead',
+    'a riding route with a ferry warns without offering a mode switch',
     (tester) async {
       final stream = StreamController<LatLng>();
       await _pump(tester, stream: stream, ferry: true);
 
-      expect(
-        find.text('Includes a ferry/boat crossing'),
-        findsOneWidget,
-        reason: 'the walking (foot) plan has a ferry leg, so Step 1 must warn',
-      );
-      expect(find.textContaining('boards a boat'), findsOneWidget);
-      expect(
-        find.textContaining('Use the riding route'),
-        findsOneWidget,
-        reason:
-            'the car plan crosses by bridge, so offer it as the alternative',
-      );
-
-      await tester.tap(find.textContaining('Use the riding route'));
-      await tester.pump();
-
-      expect(
-        find.textContaining('Includes a ferry'),
-        findsNothing,
-        reason: 'after switching to riding the selected plan has no ferry',
-      );
-      expect(
-        find.text('17 min'),
-        findsOneWidget,
-        reason: 'riding ETA is still shown',
-      );
+      expect(find.text('Includes a ferry/boat crossing'), findsOneWidget);
+      expect(find.textContaining('Use the walking route'), findsNothing);
+      expect(find.text('Walking estimate'), findsOneWidget);
     },
   );
 
-  testWidgets(
-    'mode toggle selects riding and the journey shows the real mode',
-    (tester) async {
-      final stream = StreamController<LatLng>();
-      await _pump(tester, stream: stream);
+  testWidgets('navigation starts on the riding route', (tester) async {
+    final stream = StreamController<LatLng>();
+    await _pump(tester, stream: stream);
 
-      await tester.tap(find.text('17 min'));
-      await tester.pump();
-      await tester.tap(find.text('Start Navigation'));
-      await tester.pump();
+    await tester.tap(find.text('Start Navigation'));
+    await tester.pump();
 
-      expect(
-        find.text('Riding'),
-        findsOneWidget,
-        reason: 'journey must honor the selected riding mode',
-      );
-      expect(find.text('Mark as Arrived'), findsOneWidget);
-      expect(find.text('Cancel Navigation'), findsOneWidget);
-    },
-  );
+    expect(
+      find.text('Riding'),
+      findsOneWidget,
+      reason: 'journey must honor the riding-only mode',
+    );
+    expect(find.text('Mark as Arrived'), findsOneWidget);
+    expect(find.text('Cancel Navigation'), findsOneWidget);
+  });
 
   testWidgets(
     'journey shows real remaining ETA/distance and advances through turns',
@@ -387,14 +359,14 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('Walking'),
+        find.text('Riding'),
         findsOneWidget,
-        reason: 'foot is the default mode',
+        reason: 'navigation uses the riding route',
       );
       expect(
-        find.text(_fmtDistance(_footTotal)),
+        find.text(_fmtDistance(_routeTotal)),
         findsOneWidget,
-        reason: 'remaining distance = full walking route from the start',
+        reason: 'remaining distance = full riding route from the start',
       );
       expect(
         find.text('Turn left onto Sudlon Road'),
@@ -473,7 +445,7 @@ void main() {
     );
     expect(
       routing.calls.last,
-      'foot:10.3178,123.8900',
+      'car:10.3178,123.8900',
       reason:
           'the reroute uses the active mode and the live position as '
           'its start, not the original origin',
@@ -502,7 +474,7 @@ void main() {
       3,
       reason: 'a clear wrong turn reroutes immediately',
     );
-    expect(routing.calls.last, startsWith('foot:'));
+    expect(routing.calls.last, startsWith('car:'));
   });
 
   testWidgets(
@@ -590,7 +562,7 @@ void main() {
           'the debug hook feeds two off-route fixes, so the real reroute '
           'request must fire',
     );
-    expect(routing.calls.last, startsWith('foot:'));
+    expect(routing.calls.last, startsWith('car:'));
   });
 
   testWidgets('manual GPS mode lets the arrow pad drive an off-route reroute', (
@@ -615,9 +587,9 @@ void main() {
     expect(find.text('Manual GPS · drag or arrows'), findsOneWidget);
     expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
 
-    // Walk north in five 10 m steps. The route heads east-northeast, so this
-    // leaves the line by >35 m and must request a reroute.
-    for (var i = 0; i < 5; i++) {
+    // Move far enough north for multiple fixes beyond the riding route's
+    // 45 m threshold; smaller movements can correctly be treated as GPS drift.
+    for (var i = 0; i < 10; i++) {
       await tester.tap(find.byIcon(Icons.keyboard_arrow_up));
       await tester.pump();
     }
@@ -691,9 +663,9 @@ void main() {
         reason: 'the journey must state it is replaying fake positions',
       );
       expect(
-        find.text(_fmtDistance(_footTotal)),
+        find.text(_fmtDistance(_routeTotal)),
         findsOneWidget,
-        reason: 'remaining distance starts at the full walking route',
+        reason: 'remaining distance starts at the full riding route',
       );
       expect(
         find.text('Turn left onto Sudlon Road'),
@@ -1021,7 +993,7 @@ void main() {
     );
     await tester.tap(find.text('Start Navigation'));
     await tester.pump();
-    expect(find.text('Walking'), findsOneWidget);
+    expect(find.text('Riding'), findsOneWidget);
     expect(find.text('Mark as Arrived'), findsOneWidget);
   });
 }

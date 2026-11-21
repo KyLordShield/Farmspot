@@ -4,37 +4,37 @@ import '../theme.dart';
 
 /// The single OpenStreetMap tile layer used by every FarmSpot map.
 ///
-/// Three things are tuned for the field, where the phone is usually on mobile
-/// data rather than WiFi:
-///
-/// - `panBuffer: 3` (flutter_map defaults to 1) fetches tiles well outside the
-///   visible viewport. On a slow link the old value left a ring of unloaded
-///   grey around wherever the farmer had just panned, which read as a broken
-///   map. Fetching ahead means the area they are moving into is already there.
-/// - `NetworkTileProvider(silenceExceptions: true)` turns a failed tile into a
-///   blank tile instead of a thrown error. A single dropped request then cannot
-///   bubble an exception up through the map widget and abort the rest of the
-///   screen's tiles.
-/// - `keepBuffer: 2` retains the previous zoom levels, so panning back over
-///   ground the farmer already walked does not re-download.
-class MapTileLayer extends StatelessWidget {
+/// Native maps share flutter_map's disk cache across screens and launches.
+/// Keep the network provider stable while a map is mounted so updates to GPS,
+/// pins, and route overlays reuse the same client and in-flight requests.
+class MapTileLayer extends StatefulWidget {
   final int panBuffer;
   final int keepBuffer;
 
-  const MapTileLayer({
-    super.key,
-    this.panBuffer = 3,
-    this.keepBuffer = 2,
-  });
+  const MapTileLayer({super.key, this.panBuffer = 1, this.keepBuffer = 2});
+
+  @override
+  State<MapTileLayer> createState() => _MapTileLayerState();
+}
+
+class _MapTileLayerState extends State<MapTileLayer> {
+  // TileLayer owns and disposes the provider when it unmounts.
+  late final _provider = NetworkTileProvider(
+    silenceExceptions: true,
+    attemptDecodeOfHttpErrorResponses: false,
+    cachingProvider: BuiltInMapCachingProvider.getOrCreateInstance(
+      maxCacheSize: 128 * 1024 * 1024,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     return TileLayer(
       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       userAgentPackageName: 'com.cloudsync.farmspot_app',
-      panBuffer: panBuffer,
-      keepBuffer: keepBuffer,
-      tileProvider: NetworkTileProvider(silenceExceptions: true),
+      panBuffer: widget.panBuffer,
+      keepBuffer: widget.keepBuffer,
+      tileProvider: _provider,
     );
   }
 }
@@ -54,10 +54,7 @@ class MapLoadingBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: const Color(0xFFF3F7F1),
-      child: CustomPaint(
-        painter: const _GridPainter(),
-        child: child,
-      ),
+      child: CustomPaint(painter: const _GridPainter(), child: child),
     );
   }
 }

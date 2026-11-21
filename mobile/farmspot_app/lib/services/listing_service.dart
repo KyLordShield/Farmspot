@@ -246,8 +246,8 @@ class ListingService {
       queryParameters: {
         'view': 'map',
         for (final (index, term) in terms.indexed) 'terms[$index]': term,
-        if (category != null) 'category': category,
-        if (status != null) 'status': status,
+        'category': ?category,
+        'status': ?status,
       },
     );
     final response = await http
@@ -278,12 +278,39 @@ class ListingService {
 
   /// Fetches all crop categories (GET /api/crop-categories). Public endpoint.
   /// Returns the list on success, or throws an Exception on failure.
-  static Future<List<CropCategory>> fetchCropCategories() async {
+  static const _categoryCacheLifetime = Duration(minutes: 5);
+  static List<CropCategory>? _cachedCategories;
+  static DateTime? _categoriesFetchedAt;
+  static Future<List<CropCategory>>? _categoryRequest;
+
+  static Future<List<CropCategory>> fetchCropCategories() {
+    final cached = _cachedCategories;
+    final fetchedAt = _categoriesFetchedAt;
+    if (cached != null &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < _categoryCacheLifetime) {
+      return Future.value(List.of(cached));
+    }
+    return (_categoryRequest ??= _refreshCropCategories()).then(List.of);
+  }
+
+  static Future<List<CropCategory>> _refreshCropCategories() async {
+    try {
+      final categories = await _fetchCropCategories();
+      _cachedCategories = categories;
+      _categoriesFetchedAt = DateTime.now();
+      return categories;
+    } finally {
+      _categoryRequest = null;
+    }
+  }
+
+  static Future<List<CropCategory>> _fetchCropCategories() async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/crop-categories'),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/listing_review.dart';
 import '../theme.dart';
-import 'home_widgets.dart' show cropStatusData;
+import 'home_widgets.dart'
+    show cropStatusData, cropThumbnailCacheWidth, farmThumbnailCacheWidth;
 import 'rating_stars.dart';
 import 'listing_grid_layout.dart';
 
@@ -225,7 +226,7 @@ class SearchResultCard extends StatelessWidget {
                       Image.network(
                         item.imageUrl!,
                         fit: BoxFit.cover,
-                        cacheWidth: 600,
+                        cacheWidth: cropThumbnailCacheWidth,
                         errorBuilder: (context, error, stackTrace) =>
                             const _GradientFill(),
                       )
@@ -769,7 +770,7 @@ class _InitialAvatar extends StatelessWidget {
         child: Image.network(
           url,
           fit: BoxFit.cover,
-          cacheWidth: 200,
+          cacheWidth: farmThumbnailCacheWidth,
           errorBuilder: (_, _, _) => _initials(),
           loadingBuilder: (context, child, progress) =>
               progress == null ? child : _initials(),
@@ -814,7 +815,7 @@ class _Thumb extends StatelessWidget {
             : Image.network(
                 url,
                 fit: BoxFit.cover,
-                cacheWidth: 200,
+                cacheWidth: farmThumbnailCacheWidth,
                 errorBuilder: (context, error, stackTrace) =>
                     const _GradientFill(),
               ),

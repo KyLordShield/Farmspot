@@ -317,7 +317,8 @@ void main() {
 
     // Default loadFarms hits the real endpoint (unreachable in a widget test
     // -> empty), default loadPosition hits geolocator (missing plugin ->
-    // fallback center). Both must degrade without crashing.
+    // null fix). The map can use a fallback center without inventing a buyer
+    // location. Both failures must degrade without crashing.
     await tester.pumpWidget(const MaterialApp(home: MapScreen()));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -336,8 +337,8 @@ void main() {
     expect(find.byType(TileLayer), findsOneWidget);
     expect(
       find.byIcon(Icons.navigation),
-      findsOneWidget,
-      reason: 'the fallback Cebu City buyer marker must show',
+      findsNothing,
+      reason: 'a failed GPS fix must not show a fake buyer location',
     );
 
     // Empty feed -> listing view degrades to a friendly empty message.

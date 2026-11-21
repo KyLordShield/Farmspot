@@ -209,9 +209,17 @@ class FarmController extends Controller
      */
     public function mapPins(Request $request)
     {
+        $ratings = ListingReview::query()
+            ->visible()
+            ->join('listing', 'listing.LST_ID', '=', 'listing_review.LST_ID')
+            ->groupBy('listing.FRM_ID')
+            ->selectRaw('listing.FRM_ID, AVG(LRV_RATING) as rating_average, COUNT(*) as rating_count');
+
         $farms = Farm::with([
             'photos' => fn ($query) => $query->orderBy('FPHOTO_UPLOADED_AT'),
         ])
+            ->select('farm.*', 'ratings.rating_average', 'ratings.rating_count')
+            ->leftJoinSub($ratings, 'ratings', 'ratings.FRM_ID', '=', 'farm.FRM_ID')
             ->withCount([
                 'listings as active_listings_count' => function ($query) {
                     $query->where('LST_STATUS', 'AVAILABLE_NOW')
@@ -239,6 +247,9 @@ class FarmController extends Controller
                     'latitude' => $farm->FRM_LATITUDE,
                     'longitude' => $farm->FRM_LONGITUDE,
                     'active_listings_count' => $farm->active_listings_count,
+                    'rating_average' => $farm->rating_average === null
+                        ? null : round((float) $farm->rating_average, 2),
+                    'rating_count' => (int) $farm->rating_count,
                     'photo_url' => $primary?->FPHOTO_FILE_PATH,
                 ];
             }),

@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
+import '../../widgets/map_camera_motion.dart';
 import '../../widgets/map_tile_layer.dart';
 import '../../widgets/premium_widgets.dart';
 
@@ -20,12 +21,14 @@ class BuyRequestPinScreen extends StatefulWidget {
   State<BuyRequestPinScreen> createState() => _BuyRequestPinScreenState();
 }
 
-class _BuyRequestPinScreenState extends State<BuyRequestPinScreen> {
+class _BuyRequestPinScreenState extends State<BuyRequestPinScreen>
+    with TickerProviderStateMixin, MapCameraMotion<BuyRequestPinScreen> {
   final _map = MapController();
   late LatLng? _pin = widget.initialPin;
   bool _locating = false;
   @override
   void dispose() {
+    stopCameraMotion();
     _map.dispose();
     super.dispose();
   }
@@ -40,7 +43,7 @@ class _BuyRequestPinScreenState extends State<BuyRequestPinScreen> {
       if (point != null) _pin = point;
     });
     if (point != null) {
-      _map.move(point, 16);
+      moveToLocation(_map, point, 16);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
