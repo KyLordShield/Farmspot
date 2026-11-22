@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,13 +30,19 @@ class _FakeGeolocator extends GeolocatorPlatform {
       throw MissingPluginException();
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
-      throw MissingPluginException();
+  Future<Position> getCurrentPosition({
+    LocationSettings? locationSettings,
+  }) async => throw MissingPluginException();
 }
 
 /// A fake Nominatim client so the widget tests never touch the network.
 class _FakeGeocodingService implements GeocodingService {
-  _FakeGeocodingService({this.address, this.searchResults = const []});
+  _FakeGeocodingService({
+    this.address,
+    this.searchResults = const [],
+    this.pendingSearch,
+  });
+  final Completer<List<GeocodePlace>>? pendingSearch;
 
   /// Address returned by reverseGeocode; when null the real service would
   /// have failed, exercising the raw-coordinates fallback.
@@ -44,6 +51,7 @@ class _FakeGeocodingService implements GeocodingService {
 
   int reverseCalls = 0;
   final List<String> searchQueries = [];
+  final List<String> searchBoxes = [];
 
   @override
   Future<String?> reverseGeocode(LatLng point) async {
@@ -59,7 +67,8 @@ class _FakeGeocodingService implements GeocodingService {
     bool bounded = true,
   }) async {
     searchQueries.add(query);
-    return searchResults;
+    searchBoxes.add(viewbox);
+    return pendingSearch == null ? searchResults : await pendingSearch!.future;
   }
 
   @override
@@ -77,10 +86,12 @@ Future<_FakeGeocodingService> _pumpScreen(
   FarmSetupData data, {
   String? address,
   List<GeocodePlace> searchResults = const [],
+  Completer<List<GeocodePlace>>? pendingSearch,
 }) async {
   final fakeGeo = _FakeGeocodingService(
     address: address,
     searchResults: searchResults,
+    pendingSearch: pendingSearch,
   );
   final original = GeolocatorPlatform.instance;
   GeolocatorPlatform.instance = _FakeGeolocator();
@@ -112,22 +123,190 @@ String? _coordinateText(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('GPS unavailable: falls back to a default area, no crash',
-      (tester) async {
-    await _pumpScreen(tester, FarmSetupData());
+  testWidgets(
+    'Agus selection centers beyond the old Cebu City search boundary',
+    (tester) async {
+      const agus = GeocodePlace(
+        displayName: 'Agus, Lapu-Lapu, Central Visayas, Philippines',
+        latitude: 10.2807554,
+        longitude: 123.9843016,
+      );
+      final data = FarmSetupData()..barangay = 'Agus, Lapu-Lapu City, Cebu';
+      final geo = await _pumpScreen(tester, data, searchResults: [agus]);
+      expect(geo.searchQueries, ['Agus, Lapu-Lapu, Philippines']);
+      expect(geo.searchBoxes, [GeocodingService.cebuMetroViewbox]);
+      final center = tester
+          .widget<FlutterMap>(find.byType(FlutterMap))
+          .mapController!
+          .camera
+          .center;
+      expect(center.latitude, closeTo(agus.latitude, .00001));
+      expect(center.longitude, closeTo(agus.longitude, .00001));
+    },
+  );
 
-    expect(tester.takeException(), isNull,
-        reason: 'geolocator MissingPluginException must be swallowed');
-    expect(find.byType(FlutterMap), findsOneWidget,
-        reason: 'the real map must render even without GPS');
-    expect(find.textContaining('GPS'), findsOneWidget,
-        reason: 'must tell the farmer GPS was not available');
-    expect(_coordinateText(tester), contains('10.317800'),
-        reason: 'must show the default fallback coordinates');
+  testWidgets(
+    'unrelated result cannot become the farm pin or allow default submission',
+    (tester) async {
+      final data = FarmSetupData()..barangay = 'Agus, Lapu-Lapu City, Cebu';
+      await _pumpScreen(
+        tester,
+        data,
+        searchResults: const [
+          GeocodePlace(
+            displayName: 'Pigafetta Street, Carreta, Cebu City, Philippines',
+            latitude: 10.3178,
+            longitude: 123.8742,
+          ),
+        ],
+      );
+      expect(find.textContaining('No results for'), findsOneWidget);
+      await tester.tap(find.text('Create My Farm'));
+      await tester.pump();
+      expect(find.text('Confirm farm location?'), findsNothing);
+      expect(
+        find.textContaining('Search for your area or place the pin'),
+        findsOneWidget,
+      );
+      expect(data.latitude, isNull);
+    },
+  );
+
+  const busay = GeocodePlace(
+    displayName: 'Busay, Cebu City, Philippines',
+    latitude: 10.3506,
+    longitude: 123.8842,
+  );
+
+  testWidgets(
+    'step one barangay fills search and centers the map automatically',
+    (tester) async {
+      final data = FarmSetupData()..barangay = 'Busay, Cebu City, Cebu';
+      final geo = await _pumpScreen(tester, data, searchResults: [busay]);
+      expect(geo.searchQueries, ['Busay, Cebu City, Philippines']);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        data.barangay,
+      );
+      final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+      expect(
+        map.mapController!.camera.center.latitude,
+        closeTo(busay.latitude, .0001),
+      );
+      expect(
+        tester
+            .widget<MarkerLayer>(find.byType(MarkerLayer))
+            .markers
+            .single
+            .point
+            .latitude,
+        closeTo(busay.latitude, .0001),
+      );
+    },
+  );
+
+  testWidgets('ambiguous initial barangay offers choices instead of guessing', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      FarmSetupData()..barangay = 'Busay',
+      searchResults: [
+        busay,
+        const GeocodePlace(
+          displayName: 'Another Busay, Cebu',
+          latitude: 10.36,
+          longitude: 123.88,
+        ),
+      ],
+    );
+    expect(find.textContaining('Busay, Cebu City'), findsOneWidget);
+    expect(
+      tester
+          .widget<MarkerLayer>(find.byType(MarkerLayer))
+          .markers
+          .single
+          .point
+          .latitude,
+      closeTo(10.3178, .0001),
+    );
   });
 
-  testWidgets('tapping the map moves the pin and updates the coordinates',
-      (tester) async {
+  testWidgets('failed initial area lookup still allows manual pin placement', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, FarmSetupData()..barangay = 'Unknown Area');
+    expect(find.textContaining('No results for'), findsOneWidget);
+    final mapRect = tester.getRect(find.byType(FlutterMap));
+    await tester.tapAt(mapRect.bottomLeft + const Offset(20, -12));
+    await tester.pump(const Duration(milliseconds: 850));
+    expect(
+      tester
+          .widget<MarkerLayer>(find.byType(MarkerLayer))
+          .markers
+          .single
+          .point
+          .latitude,
+      isNot(closeTo(10.3178, .000001)),
+    );
+  });
+
+  testWidgets('late initial lookup never overwrites a manually placed pin', (
+    tester,
+  ) async {
+    final pending = Completer<List<GeocodePlace>>();
+    await _pumpScreen(
+      tester,
+      FarmSetupData()..barangay = 'Busay',
+      pendingSearch: pending,
+    );
+    final mapRect = tester.getRect(find.byType(FlutterMap));
+    await tester.tapAt(mapRect.center + const Offset(40, 20));
+    await tester.pump(const Duration(milliseconds: 350));
+    final chosen = tester
+        .widget<MarkerLayer>(find.byType(MarkerLayer))
+        .markers
+        .single
+        .point;
+    expect(chosen.latitude, isNot(closeTo(10.3178, .000001)));
+    pending.complete([busay]);
+    await tester.pump();
+    expect(
+      tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers.single.point,
+      chosen,
+    );
+  });
+
+  testWidgets('GPS unavailable: falls back to a default area, no crash', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, FarmSetupData());
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'geolocator MissingPluginException must be swallowed',
+    );
+    expect(
+      find.byType(FlutterMap),
+      findsOneWidget,
+      reason: 'the real map must render even without GPS',
+    );
+    expect(
+      find.textContaining('GPS'),
+      findsOneWidget,
+      reason: 'must tell the farmer GPS was not available',
+    );
+    expect(
+      _coordinateText(tester),
+      contains('10.317800'),
+      reason: 'must show the default fallback coordinates',
+    );
+  });
+
+  testWidgets('tapping the map moves the pin and updates the coordinates', (
+    tester,
+  ) async {
     await _pumpScreen(tester, FarmSetupData());
 
     final mapRect = tester.getRect(find.byType(FlutterMap));
@@ -145,8 +324,9 @@ void main() {
     );
   });
 
-  testWidgets('confirm writes the real selected lat/lng into FarmSetupData',
-      (tester) async {
+  testWidgets('confirm writes the real selected lat/lng into FarmSetupData', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final data = FarmSetupData()..name = 'Test Farm';
 
@@ -164,23 +344,36 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     // The last-step confirmation guard must be acknowledged first.
-    expect(find.text('Confirm farm location?'), findsOneWidget,
-        reason: 'the wizard must confirm before creating the farm');
+    expect(
+      find.text('Confirm farm location?'),
+      findsOneWidget,
+      reason: 'the wizard must confirm before creating the farm',
+    );
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(data.latitude, isNotNull,
-        reason: 'farmSetupData.latitude must be set on confirm');
-    expect(data.longitude, isNotNull,
-        reason: 'farmSetupData.longitude must be set on confirm');
-    expect(data.latitude, isNot(closeTo(10.3178, 0.0001)),
-        reason: 'the stored lat/lng must be the tapped point, not the fallback');
+    expect(
+      data.latitude,
+      isNotNull,
+      reason: 'farmSetupData.latitude must be set on confirm',
+    );
+    expect(
+      data.longitude,
+      isNotNull,
+      reason: 'farmSetupData.longitude must be set on confirm',
+    );
+    expect(
+      data.latitude,
+      isNot(closeTo(10.3178, 0.0001)),
+      reason: 'the stored lat/lng must be the tapped point, not the fallback',
+    );
   });
 
-  testWidgets('dragging the marker updates the selected coordinates',
-      (tester) async {
+  testWidgets('dragging the marker updates the selected coordinates', (
+    tester,
+  ) async {
     await _pumpScreen(tester, FarmSetupData());
 
     final markerFinder = find.byIcon(Icons.location_pin);
@@ -202,8 +395,11 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 850));
 
-    expect(tester.takeException(), isNull,
-        reason: 'dragging the pin must not throw');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'dragging the pin must not throw',
+    );
     expect(
       _coordinateText(tester),
       isNot(contains('10.317800')),
@@ -211,16 +407,20 @@ void main() {
     );
   });
 
-  testWidgets('readable address shows after the pin settles, not mid-drag',
-      (tester) async {
+  testWidgets('readable address shows after the pin settles, not mid-drag', (
+    tester,
+  ) async {
     final fakeGeo = await _pumpScreen(
       tester,
       FarmSetupData(),
       address: 'Sitio Maraag, Barangay Sudlon II, Cebu City',
     );
 
-    expect(fakeGeo.reverseCalls, 0,
-        reason: 'no reverse lookup before any pin interaction');
+    expect(
+      fakeGeo.reverseCalls,
+      0,
+      reason: 'no reverse lookup before any pin interaction',
+    );
 
     final markerFinder = find.byIcon(Icons.location_pin);
     final start = tester.getCenter(markerFinder);
@@ -234,15 +434,24 @@ void main() {
     await gesture.moveBy(const Offset(-10, -10));
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(fakeGeo.reverseCalls, 0,
-        reason: 'must NOT reverse-geocode while the pin is still being dragged');
-    expect(find.textContaining('Looking up the area'), findsNothing,
-        reason: 'no loading state should appear mid-drag');
+    expect(
+      fakeGeo.reverseCalls,
+      0,
+      reason: 'must NOT reverse-geocode while the pin is still being dragged',
+    );
+    expect(
+      find.textContaining('Looking up the area'),
+      findsNothing,
+      reason: 'no loading state should appear mid-drag',
+    );
 
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(fakeGeo.reverseCalls, 0,
-        reason: 'the debounce is 700 ms after the drag ends');
+    expect(
+      fakeGeo.reverseCalls,
+      0,
+      reason: 'the debounce is 700 ms after the drag ends',
+    );
     expect(
       find.textContaining('Sitio Maraag, Barangay Sudlon II, Cebu City'),
       findsNothing,
@@ -250,17 +459,22 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 700));
-    expect(fakeGeo.reverseCalls, 1,
-        reason: 'exactly one lookup after the pin settles');
+    expect(
+      fakeGeo.reverseCalls,
+      1,
+      reason: 'exactly one lookup after the pin settles',
+    );
     expect(
       find.textContaining('Sitio Maraag, Barangay Sudlon II, Cebu City'),
       findsOneWidget,
-      reason: 'a readable address must replace the raw coordinates once settled',
+      reason:
+          'a readable address must replace the raw coordinates once settled',
     );
   });
 
-  testWidgets('failed reverse lookup falls back to raw coordinates',
-      (tester) async {
+  testWidgets('failed reverse lookup falls back to raw coordinates', (
+    tester,
+  ) async {
     // address: null -> the real service failed (offline/rate-limited/error).
     await _pumpScreen(tester, FarmSetupData());
 
@@ -268,28 +482,36 @@ void main() {
     await tester.tapAt(mapRect.center + const Offset(30, 20));
     await tester.pump(const Duration(milliseconds: 850));
 
-    expect(tester.takeException(), isNull,
-        reason: 'a failed reverse lookup must never break the screen');
-    expect(_coordinateText(tester), isNot(contains('10.317800')),
-        reason: 'the pin moved, and the card falls back to raw coordinates');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'a failed reverse lookup must never break the screen',
+    );
+    expect(
+      _coordinateText(tester),
+      isNot(contains('10.317800')),
+      reason: 'the pin moved, and the card falls back to raw coordinates',
+    );
   });
 
-  testWidgets('search with no results shows a clear message',
-      (tester) async {
+  testWidgets('search with no results shows a clear message', (tester) async {
     await _pumpScreen(tester, FarmSetupData());
 
-    await tester.enterText(
-        find.byType(TextField), 'no such barangay anywhere');
+    await tester.enterText(find.byType(TextField), 'no such barangay anywhere');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('No results for'), findsOneWidget,
-        reason: 'must explain there were no matches, not stay silent');
+    expect(
+      find.textContaining('No results for'),
+      findsOneWidget,
+      reason: 'must explain there were no matches, not stay silent',
+    );
   });
 
-  testWidgets('search with one result jumps the map and places the pin',
-      (tester) async {
+  testWidgets('search with one result jumps the map and places the pin', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       FarmSetupData(),
@@ -307,44 +529,55 @@ void main() {
     await tester.pump(const Duration(milliseconds: 850));
 
     expect(tester.takeException(), isNull);
-    expect(_coordinateText(tester), isNot(contains('10.317800')),
-        reason: 'a single match must move the pin to that place on its own');
-  });
-
-  testWidgets('search with several matches lists them and lets the farmer pick',
-      (tester) async {
-    final fakeGeo = await _pumpScreen(
-      tester,
-      FarmSetupData(),
-      searchResults: const [
-        GeocodePlace(
-          displayName: 'Lahug, Cebu City, Philippines',
-          latitude: 10.3200,
-          longitude: 123.8750,
-        ),
-        GeocodePlace(
-          displayName: 'Guadalupe, Cebu City, Philippines',
-          latitude: 10.3150,
-          longitude: 123.8740,
-        ),
-      ],
+    expect(
+      _coordinateText(tester),
+      isNot(contains('10.317800')),
+      reason: 'a single match must move the pin to that place on its own',
     );
-
-    await tester.enterText(find.byType(TextField), 'Cebu');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(fakeGeo.searchQueries, ['Cebu']);
-    expect(find.textContaining('Lahug, Cebu City'), findsOneWidget,
-        reason: 'multiple matches must be shown as a pick list');
-    expect(find.textContaining('Guadalupe, Cebu City'), findsOneWidget);
-
-    await tester.tap(find.textContaining('Lahug, Cebu City'));
-    await tester.pump(const Duration(milliseconds: 850));
-
-    expect(tester.takeException(), isNull);
-    expect(_coordinateText(tester), contains('10.320000'),
-        reason: 'picking Lahug places the pin on its coordinates');
   });
+
+  testWidgets(
+    'search with several matches lists them and lets the farmer pick',
+    (tester) async {
+      final fakeGeo = await _pumpScreen(
+        tester,
+        FarmSetupData(),
+        searchResults: const [
+          GeocodePlace(
+            displayName: 'Lahug, Cebu City, Philippines',
+            latitude: 10.3200,
+            longitude: 123.8750,
+          ),
+          GeocodePlace(
+            displayName: 'Guadalupe, Cebu City, Philippines',
+            latitude: 10.3150,
+            longitude: 123.8740,
+          ),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField), 'Cebu');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(fakeGeo.searchQueries, ['Cebu']);
+      expect(
+        find.textContaining('Lahug, Cebu City'),
+        findsOneWidget,
+        reason: 'multiple matches must be shown as a pick list',
+      );
+      expect(find.textContaining('Guadalupe, Cebu City'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Lahug, Cebu City'));
+      await tester.pump(const Duration(milliseconds: 850));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _coordinateText(tester),
+        contains('10.320000'),
+        reason: 'picking Lahug places the pin on its coordinates',
+      );
+    },
+  );
 }

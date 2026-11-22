@@ -59,6 +59,7 @@ class FarmSpotHeader extends StatelessWidget {
 class FarmSpotTextField extends StatelessWidget {
   final String hint;
   final int? maxLength;
+  final bool showCounter;
   final bool obscureText;
   final TextEditingController? controller;
   final TextInputType keyboardType;
@@ -73,6 +74,7 @@ class FarmSpotTextField extends StatelessWidget {
     super.key,
     required this.hint,
     this.maxLength,
+    this.showCounter = true,
     this.obscureText = false,
     this.controller,
     this.keyboardType = TextInputType.text,
@@ -89,6 +91,14 @@ class FarmSpotTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLength: maxLength,
+      buildCounter: showCounter
+          ? null
+          : (
+              context, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) => null,
       focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,

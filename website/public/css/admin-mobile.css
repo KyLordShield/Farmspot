@@ -1,0 +1,96 @@
+/* Small-screen overrides only. Desktop component rules stay in their own files. */
+@media (max-width: 991.98px) {
+    .sidebar { height: 100dvh; max-width: calc(100vw - 44px); overflow-y: auto; overscroll-behavior: contain; }
+    .sidebar .menu { flex-shrink: 0; }
+    .sidebar-footer { margin-top: auto; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+    body:has(.sidebar.open) { overflow: hidden; }
+    .topbar { padding-top: max(10px, env(safe-area-inset-top)); }
+    .topbar-toggle { width: 44px; height: 44px; }
+    .mod-table-scroll { position: relative; min-width: 0; width: 100%; }
+    .table-responsive { position: relative; min-width: 0; }
+}
+
+@media (max-width: 767.98px) {
+    .content { padding: 18px 12px 28px; }
+    .page-head, .ld-header, .user-details-header { flex-direction: column; align-items: stretch; gap: 14px; }
+    .page-head > *, .panel-header > *, .ld-header > *, .d-flex > div { min-width: 0; }
+    .page-actions, .ld-actions, .user-details-actions { flex-wrap: wrap; width: 100%; }
+    .page-actions > .btn, .ld-actions > .ld-button, .user-details-actions > .user-details-button { flex: 1 1 auto; justify-content: center; }
+    .page-title, .page-desc, .panel-title, .admin-refresh-crumb, .ld-breadcrumb, .user-details-breadcrumb { overflow-wrap: anywhere; }
+    .panel-header { flex-wrap: wrap; }
+    .panel-title { min-width: 0; }
+    .panel, .stat-card, .ld-card, .analytics-card { min-width: 0; }
+    .panel-body, .admin-refresh .panel-body { padding: 16px; }
+    .ld-card, .user-details-card { padding: 16px; }
+    .ld-card.mod-queue { padding: 0; }
+    .empty-state { padding: 24px 16px; }
+    .admin-refresh .panel-header { padding: 16px 16px 0; }
+    .stat-grid, .admin-refresh .stat-grid, .mod-stats, .analytics-kpis { gap: 12px; }
+    .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat-card, .admin-refresh .stat-card { padding: 14px; gap: 8px; flex-direction: column; align-items: flex-start; }
+    .stat-card .stat-icon { width: 32px; height: 32px; font-size: 17px; }
+    .stat-grid > :only-child { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+    .stat-card > div { min-width: 0; }
+    .stat-label, .stat-value, .analytics-kpi strong { overflow-wrap: anywhere; }
+    .stat-value { font-size: 24px; }
+    .filter-bar, .admin-refresh-queue .filter-bar, .mod-toolbar { padding: 14px; gap: 10px; }
+    .filter-grow, .filter-auto { min-width: 0; flex: 1 1 100%; width: 100%; }
+    .filter-bar > .btn, .filter-bar > select, .mod-toolbar > .form-select { flex: 1 1 auto; }
+    .filter-bar .input-group, .mod-toolbar .input-group { min-width: 0; flex-basis: 100%; }
+    .form-control, .form-select, .mod-toolbar .form-select { font-size: 16px; min-height: 44px; }
+    .input-group > .form-control { min-width: 0; }
+    .btn, .ld-button, .user-details-button { min-height: 44px; white-space: normal; }
+    .btn-icon { width: 40px; height: 40px; }
+    .actions { flex-wrap: wrap; }
+    .data-table .actions, .mod-table .mod-row-actions {
+        display: flex;
+        flex-flow: row nowrap;
+        align-items: center;
+        gap: 6px;
+        width: max-content;
+    }
+    .data-table .actions > *, .mod-table .mod-row-actions > * { flex: 0 0 auto; }
+    .data-table .actions form { margin: 0; }
+    .pagination { flex-wrap: wrap; gap: 5px; }
+    .pagination .page-link { min-height: 40px; min-width: 40px; display: grid; place-items: center; }
+    .table-responsive, .mod-table-scroll, .analytics-table-region { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+    .admin-refresh-queue .table-responsive, .mod-table-scroll { max-height: none; }
+    .mod-table:has(.mod-empty) { min-width: 0; }
+    .mod-table:has(.mod-empty) thead { display: none; }
+    .mod-table-scroll:not(:has(.mod-empty))::before,
+    .analytics-table-region::before { content: 'Swipe sideways to see all columns'; display: block; position: sticky; left: 0; padding: 8px 14px; color: var(--text-muted); font-size: 12px; }
+    .data-table { min-width: 640px; }
+    .table-responsive:not(:has(.empty-state)):has(.data-table)::before { content: 'Swipe sideways to see all columns'; display: block; position: sticky; left: 0; padding: 8px 14px; color: var(--text-muted); font-size: 12px; }
+    .data-table:has(.empty-state) { min-width: 0; }
+    .data-table:has(.empty-state) thead { display: none; }
+    .mod-truncate { max-width: 220px; }
+    .mod-toolbar .mod-toggle { white-space: normal; }
+    .mod-dialog { padding: 18px; overflow-y: auto; }
+    .modal-dialog { margin: 12px; }
+    .modal-content { max-height: calc(100dvh - 24px); overflow-y: auto; }
+    .modal-footer { flex-wrap: wrap; }
+    .modal-footer > .btn { flex: 1 1 auto; }
+    .cal-nav { flex-wrap: wrap; }
+    .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+    .cal-day { min-width: 0; min-height: 44px; }
+    .cal-label { min-width: 0; }
+    .cal-detail-item { flex-wrap: wrap; }
+    .note-add-row { flex-wrap: wrap; }
+    .note-add-row > .form-control { min-width: 0; flex: 1 1 100%; }
+    .weather-forecast { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .analytics-controls, .analytics-custom { width: 100%; }
+    .analytics-controls > .form-select { flex: 1 1 100%; width: 100%; }
+    .analytics-custom > label { flex: 1 1 100%; }
+    .analytics-custom input { width: 100%; max-width: 100%; }
+    .analytics-card-head > div { min-width: 0; overflow-wrap: anywhere; }
+    .admin-reset-code-boxes { gap: 5px; }
+    .admin-reset-code-boxes .form-control { font-size: 22px; }
+    .document-modal-image, .document-modal-frame { max-width: 100%; height: 55dvh; }
+    .lf-layout > *, .lf-layout .row > * { min-width: 0; }
+}
+
+@media (max-width: 575.98px) {
+    .admin-refresh-fields { gap: 16px; padding-inline: 16px; }
+    .analytics-kpi strong { font-size: 24px; }
+    .admin-refresh .event-schedule { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,4 +1,5 @@
 import '../legal/legal.dart';
+import '../widgets/association_contact_dialog.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/home_widgets.dart';
@@ -777,16 +778,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showContactSupport() {
-    showFarmSpotDialog(
-      context,
-      title: 'Contact Support',
-      message:
-          'Need help with your seller application?\n\n'
-          'Contact the Association Secretary:\n'
-          'PHONE: [PHONE NUMBER HERE]\n'
-          'EMAIL: [EMAIL ADDRESS HERE]',
-      confirmLabel: 'OK',
-    );
+    showAssociationContactDialog(context);
   }
 
   Widget _accountTile({

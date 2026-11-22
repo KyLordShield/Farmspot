@@ -2,6 +2,13 @@ const moderationPage = document.querySelector('.mod-page');
 const copyFeedback = moderationPage.querySelector('[data-mod-copy-feedback]');
 let feedbackTimer;
 
+moderationPage.querySelectorAll('[data-mod-profile-photo]').forEach((photo) => {
+    const update = () => { photo.hidden = photo.naturalWidth === 0; };
+    photo.addEventListener('load', update);
+    photo.addEventListener('error', () => { photo.hidden = true; });
+    update();
+});
+
 moderationPage.querySelectorAll('[data-mod-filter]').forEach((control) => {
     control.addEventListener('change', () => control.form.requestSubmit());
 });

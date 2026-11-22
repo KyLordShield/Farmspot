@@ -10,6 +10,33 @@ use Tests\TestCase;
 
 class ReportViewQaTest extends TestCase
 {
+    public function test_reported_user_photo_and_initials_fallback(): void
+    {
+        foreach ([null, 'https://example.test/profile.jpg'] as $photo) {
+            $user = new User(['USR_ID' => 'PHOTO1', 'USR_NAME' => 'Test Person', 'USR_PHOTO_PATH' => $photo]);
+            $report = new Report(['RPT_TARGET_TYPE' => 'USER', 'RPT_TARGET_ID' => 'PHOTO1']);
+            $report->setRelation('reportedUser', $user);
+            $html = view('reports._evidence', ['report' => $report])->render();
+            $this->assertStringContainsString(route('users.show', 'PHOTO1'), $html);
+            $this->assertStringContainsString('TP', $html);
+            if ($photo) {
+                $this->assertStringContainsString('src="'.$photo.'"', $html);
+                $this->assertStringContainsString('data-mod-profile-photo hidden', $html);
+            } else {
+                $this->assertStringNotContainsString('<img', $html);
+            }
+        }
+    }
+
+    public function test_profile_link_points_to_user_and_handles_missing_account(): void
+    {
+        $user = new User(['USR_ID' => 'LINK01', 'USR_NAME' => 'Test Person']);
+        $html = view('users.partials.profile-link', ['profileUser' => $user])->render();
+        $this->assertStringContainsString(route('users.show', 'LINK01'), $html);
+        $this->assertStringContainsString('View profile of Test Person', $html);
+        $this->assertStringNotContainsString('<a', view('users.partials.profile-link', ['profileUser' => null])->render());
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

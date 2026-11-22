@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
+import '../../../utils/address_areas.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -76,12 +77,25 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   bool _isSearching = false;
   List<GeocodePlace>? _searchResults;
   String? _searchError;
+  int _positionRevision = 0;
+  bool _mapInitialized = false;
+  bool _hasChosenLocation = false;
 
   @override
   void initState() {
     super.initState();
     _geocodingService = widget.geocodingService ?? GeocodingService();
-    _initFromGps();
+    _searchController.text = widget.farmSetupData.barangay.trim();
+  }
+
+  void _initializeMap() {
+    if (_mapInitialized) return;
+    _mapInitialized = true;
+    if (_searchController.text.isNotEmpty) {
+      _submitSearch(_searchController.text);
+    } else {
+      _initFromGps();
+    }
   }
 
   @override
@@ -95,6 +109,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   }
 
   void _initFromGps() async {
+    final revision = _positionRevision;
     setState(() => _isLocating = true);
 
     try {
@@ -132,8 +147,13 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
       );
 
       if (!mounted) return;
+      if (revision != _positionRevision || _isSubmitting) {
+        setState(() => _isLocating = false);
+        return;
+      }
       setState(() {
         _markerPosition = LatLng(position.latitude, position.longitude);
+        _hasChosenLocation = true;
         _isLocating = false;
         _gpsNotice = null;
       });
@@ -155,14 +175,18 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   }
 
   void _onMapTapped(TapPosition _, LatLng point) {
+    _positionRevision++;
     setState(() {
       _markerPosition = point;
+      _hasChosenLocation = true;
       _errorMessage = null;
     });
     _scheduleReverseGeocode();
   }
 
   void _onMarkerDragStart(DragStartDetails details) {
+    _positionRevision++;
+    _hasChosenLocation = true;
     setState(() => _draggingMarker = true);
   }
 
@@ -213,8 +237,10 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   }
 
   void _movePin(LatLng point, {bool recenterMap = true}) {
+    _positionRevision++;
     setState(() {
       _markerPosition = point;
+      _hasChosenLocation = true;
       _errorMessage = null;
       _searchResults = null;
       _searchError = null;
@@ -230,16 +256,32 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
     if (query.isEmpty || _isSearching) return;
 
     FocusScope.of(context).unfocus();
+    final revision = _positionRevision;
     setState(() {
       _isSearching = true;
       _searchError = null;
       _searchResults = null;
     });
 
-    final results = await _geocodingService.search(query);
+    final found = await _geocodingService.search(
+      AddressAreas.mapQuery(query),
+      viewbox: GeocodingService.cebuMetroViewbox,
+    );
+    final results = found
+        .where(
+          (place) => AddressAreas.matchesMapResult(query, place.displayName),
+        )
+        .toList();
     if (!mounted) return;
 
     setState(() => _isSearching = false);
+    // A delayed lookup must not replace a pin the farmer has already moved,
+    // or apply a result for search text they have since changed.
+    if (revision != _positionRevision ||
+        _isSubmitting ||
+        _searchController.text.trim() != query) {
+      return;
+    }
 
     if (results.isEmpty) {
       setState(() {
@@ -258,6 +300,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
         _searchResults = null;
         _searchError = null;
         _markerPosition = LatLng(place.latitude, place.longitude);
+        _hasChosenLocation = true;
       });
       _mapController.move(_markerPosition, _initialZoom);
       _scheduleReverseGeocode();
@@ -273,6 +316,14 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
 
   Future<void> _confirm() async {
     if (_isSubmitting) return;
+    if (!_hasChosenLocation) {
+      setState(
+        () => _errorMessage =
+            'Search for your area or place the pin on your farm before continuing.',
+      );
+      return;
+    }
+    _positionRevision++;
 
     // Last step of the wizard: once the farm is created the map pin can't be
     // changed, so ask before firing the save.
@@ -353,6 +404,11 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
   /// The primary line of the location card: a readable address when we have
   /// one (or are looking one up), otherwise the raw coordinates.
   String get _locationSummary {
+    if (!_hasChosenLocation) {
+      return _isSearching
+          ? 'Finding your barangay…'
+          : 'Place the pin on your farm to choose its location.';
+    }
     if (_address != null) return _address!;
     if (_isReverseGeocoding) return 'Looking up the area…';
     return _coordinatesLabel;
@@ -404,6 +460,7 @@ class _FarmSetupLocationScreenState extends State<FarmSetupLocationScreen> {
                                   options: MapOptions(
                                     initialCenter: _fallbackCenter,
                                     initialZoom: _initialZoom,
+                                    onMapReady: _initializeMap,
                                     onTap: _onMapTapped,
                                     interactionOptions: InteractionOptions(
                                       flags: _interactionFlags,

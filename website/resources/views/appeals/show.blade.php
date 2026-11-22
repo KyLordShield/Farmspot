@@ -98,6 +98,7 @@
                         <dt>Requester</dt>
                         <dd>
                             {{ $appeal->user?->USR_NAME ?? '-' }}
+                            @include('users.partials.profile-link', ['profileUser' => $appeal->user])
                             @if($appeal->user?->USR_EMAIL)
                                 <div class="cell-secondary">{{ $appeal->user->USR_EMAIL }}</div>
                             @endif
@@ -236,7 +237,7 @@
                         </div>
                         <div>
                             <dt>Name</dt>
-                            <dd>{{ $appeal->account?->USR_NAME ?? '-' }}</dd>
+                            <dd>{{ $appeal->account?->USR_NAME ?? '-' }} @include('users.partials.profile-link', ['profileUser' => $appeal->account])</dd>
                         </div>
                         <div>
                             <dt>Email</dt>

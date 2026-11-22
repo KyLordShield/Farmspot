@@ -67,6 +67,10 @@ class GeocodingService {
   ///   2. If the pilot later expands beyond Cebu City, widening is a
   ///      one-line change: update this constant (or pass a custom [viewbox]).
   static const String cebuPilotViewbox = '123.75,10.17,123.98,10.50';
+
+  /// Includes all three cities offered by the address suggestions, including
+  /// eastern Mactan/Olango which are outside the original Cebu City pilot box.
+  static const String cebuMetroViewbox = '123.75,10.17,124.12,10.50';
   GeocodingService({
     http.Client? client,
     this.minInterval = const Duration(milliseconds: 1000),
@@ -151,9 +155,9 @@ class GeocodingService {
   Future<void> close() async => _client.close();
 
   Map<String, String> _headers() => {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-      };
+    'User-Agent': userAgent,
+    'Accept': 'application/json',
+  };
 
   /// Enforces Nominatim's 1 request/second policy even if callers debounce
   /// imperfectly.
@@ -216,11 +220,9 @@ class GeocodingService {
       final lon = double.tryParse(item['lon']?.toString() ?? '');
       final name = item['display_name']?.toString();
       if (lat != null && lon != null && name != null && name.isNotEmpty) {
-        places.add(GeocodePlace(
-          displayName: name,
-          latitude: lat,
-          longitude: lon,
-        ));
+        places.add(
+          GeocodePlace(displayName: name, latitude: lat, longitude: lon),
+        );
       }
     }
     return places;

@@ -10,15 +10,16 @@ import 'package:farmspot_app/utils/mobile_number.dart';
 Finder phoneField() => find.byWidgetPredicate(
   (w) => w is TextField && w.decoration?.labelText == 'mobile number',
 );
-Future<void> openProfile(WidgetTester tester) async {
+Future<void> openProfile(WidgetTester tester, {String address = ''}) async {
   SharedPreferences.setMockInitialValues({'auth_token': 'test-token'});
   await tester.pumpWidget(
-    const MaterialApp(
+    MaterialApp(
       home: EditProfileScreen(
         firstName: 'Test',
         lastName: 'Person',
         phone: '09171234567',
         email: 'person@example.test',
+        address: address,
       ),
     ),
   );
@@ -26,6 +27,49 @@ Future<void> openProfile(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'edit address suggests areas with the keyboard open and retains street details',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetViewInsets);
+      await openProfile(
+        tester,
+        address: '12 Main Street, Pusok, Lapu-Lapu City, Cebu',
+      );
+      final address = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == 'address',
+      );
+      await tester.ensureVisible(address);
+      await tester.tap(address);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      await tester.pumpAndSettle();
+      expect(find.text('Pusok, Lapu-Lapu City, Cebu'), findsOneWidget);
+      await tester.enterText(address, '12 Main Street, Agu');
+      await tester.pumpAndSettle();
+      final suggestion = find.text('Agus, Lapu-Lapu City, Cebu');
+      expect(tester.getRect(suggestion).bottom, lessThan(844 - 280));
+      await tester.tap(suggestion);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(address).controller!.text,
+        '12 Main Street, Agus, Lapu-Lapu City, Cebu',
+      );
+      expect(find.textContaining('/150'), findsNothing);
+    },
+  );
+
+  testWidgets('name parts and address have the new input limits', (
+    tester,
+  ) async {
+    await openProfile(tester);
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(fields.where((field) => field.maxLength == 40).length, 2);
+    expect(fields.where((field) => field.maxLength == 150).length, 1);
+  });
+
   testWidgets(
     'email is visible and read-only and phone input is digits only capped at eleven',
     (tester) async {

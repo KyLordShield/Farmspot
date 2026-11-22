@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../models/farm_setup_data.dart';
 import '../../../theme.dart';
 import '../../../widgets/seller_widgets.dart';
+import '../../../widgets/address_area_picker.dart';
 import 'farm_setup_location_screen.dart';
 import 'farm_setup_verify_screen.dart';
 
@@ -201,10 +202,25 @@ class _FarmSetupDetailsScreenState extends State<FarmSetupDetailsScreen> {
                   ),
                   const SizedBox(height: 18),
                   const FieldLabel('BARANGAY'),
-                  TextField(
+                  AddressAreaField(
                     controller: _barangayCtrl,
                     maxLength: InputLimits.barangay,
-                    decoration: _inputDecoration(),
+                    barangayOnly: true,
+                    fieldBuilder: (focusNode) => TextField(
+                      focusNode: focusNode,
+                      controller: _barangayCtrl,
+                      maxLength: InputLimits.barangay,
+                      buildCounter:
+                          (
+                            context, {
+                            required currentLength,
+                            required isFocused,
+                            maxLength,
+                          }) => null,
+                      decoration: _inputDecoration().copyWith(
+                        hintText: 'Barangay, city',
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   const FieldLabel('FARM PHOTOS'),

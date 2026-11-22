@@ -24,7 +24,7 @@ Widget app(VoidCallback finished) => DefaultAssetBundle(
 );
 
 void main() {
-  testWidgets('FarmSpot letters bounce once in left-to-right order', (
+  testWidgets('FarmSpot letters repeat with a one-second rest between waves', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 740));
@@ -51,8 +51,17 @@ void main() {
       lessThan(-.1),
       reason: 'the next letter starts before the first lands',
     );
-    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 610));
     expect(height('t'), closeTo(0, .01));
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(height('F'), closeTo(0, .01));
+    expect(height('t'), closeTo(0, .01));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      height('F'),
+      lessThan(0),
+      reason: 'the title repeats while the splash is still visible',
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

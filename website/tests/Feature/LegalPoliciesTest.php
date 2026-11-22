@@ -44,7 +44,7 @@ class LegalPoliciesTest extends TestCase
 
     private function registration(): array
     {
-        return ['USR_NAME' => 'Juan Dela Cruz', 'USR_EMAIL' => 'new@legal.test', 'USR_PASSWORD' => 'password123', 'USR_PASSWORD_confirmation' => 'password123', 'USR_MOBILE_NUMBER' => '09123456789'];
+        return ['USR_NAME' => 'Juan Dela Cruz', 'USR_EMAIL' => 'new@legal.test', 'USR_PASSWORD' => 'Password123', 'USR_PASSWORD_confirmation' => 'Password123', 'USR_MOBILE_NUMBER' => '09123456789'];
     }
 
     public function test_draft_documents_are_public_but_cannot_be_accepted_and_legacy_signup_works(): void

@@ -27,6 +27,7 @@
          that pushes into 'scripts' for JS would otherwise have to push its CSS
          there too, which works and is exactly as clear as it sounds. --}}
     @stack('styles')
+    <link rel="stylesheet" href="{{ asset('css/admin-mobile.css') }}?v={{ filemtime(public_path('css/admin-mobile.css')) }}">
 </head>
 
 <body>

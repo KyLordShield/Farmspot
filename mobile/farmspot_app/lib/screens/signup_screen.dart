@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:farmspot_app/utils/mobile_number.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/password_requirements.dart';
+import '../widgets/address_area_picker.dart';
 import '../widgets/lottie_loader.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
@@ -15,7 +17,16 @@ class SignUpScreen extends StatefulWidget {
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _SignUpScreenState extends State<SignUpScreen> {
+class _SignUpScreenState extends State<SignUpScreen>
+    with SingleTickerProviderStateMixin {
+  int _step = 0;
+  bool _forward = true;
+  final _scrollController = ScrollController();
+  late final _slideController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+    value: 1,
+  );
   final _lastNameController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -43,6 +54,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   void dispose() {
+    _slideController.dispose();
+    _scrollController.dispose();
     _lastNameController.dispose();
     _firstNameController.dispose();
     _emailController.dispose();
@@ -82,9 +95,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _validateMobile(String value) => MobileNumber.validate(value);
 
   String? _validatePassword(String value) {
-    if (value.isEmpty) return 'Please create a password.';
-    if (value.length < 8) return 'Password must be at least 8 characters.';
-    return null;
+    return PasswordRequirements.validate(value);
   }
 
   String? _validateConfirmPassword(String value) {
@@ -131,7 +142,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             .trim()
             .length >
         InputLimits.fullName) {
-      firstNameError = 'Full name must be 150 characters or fewer.';
+      firstNameError =
+          'Full name must be ${InputLimits.fullName} characters or fewer.';
     }
     final emailError = _validateEmail(_emailController.text);
     final mobileError = _validateMobile(_mobileController.text);
@@ -154,6 +166,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _passwordError = passwordError;
         _confirmPasswordError = confirmError;
       });
+      if (lastNameError != null || firstNameError != null) {
+        _goToStep(0);
+      } else if (emailError != null || mobileError != null) {
+        _goToStep(1);
+      }
       return;
     }
 
@@ -255,6 +272,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ? 'Passwords do not match.'
             : null;
       });
+      if (_firstNameError != null) {
+        _goToStep(0);
+      } else if (_emailError != null ||
+          _mobileError != null ||
+          _addressError != null) {
+        _goToStep(1);
+      }
       final messages = <String?>[
         _firstNameError,
         _emailError,
@@ -325,6 +349,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
     if (fieldKey == 'USR_PASSWORD') {
       if (raw.contains('confirmation')) return 'Passwords do not match.';
+      if (raw.contains('uppercase') ||
+          raw.contains('lowercase') ||
+          raw.contains('number')) {
+        return 'Include an uppercase letter, a lowercase letter, and a number.';
+      }
       if (raw.contains('least') || raw.contains('characters')) {
         return 'Password must be at least 8 characters.';
       }
@@ -332,12 +361,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
     if (fieldKey == 'USR_NAME') {
       if (raw.contains('characters') || raw.contains('greater'))
-        return 'Full name must be 150 characters or fewer.';
+        return 'Full name must be ${InputLimits.fullName} characters or fewer.';
       return 'Please check your $fieldLabel — only letters are allowed.';
     }
     if (fieldKey == 'address' &&
         (raw.contains('characters') || raw.contains('greater'))) {
-      return 'Address must be 255 characters or fewer.';
+      return 'Address must be ${InputLimits.address} characters or fewer.';
     }
     return 'Please check your $fieldLabel.';
   }
@@ -346,182 +375,300 @@ class _SignUpScreenState extends State<SignUpScreen> {
     Navigator.of(context).pushReplacement(farmFadeRoute(const LoginScreen()));
   }
 
+  void _goToStep(int step) {
+    if (_isLoading || step == _step) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _forward = step > _step;
+      _step = step;
+    });
+    _slideController.forward(from: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) _scrollController.jumpTo(0);
+    });
+  }
+
+  void _nextStep() {
+    if (_slideController.isAnimating || _isLoading) return;
+    if (_step == 0) {
+      setState(() {
+        _firstNameError = _validateFirstName(_firstNameController.text);
+        _lastNameError = _validateLastName(_lastNameController.text);
+      });
+      if (_firstNameError != null || _lastNameError != null) return;
+    } else if (_step == 1) {
+      setState(() {
+        _emailError = _validateEmail(_emailController.text);
+        _mobileError = _validateMobile(_mobileController.text);
+      });
+      if (_emailError != null || _mobileError != null) return;
+    }
+    _goToStep(_step + 1);
+  }
+
+  Widget _label(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
+  );
+
+  Widget _nameStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _label('First name'),
+      FarmSpotTextField(
+        hint: 'FirstName',
+        controller: _firstNameController,
+        maxLength: InputLimits.personNamePart,
+        showCounter: false,
+        errorText: _firstNameError,
+        onChanged: (_) => setState(() => _firstNameError = null),
+      ),
+      const SizedBox(height: 18),
+      _label('Last name'),
+      FarmSpotTextField(
+        hint: 'Lastname',
+        controller: _lastNameController,
+        maxLength: InputLimits.personNamePart,
+        showCounter: false,
+        errorText: _lastNameError,
+        onChanged: (_) => setState(() => _lastNameError = null),
+      ),
+    ],
+  );
+
+  Widget _contactStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _label('Email'),
+      FarmSpotTextField(
+        hint: 'email',
+        controller: _emailController,
+        maxLength: 200,
+        showCounter: false,
+        keyboardType: TextInputType.emailAddress,
+        errorText: _emailError,
+        onChanged: (_) => setState(() => _emailError = null),
+      ),
+      const SizedBox(height: 18),
+      _label('Mobile number'),
+      FarmSpotTextField(
+        hint: 'mobile number',
+        controller: _mobileController,
+        keyboardType: TextInputType.phone,
+        inputFormatters: MobileNumber.formatters,
+        errorText: _mobileError,
+        onChanged: (_) => setState(() => _mobileError = null),
+      ),
+      const SizedBox(height: 18),
+      _label('Address (optional)'),
+      AddressAreaField(
+        controller: _addressController,
+        maxLength: InputLimits.address,
+        onChanged: (_) => setState(() => _addressError = null),
+        fieldBuilder: (focusNode) => FarmSpotTextField(
+          hint: 'address',
+          focusNode: focusNode,
+          controller: _addressController,
+          showCounter: false,
+          maxLength: InputLimits.address,
+          errorText: _addressError,
+          onChanged: (_) => setState(() => _addressError = null),
+        ),
+      ),
+    ],
+  );
+
+  Widget _passwordStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _label('Password'),
+      FarmSpotTextField(
+        hint: 'password',
+        controller: _passwordController,
+        obscureText: _obscurePassword,
+        errorText: _passwordError,
+        onChanged: (_) => setState(() => _passwordError = null),
+        suffixIcon: IconButton(
+          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+          icon: Icon(
+            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+            color: Colors.black45,
+          ),
+          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+        ),
+      ),
+      PasswordRequirements(controller: _passwordController),
+      const SizedBox(height: 18),
+      _label('Confirm password'),
+      FarmSpotTextField(
+        hint: 'confirm password',
+        controller: _confirmPasswordController,
+        obscureText: _obscureConfirm,
+        errorText: _confirmPasswordError,
+        onChanged: (_) => setState(() => _confirmPasswordError = null),
+        suffixIcon: IconButton(
+          tooltip: _obscureConfirm ? 'Show confirmation' : 'Hide confirmation',
+          icon: Icon(
+            _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+            color: Colors.black45,
+          ),
+          onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+        ),
+      ),
+      const SizedBox(height: 20),
+      LegalRegistrationConsent(
+        onChanged: (catalog, accepted) {
+          _legalCatalog = catalog;
+          _legalAccepted = accepted;
+        },
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        // Reserve the status bar with the SafeArea itself now that the branded
-        // header is gone, and keep the bottom-most content (the "Log In" switch
-        // link) reachable: on gesture/button nav phones the home bar overlaps
-        // the last row, so the extra bottom padding lets the form scroll fully
-        // above it.
-        top: true,
-        bottom: true,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewPadding.bottom + 32,
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 24),
-              const FarmSpotLogo(size: 190),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                child: Column(
+    const titles = ['Your name', 'Contact details', 'Secure your account'];
+    const descriptions = [
+      'Tell us what to call you.',
+      'Add your email, mobile number and address.',
+      'Create a password and review the agreement.',
+    ];
+    final steps = [_nameStep(), _contactStep(), _passwordStep()];
+    return PopScope(
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _step > 0) _goToStep(_step - 1);
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: FarmSpotTextField(
-                            hint: 'Lastname',
-                            maxLength: InputLimits.personNamePart,
-                            controller: _lastNameController,
-                            errorText: _lastNameError,
-                            onChanged: (_) {
-                              if (_lastNameError != null) {
-                                setState(() => _lastNameError = null);
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FarmSpotTextField(
-                            hint: 'FirstName',
-                            maxLength: InputLimits.personNamePart,
-                            controller: _firstNameController,
-                            errorText: _firstNameError,
-                            onChanged: (_) {
-                              if (_firstNameError != null) {
-                                setState(() => _firstNameError = null);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    FarmSpotTextField(
-                      hint: 'email',
-                      maxLength: 200,
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      errorText: _emailError,
-                      onChanged: (_) {
-                        if (_emailError != null) {
-                          setState(() => _emailError = null);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    FarmSpotTextField(
-                      hint: 'mobile number',
-                      controller: _mobileController,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: MobileNumber.formatters,
-                      errorText: _mobileError,
-                      onChanged: (_) {
-                        if (_mobileError != null) {
-                          setState(() => _mobileError = null);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    FarmSpotTextField(
-                      hint: 'address',
-                      maxLength: InputLimits.address,
-                      controller: _addressController,
-                      errorText: _addressError,
-                      onChanged: (_) {
-                        if (_addressError != null) {
-                          setState(() => _addressError = null);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    FarmSpotTextField(
-                      hint: 'password',
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      errorText: _passwordError,
-                      onChanged: (_) {
-                        if (_passwordError != null) {
-                          setState(() => _passwordError = null);
-                        }
-                      },
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.black45,
-                        ),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    FarmSpotTextField(
-                      hint: 'confirm password',
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirm,
-                      errorText: _confirmPasswordError,
-                      onChanged: (_) {
-                        if (_confirmPasswordError != null) {
-                          setState(() => _confirmPasswordError = null);
-                        }
-                      },
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirm
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.black45,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm),
-                      ),
-                    ),
-                    if (_isLoading) ...[
-                      const SizedBox(height: 16),
-                      const Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    LegalRegistrationConsent(
-                      onChanged: (catalog, accepted) {
-                        _legalCatalog = catalog;
-                        _legalAccepted = accepted;
-                      },
-                    ),
-                    const SizedBox(height: 26),
-                    FarmSpotButton(
-                      label: _isLoading
-                          ? 'Creating Account...'
-                          : 'Create Account',
-                      trailingIcon: Icons.arrow_forward,
+                    IconButton(
+                      tooltip: 'Back',
                       onPressed: _isLoading
-                          ? () {}
-                          : () => _handleCreateAccount(),
+                          ? null
+                          : () {
+                              if (_step > 0) {
+                                _goToStep(_step - 1);
+                              } else {
+                                _goToLogin();
+                              }
+                            },
+                      icon: const Icon(Icons.arrow_back),
                     ),
-                    const SizedBox(height: 20),
-                    FarmSpotSwitchLink(
-                      question: '----- Already have an Account?-----',
-                      actionLabel: 'Log In',
-                      onTap: _goToLogin,
+                    const Expanded(
+                      child: Text(
+                        'Create your account',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                const Center(child: FarmSpotLogo(size: 110)),
+                const SizedBox(height: 20),
+                Text(
+                  'Step ${_step + 1} of 3',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    for (var index = 0; index < 3; index++) ...[
+                      if (index > 0) const SizedBox(width: 6),
+                      Expanded(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          height: 4,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            color: index <= _step
+                                ? const Color(0xFF00664E)
+                                : const Color(0xFFE7ECE9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  titles[_step],
+                  style: const TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  descriptions[_step],
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                SlideTransition(
+                  key: const Key('signup-slide'),
+                  position:
+                      Tween<Offset>(
+                            begin: Offset(_forward ? .12 : -.12, 0),
+                            end: Offset.zero,
+                          )
+                          .chain(CurveTween(curve: Curves.easeOutCubic))
+                          .animate(_slideController),
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      for (var index = 0; index < steps.length; index++)
+                        Offstage(
+                          offstage: index != _step,
+                          child: TickerMode(
+                            enabled: index == _step,
+                            child: ExcludeFocus(
+                              excluding: index != _step,
+                              child: KeyedSubtree(
+                                key: ValueKey('signup-step-$index'),
+                                child: steps[index],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 26),
+                FarmSpotButton(
+                  label: _step < 2
+                      ? 'Next'
+                      : _isLoading
+                      ? 'Creating Account...'
+                      : 'Create Account',
+                  trailingIcon: Icons.arrow_forward,
+                  onPressed: _isLoading
+                      ? () {}
+                      : _step < 2
+                      ? _nextStep
+                      : _handleCreateAccount,
+                ),
+                const SizedBox(height: 20),
+                FarmSpotSwitchLink(
+                  question: '----- Already have an Account?-----',
+                  actionLabel: 'Log In',
+                  onTap: _goToLogin,
+                ),
+              ],
+            ),
           ),
         ),
       ),

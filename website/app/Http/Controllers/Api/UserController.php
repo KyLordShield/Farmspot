@@ -29,7 +29,7 @@ class UserController extends Controller
         PersonName::normalize($request, 'name');
 
         $validated = $request->validate([
-            'name' => ['sometimes', 'bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
+            'name' => ['sometimes', 'bail', 'required', 'string', 'max:'.PersonName::MOBILE_MAX_LENGTH, new PersonName],
             'mobile_number' => [
                 'sometimes',
                 'bail',
@@ -40,7 +40,7 @@ class UserController extends Controller
                 // the current user so keeping your own number is fine.
                 Rule::unique('user', 'USR_MOBILE_NUMBER')->ignore($user->USR_ID, 'USR_ID'),
             ],
-            'address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'address' => ['sometimes', 'nullable', 'string', 'max:'.\App\Support\InputLimits::ADDRESS],
             'email' => ['prohibited'],
             'USR_EMAIL' => ['prohibited'],
         ], [

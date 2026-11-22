@@ -11,6 +11,61 @@ use Tests\TestCase;
 
 class ProfilePhoneValidationTest extends TestCase
 {
+    public function test_mobile_name_and_address_boundaries(): void
+    {
+        $user = $this->account('LIMIT1', '09171234567');
+        $this->actingAs($user, 'sanctum');
+        $name = str_repeat('A', 40).' '.str_repeat('B', 40);
+        $this->patchJson('/api/user', ['name' => $name, 'address' => str_repeat('A', 150)])
+            ->assertOk();
+        $this->patchJson('/api/user', ['name' => $name.'B', 'address' => str_repeat('A', 151)])
+            ->assertUnprocessable()->assertJsonValidationErrors(['name', 'address']);
+        $this->assertSame($name, $user->fresh()->USR_NAME);
+        $this->postJson('/api/register', [
+            'USR_NAME' => $name.'B', 'USR_EMAIL' => 'limits@example.test',
+            'USR_MOBILE_NUMBER' => '09281234567',
+            'USR_PASSWORD' => 'Example123', 'USR_PASSWORD_confirmation' => 'Example123',
+            'address' => str_repeat('A', 151),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['USR_NAME', 'address']);
+    }
+
+    public function test_registration_enforces_password_requirements(): void
+    {
+        foreach (['Abc1234', 'lowercase1', 'UPPERCASE1', 'NoNumbers'] as $password) {
+            $this->postJson('/api/register', [
+                'USR_NAME' => 'Test Person', 'USR_EMAIL' => 'new@example.test',
+                'USR_MOBILE_NUMBER' => '09171234567',
+                'USR_PASSWORD' => $password, 'USR_PASSWORD_confirmation' => $password,
+            ])->assertUnprocessable()->assertJsonValidationErrors('USR_PASSWORD');
+            $this->travel(61)->seconds();
+        }
+        $this->assertDatabaseCount('user', 0);
+    }
+
+    public function test_valid_password_registers_and_existing_weak_password_can_still_log_in(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->string('tokenable_type');
+            $table->string('tokenable_id');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
+        });
+        $this->postJson('/api/register', [
+            'USR_NAME' => 'Test Person', 'USR_EMAIL' => 'new@example.test',
+            'USR_MOBILE_NUMBER' => '09171234567',
+            'USR_PASSWORD' => 'Abcdef12', 'USR_PASSWORD_confirmation' => 'Abcdef12',
+        ])->assertCreated()->assertJsonStructure(['token']);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('Abcdef12', User::first()->USR_PASSWORD));
+        $this->account('OLD001', '09281234567');
+        $this->postJson('/api/login', ['email' => 'OLD001@example.test', 'password' => 'example123'])
+            ->assertOk()->assertJsonStructure(['token']);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

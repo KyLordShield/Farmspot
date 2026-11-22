@@ -189,7 +189,7 @@ class ListingDuplicateNameTest extends TestCase
         $this->postJson('/api/farms', ['name' => str_repeat('F', 101), 'description' => str_repeat('D', 1001), 'barangay' => str_repeat('B', 101)])
             ->assertUnprocessable()->assertJsonValidationErrors(['name', 'description', 'barangay']);
         $this->patchJson('/api/user', ['address' => str_repeat('A', 256)])->assertUnprocessable()->assertJsonValidationErrors('address');
-        $this->patchJson('/api/user', ['address' => str_repeat('A', 255)])->assertOk();
+        $this->patchJson('/api/user', ['address' => str_repeat('A', 150)])->assertOk();
         $this->postJson('/api/register', ['USR_NAME' => 'Test Person', 'USR_EMAIL' => 'invalid', 'address' => str_repeat('A', 256)])
             ->assertUnprocessable()->assertJsonValidationErrors('address');
     }

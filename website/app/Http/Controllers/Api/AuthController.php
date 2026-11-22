@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Rules\PersonName;
 use App\Services\LegalPolicies;
 use App\Support\MobileNumber;
+use App\Support\InputLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -24,12 +25,12 @@ class AuthController extends Controller
         PersonName::normalize($request, 'USR_NAME');
 
         $validated = $request->validate([
-            'USR_NAME' => ['bail', 'required', 'string', 'max:'.PersonName::MAX_LENGTH, new PersonName],
+            'USR_NAME' => ['bail', 'required', 'string', 'max:'.PersonName::MOBILE_MAX_LENGTH, new PersonName],
             'USR_EMAIL' => ['required', 'email', 'max:200', 'unique:user,USR_EMAIL'],
-            'USR_PASSWORD' => ['required', 'confirmed', Password::defaults()],
+            'USR_PASSWORD' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()],
             'USR_MOBILE_NUMBER' => ['bail', 'required', 'string', MobileNumber::PATTERN, 'unique:user,USR_MOBILE_NUMBER'],
             // Optional — the buyer can skip it, and existing test flows don't send it.
-            'address' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:'.InputLimits::ADDRESS],
         ], MobileNumber::messages('USR_MOBILE_NUMBER'));
 
         $legal = app(LegalPolicies::class);

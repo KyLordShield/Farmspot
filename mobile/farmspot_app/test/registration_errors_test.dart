@@ -6,6 +6,7 @@ import 'package:farmspot_app/screens/signup_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:farmspot_app/services/auth_service.dart';
+import 'helpers/signup_steps.dart';
 
 void main() {
   setUpAll(() async {
@@ -16,6 +17,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SignUpScreen()));
       await tester.pumpAndSettle();
+      await signupToPassword(tester);
       await tester.scrollUntilVisible(
         find.text('Create Account'),
         200,
@@ -53,10 +55,13 @@ void main() {
         'FirstName': 'Test Person',
         'email': 'person@example.com',
         'mobile number': '09123456789',
-        'password': 'example123',
-        'confirm password': 'example123',
+        'password': 'Example123',
+        'confirm password': 'Example123',
       };
       for (final entry in values.entries) {
+        if (entry.key == 'email' || entry.key == 'password') {
+          await signupNext(tester);
+        }
         final field = find.byWidgetPredicate(
           (w) => w is TextField && w.decoration?.hintText == entry.key,
         );
@@ -113,6 +118,14 @@ void main() {
             .decoration
             ?.errorText,
         'That mobile number is already registered.',
+      );
+      expect(find.text('Step 2 of 3'), findsOneWidget);
+      await signupNext(tester);
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+      expect(
+        tester.widget<TextField>(signupField('password')).controller!.text,
+        'Example123',
       );
     }, () => client);
   });

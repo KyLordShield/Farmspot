@@ -17,7 +17,11 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _titleController = AnimationController(
+    vsync: this,
+    animationBehavior: AnimationBehavior.preserve,
+  );
   late final AnimationController _controller =
       AnimationController(
         vsync: this,
@@ -29,6 +33,12 @@ class _SplashScreenState extends State<SplashScreen>
   bool _finished = false;
   bool _loaded = false;
   bool _active = true;
+
+  double get _titleProgress => !_loaded
+      ? 0
+      : _titleController.value *
+            _titleController.duration!.inMicroseconds /
+            _controller.duration!.inMicroseconds;
 
   @override
   void initState() {
@@ -50,7 +60,17 @@ class _SplashScreenState extends State<SplashScreen>
     _loaded = true;
     _loadTimeout?.cancel();
     _controller.duration = composition.duration;
-    if (_active) _controller.forward();
+    // The last letter lands at 44.5% of the intro's duration. Leave one
+    // second at rest before starting the next wave, even if startup is slow.
+    _titleController.duration = Duration(
+      microseconds:
+          (composition.duration.inMicroseconds * .445).round() +
+          Duration.microsecondsPerSecond,
+    );
+    if (_active) {
+      _controller.forward();
+      _titleController.repeat();
+    }
   }
 
   @override
@@ -58,8 +78,10 @@ class _SplashScreenState extends State<SplashScreen>
     _active = state == AppLifecycleState.resumed;
     if (!_active) {
       _controller.stop(canceled: false);
-    } else if (_loaded && !_finished) {
-      _controller.forward();
+      _titleController.stop(canceled: false);
+    } else if (_loaded) {
+      if (!_finished) _controller.forward();
+      _titleController.repeat();
     }
   }
 
@@ -68,6 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
     WidgetsBinding.instance.removeObserver(this);
     _loadTimeout?.cancel();
     _controller.dispose();
+    _titleController.dispose();
     super.dispose();
   }
 
@@ -108,7 +131,7 @@ class _SplashScreenState extends State<SplashScreen>
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: AnimatedBuilder(
-                          animation: _controller,
+                          animation: _titleController,
                           builder: (context, _) => Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -124,7 +147,7 @@ class _SplashScreenState extends State<SplashScreen>
                                         math.sin(
                                           math.pi *
                                               Curves.easeInOut.transform(
-                                                ((_controller.value -
+                                                ((_titleProgress -
                                                             .08 -
                                                             index * .035) /
                                                         .12)

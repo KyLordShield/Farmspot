@@ -1,4 +1,5 @@
 import '../legal/legal.dart';
+import '../widgets/association_contact_dialog.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -35,8 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _validateEmail(String value) {
     final email = value.trim();
     if (email.isEmpty) return 'Please enter your email.';
-    final valid =
-        RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+    final valid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
     if (!valid) return 'Please enter a valid email address.';
     return null;
   }
@@ -72,9 +72,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
       return;
     }
     _showLoginError(result);
@@ -87,7 +87,8 @@ class _LoginScreenState extends State<LoginScreen> {
         type: FarmAlertType.error,
         icon: Icons.wifi_off_rounded,
         title: 'No Connection',
-        message: "We couldn't reach FarmSpot. Please check your internet "
+        message:
+            "We couldn't reach FarmSpot. Please check your internet "
             'connection and try again.',
         buttonLabel: 'Try Again',
       );
@@ -99,7 +100,8 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         type: FarmAlertType.error,
         title: "Can't Sign In",
-        message: 'The email or password is incorrect. Please check your '
+        message:
+            'The email or password is incorrect. Please check your '
             'details and try again.',
       );
       return;
@@ -122,13 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (result.isPlainlyDeactivated) {
-        showFarmAlert(
-          context,
-          type: FarmAlertType.warning,
-          title: 'Account Deactivated',
-          message: 'Your account has been deactivated. Please contact your '
-              'farm association for help.',
-        );
+        showAssociationContactDialog(context, accountDeactivated: true);
         return;
       }
 
@@ -138,7 +134,8 @@ class _LoginScreenState extends State<LoginScreen> {
           context,
           type: FarmAlertType.info,
           title: 'Account Not Verified Yet',
-          message: 'Your account is still waiting to be verified. '
+          message:
+              'Your account is still waiting to be verified. '
               'Please try again later.',
         );
       } else {
@@ -146,7 +143,8 @@ class _LoginScreenState extends State<LoginScreen> {
           context,
           type: FarmAlertType.warning,
           title: 'FarmSpot Buyers & Farmers Only',
-          message: 'This app is for buyers and farmers. Admin accounts can '
+          message:
+              'This app is for buyers and farmers. Admin accounts can '
               'only log in on the website.',
         );
       }
@@ -172,23 +170,20 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       type: FarmAlertType.error,
       title: 'Something Went Wrong',
-      message: 'Something went wrong on our side. Please try again in a moment.',
+      message:
+          'Something went wrong on our side. Please try again in a moment.',
     );
   }
 
   void _goToSignUp() {
-    Navigator.of(context).pushReplacement(
-      farmFadeRoute(const SignUpScreen()),
-    );
+    Navigator.of(context).pushReplacement(farmFadeRoute(const SignUpScreen()));
   }
 
   /// Pushes, not replaces: the email the user just typed stays on the login
   /// screen underneath, so if they remember the password they are one tap away
   /// back instead of retyping it.
   void _goToForgotPassword() {
-    Navigator.of(context).push(
-      farmFadeRoute(const ForgotPasswordScreen()),
-    );
+    Navigator.of(context).push(farmFadeRoute(const ForgotPasswordScreen()));
   }
 
   @override
@@ -201,8 +196,10 @@ class _LoginScreenState extends State<LoginScreen> {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -238,7 +235,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.black45,
                         ),
                         onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword),
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -248,7 +246,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextButton.styleFrom(
                           minimumSize: Size.zero,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: _goToForgotPassword,
@@ -273,7 +273,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       actionLabel: 'Create Account',
                       onTap: _goToSignUp,
                     ),
-                    const LegalLinks(),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: Color(0xFFE8ECE9)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 4,
+                      children: [
+                        for (final id in ['terms', 'privacy'])
+                          _footerLink(
+                            LegalLinks.titles[id]!,
+                            () => LegalService.review(context, [id]),
+                          ),
+                        _footerLink(
+                          'Contact the Association',
+                          () => showAssociationContactDialog(context),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -283,4 +300,15 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  Widget _footerLink(String label, VoidCallback onPressed) => TextButton(
+    onPressed: onPressed,
+    style: TextButton.styleFrom(
+      foregroundColor: Colors.black54,
+      textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      minimumSize: const Size(48, 48),
+    ),
+    child: Text(label),
+  );
 }

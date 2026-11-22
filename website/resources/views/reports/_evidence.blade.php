@@ -106,7 +106,15 @@
     <section class="ld-card">
         <h2>Reported {{ $report->RPT_TARGET_TYPE == 'FARMER' ? 'Farmer' : 'User' }}</h2>
         @if($accused)
-            <div class="mod-person"><span class="mod-avatar" aria-hidden="true">{{ Str::of($accused->USR_NAME ?? '?')->trim()->explode(' ')->filter()->take(2)->map(fn ($part) => Str::substr($part, 0, 1))->implode('') }}</span> <a class="mod-link" href="{{ route('users.show', $accused->USR_ID) }}">View user profile</a></div>
+            <div class="mod-person">
+                <span class="mod-avatar" aria-hidden="true">
+                    {{ Str::of($accused->USR_NAME ?? '?')->trim()->explode(' ')->filter()->take(2)->map(fn ($part) => Str::substr($part, 0, 1))->implode('') }}
+                    @if(filled($accused->USR_PHOTO_PATH))
+                        <img src="{{ $accused->USR_PHOTO_PATH }}" alt="" data-mod-profile-photo hidden>
+                    @endif
+                </span>
+                <a class="mod-link" href="{{ route('users.show', $accused->USR_ID) }}">View user profile</a>
+            </div>
         @endif
         <dl class="ld-fields">
                 <div>

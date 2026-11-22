@@ -12,7 +12,7 @@ class InputLimits
 
     public const BARANGAY = 100;
 
-    public const ADDRESS = 255;
+    public const ADDRESS = 150;
 
     public static function messages(): array
     {

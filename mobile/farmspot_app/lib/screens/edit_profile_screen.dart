@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme.dart';
 import '../services/auth_service.dart';
+import '../widgets/address_area_picker.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String firstName;
@@ -115,7 +116,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final address = _addressCtrl.text.trim();
 
     if ('$first $last'.trim().length > InputLimits.fullName) {
-      setState(() => _saveError = 'Full name must be 150 characters or fewer.');
+      setState(
+        () => _saveError =
+            'Full name must be ${InputLimits.fullName} characters or fewer.',
+      );
       return;
     }
     final nameChanged = _currentName != '$first $last'.trim();
@@ -302,7 +306,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             }),
           ),
           const SizedBox(height: 14),
-          _field('address', _addressCtrl, maxLength: InputLimits.address),
+          AddressAreaField(
+            controller: _addressCtrl,
+            maxLength: InputLimits.address,
+            onChanged: (_) => setState(() => _saveError = null),
+            fieldBuilder: (focusNode) => _field(
+              'address',
+              _addressCtrl,
+              focusNode: focusNode,
+              maxLength: InputLimits.address,
+              showCounter: false,
+            ),
+          ),
           if (_saveError != null) ...[
             const SizedBox(height: 14),
             Container(
@@ -378,10 +393,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     List<TextInputFormatter>? inputFormatters,
     String? errorText,
     ValueChanged<String>? onChanged,
+    FocusNode? focusNode,
+    bool showCounter = true,
   }) {
     return TextField(
       controller: controller,
       maxLength: maxLength,
+      buildCounter: showCounter
+          ? null
+          : (
+              context, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) => null,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       readOnly: readOnly,
       inputFormatters: inputFormatters,

@@ -129,6 +129,12 @@
         }
         @media (max-width: 767px) {
             .brand-panel { display: none; }
+            .login-wrapper { min-height: 100dvh; }
+            .form-panel { padding: 28px 20px; min-width: 0; }
+            .login-card .brand-title-form { font-size: 2.1rem; transform: none; margin-bottom: 12px; }
+            .login-card .form-control { font-size: 16px; min-height: 44px; }
+            .login-card .btn { min-height: 44px; }
+            .login-card { padding-block: 12px; }
         }
     </style>
 </head>

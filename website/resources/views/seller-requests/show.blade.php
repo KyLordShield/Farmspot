@@ -107,7 +107,7 @@
 
                     <div>
                         <dt>Owner Name</dt>
-                        <dd>{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }}</dd>
+                        <dd>{{ $farm->farmer?->buyer?->user?->USR_NAME ?? '-' }} @include('users.partials.profile-link', ['profileUser' => $farm->farmer?->buyer?->user])</dd>
                     </div>
 
                     <div>

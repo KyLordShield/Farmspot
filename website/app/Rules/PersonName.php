@@ -10,6 +10,8 @@ class PersonName implements ValidationRule
 {
     public const MAX_LENGTH = 150;
 
+    public const MOBILE_MAX_LENGTH = 81;
+
     public static function normalize(Request $request, string $field): void
     {
         $value = $request->input($field);
