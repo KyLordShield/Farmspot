@@ -68,8 +68,9 @@ final class CropSearchInsights
             'recent' => $asMap($recent), 'current' => $asMap($current), 'future_months' => $futureMonths,
         ];
         $process = new Process([config('farmspot.insights_python'), base_path('analytics/search_interest.py')]);
-        if ($demo && PHP_OS_FAMILY === 'Windows') {
-            // The local Windows web server may lack access to Python's startup entropy.
+        if (PHP_OS_FAMILY === 'Windows') {
+            // Windows web workers may lack access to Python's startup entropy.
+            // This scoring process needs the same startup setting in live and demo mode.
             $process->setEnv(['PYTHONHASHSEED' => '42']);
         }
         $process->setTimeout(10)->setInput(json_encode($input, JSON_THROW_ON_ERROR));

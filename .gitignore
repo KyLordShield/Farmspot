@@ -47,6 +47,12 @@ website/public/demo-crops/
 website/public/demo-farm-photos/
 website/public/testing-crops/
 
+# Local presentation database photos. Keep on disk for local listings;
+# publish these assets separately when migrating the presentation database.
+/website/public/presentation-avatars/
+/website/public/presentation-crops/
+/website/public/presentation-farms/
+
 # Pre-migration mysqldump snapshots of capstone_db. Local safety copies only,
 # never committed: they contain every row of the live capstone database.
 backups/
