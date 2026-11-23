@@ -7,7 +7,6 @@
     var titleEl = document.getElementById('documentModalTitle');
     var imageEl = document.getElementById('documentModalImage');
     var frameEl = document.getElementById('documentModalFrame');
-    var openLink = document.getElementById('documentModalOpenLink');
 
     modal.addEventListener('show.bs.modal', function (event) {
         var trigger = event.relatedTarget;
@@ -19,7 +18,6 @@
         var title = trigger.getAttribute('data-document-title') || 'Document';
 
         titleEl.textContent = title;
-        openLink.setAttribute('href', url);
 
         // Cloudinary serves a plain image for jpg/png and everything else
         // (pdf, doc) needs the embedded viewer rather than an <img>.

@@ -92,6 +92,7 @@ Route::middleware(['auth', 'admin', 'admin.mfa', \App\Http\Middleware\RecordAdmi
         ->name('reviews.toggleStatus');
 
     Route::get('/seller-requests', [SellerRequestController::class, 'index'])->name('seller-requests');
+    Route::get('/seller-requests/{id}/documents/{document}', [\App\Http\Controllers\SellerDocumentController::class, 'show'])->whereIn('document', ['id', 'permit'])->name('seller-requests.document');
     Route::get('/seller-requests/{id}', [SellerRequestController::class, 'show'])->name('seller-requests.show');
     Route::post('/seller-requests/{id}/approve', [SellerRequestController::class, 'approve'])->name('seller-requests.approve');
     Route::post('/seller-requests/{id}/reject', [SellerRequestController::class, 'reject'])->name('seller-requests.reject');

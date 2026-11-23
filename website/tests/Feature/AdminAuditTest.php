@@ -191,4 +191,27 @@ class AdminAuditTest extends TestCase
             $this->assertSame(1, $xpath->query('//button[@data-bs-target="#audit-changes-'.$log->AUD_ID.'"]')->length);
         }
     }
+
+    public function test_seller_documents_are_proxied_only_for_verified_administrators(): void
+    {
+        Schema::create('farm', function (Blueprint $table) {
+            $table->char('FRM_ID', 6)->primary();
+            $table->text('FRM_VERIFICATION_DOC_PATH')->nullable();
+            $table->text('FRM_FARM_CERTIFICATE_PATH')->nullable();
+        });
+        DB::table('farm')->insert(['FRM_ID' => 'FARM01', 'FRM_VERIFICATION_DOC_PATH' => 'https://res.cloudinary.com/demo/image/upload/id.jpg', 'FRM_FARM_CERTIFICATE_PATH' => 'https://res.cloudinary.com/demo/image/upload/permit.pdf']);
+        \Illuminate\Support\Facades\Http::fake([
+            '*id.jpg' => \Illuminate\Support\Facades\Http::response('image bytes', 200, ['Content-Type' => 'image/jpeg']),
+            '*permit.pdf' => \Illuminate\Support\Facades\Http::response('%PDF-test', 200, ['Content-Type' => 'application/pdf']),
+        ]);
+        $this->get('/seller-requests/FARM01/documents/id')->assertOk()->assertContent('image bytes')->assertHeader('Content-Type', 'image/jpeg');
+        $this->get('/seller-requests/FARM01/documents/permit')->assertOk()->assertContent('%PDF-test')->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+        DB::table('farm')->where('FRM_ID', 'FARM01')->update(['FRM_VERIFICATION_DOC_PATH' => 'http://127.0.0.1/private']);
+        $this->get('/seller-requests/FARM01/documents/id')->assertNotFound();
+        $this->get('/seller-requests/FARM01/documents/other')->assertNotFound();
+        $this->actingAs(new User(['USR_ID' => 'BUY001', 'USR_ROLE' => 'GENERAL_USER']))->get('/seller-requests/FARM01/documents/permit')->assertForbidden();
+        $this->actingAs($this->admin)->withSession(['admin_mfa' => []])->get('/seller-requests/FARM01/documents/permit')->assertRedirect(route('login'));
+        $this->app['auth']->forgetGuards();
+        $this->get('/seller-requests/FARM01/documents/permit')->assertRedirect(route('login'));
+    }
 }

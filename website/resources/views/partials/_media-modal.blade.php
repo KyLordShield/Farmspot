@@ -10,9 +10,6 @@
                 <iframe id="documentModalFrame" class="document-modal-frame" title="Document preview" hidden></iframe>
             </div>
             <div class="modal-footer">
-                <a id="documentModalOpenLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost">
-                    <i class="bi bi-box-arrow-up-right me-1"></i> Open Full Size
-                </a>
                 <button type="button" class="btn btn-farm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>

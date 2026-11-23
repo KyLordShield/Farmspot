@@ -160,21 +160,23 @@
             if ($farm->FRM_VERIFICATION_DOC_PATH) {
                 $viewerDocuments[] = [
                     'label' => 'Valid ID Document',
-                    'url'   => $farm->FRM_VERIFICATION_DOC_PATH,
+                    'url'   => route('seller-requests.document', ['id' => $farm->FRM_ID, 'document' => 'id']),
+                    'source' => $farm->FRM_VERIFICATION_DOC_PATH,
                 ];
             }
 
             if ($farm->FRM_FARM_CERTIFICATE_PATH) {
                 $viewerDocuments[] = [
                     'label' => 'Farm Permit / Certificate',
-                    'url'   => $farm->FRM_FARM_CERTIFICATE_PATH,
+                    'url'   => route('seller-requests.document', ['id' => $farm->FRM_ID, 'document' => 'permit']),
+                    'source' => $farm->FRM_FARM_CERTIFICATE_PATH,
                 ];
             }
         @endphp
 
         @foreach($viewerDocuments as $document)
             @php
-                $documentExtension = strtolower(pathinfo(parse_url($document['url'], PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+                $documentExtension = strtolower(pathinfo(parse_url($document['source'], PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
             @endphp
             <div class="panel">
                 <div class="panel-header">

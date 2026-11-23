@@ -14,3 +14,4 @@ tests
 phpunit*.xml
 *.sql
 backups
+storage/app/private/database-backups

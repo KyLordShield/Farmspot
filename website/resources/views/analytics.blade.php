@@ -42,7 +42,6 @@
                 <label>To <input class="form-control" name="to" type="date" value="{{ old('to', $filters['to'] ?? '') }}"></label>
             </fieldset>
             <button type="submit" class="btn btn-ghost"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> <span id="analytics-apply-label">{{ old('range', $range) === 'custom' ? 'Apply dates' : 'Refresh' }}</span></button>
-            <button type="submit" name="export" value="csv" class="btn btn-farm"><i class="bi bi-download" aria-hidden="true"></i> Export CSV</button>
             <small class="analytics-muted" id="analytics-range-scope">Filters Top Searches. For a custom range, enter both dates and select Apply dates.</small>
         </form>
     </header>
