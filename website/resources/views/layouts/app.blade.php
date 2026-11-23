@@ -133,6 +133,13 @@
                 </a>
             </li>
 
+            <li>
+                <a href="{{ route('audit-log') }}">
+                    <i class="bi bi-clock-history"></i>
+                    Audit Log
+                </a>
+            </li>
+
         </ul>
 
         <div class="sidebar-footer">

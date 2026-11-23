@@ -100,16 +100,6 @@ class AppealController extends Controller
                 ]);
 
                 try {
-                    \App\Models\AuditLog::record(
-                        'APPEAL_APPROVED',
-                        sprintf('Appeal %s (target %s %s) approved', $appeal->RRQ_ID, $appeal->RRQ_TARGET_TYPE, $appeal->RRQ_TARGET_ID),
-                        $request->user()->USR_ID
-                    );
-                } catch (\Throwable $e) {
-                    Log::warning('[audit] APPEAL_APPROVED failed', ['rrq_id' => $appeal->RRQ_ID, 'message' => $e->getMessage()]);
-                }
-
-                try {
                     app(\App\Services\NotificationService::class)->notify(
                         $appeal->USR_ID,
                         'APPEAL_APPROVED',
@@ -168,16 +158,6 @@ class AppealController extends Controller
                     'RRQ_DECIDED_BY' => $request->user()->USR_ID,
                     'RRQ_DECIDED_AT' => now(),
                 ]);
-
-                try {
-                    \App\Models\AuditLog::record(
-                        'APPEAL_DENIED',
-                        sprintf('Appeal %s (target %s %s) denied', $appeal->RRQ_ID, $appeal->RRQ_TARGET_TYPE, $appeal->RRQ_TARGET_ID),
-                        $request->user()->USR_ID
-                    );
-                } catch (\Throwable $e) {
-                    Log::warning('[audit] APPEAL_DENIED failed', ['rrq_id' => $appeal->RRQ_ID, 'message' => $e->getMessage()]);
-                }
 
                 try {
                     app(\App\Services\NotificationService::class)->notify(

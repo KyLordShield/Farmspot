@@ -13,9 +13,12 @@ use Illuminate\Pagination\Paginator;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Event;
+use App\Services\AdminAudit;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -68,6 +71,13 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
         Listing::observe(PremiumListingObserver::class);
         BuyRequest::observe(PremiumBuyRequestObserver::class);
+
+        Event::listen(['eloquent.created: *', 'eloquent.updated: *', 'eloquent.deleted: *'], function ($event, $models) {
+            $audit = request()->attributes->get('admin.audit');
+            if ($audit instanceof AdminAudit) {
+                $audit->capture($models[0], Str::before(Str::after($event, 'eloquent.'), ':'));
+            }
+        });
 
         // Share light-weight sidebar counts for the admin layout. Doing it as a
         // composer avoids the temptation to compute them in every controller

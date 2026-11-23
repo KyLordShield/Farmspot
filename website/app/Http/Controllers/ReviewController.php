@@ -87,9 +87,8 @@ class ReviewController extends Controller
      * moderator takes cannot disagree with the state it was offered from: the
      * target state is derived from what the row is now.
      *
-     * No audit_log write. Nothing in the admin panel writes there any more —
-     * Report enforcement moved to report_action — so introducing a lone writer
-     * for one feature would create a trail that only partly exists.
+     * Audit history is captured by the admin change middleware.
+     * Report enforcement also retains its detailed report_action history.
      */
     public function toggleStatus(Request $request, $id)
     {

@@ -6,24 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
- * Append-only record of who did something and when.
- *
- * Nothing wrote to this table while the report queue's decisions lived in
- * ReportAction / report_action, which keeps one row per step, records the
- * previous value so undo is exact, and orders by insertion. That trail is
- * still the right one for a moderator clicking a button on a report.
- *
- * Re-evaluations are different. Approving or denying an appeal is a decision
- * about a person that has no undo button and must be answerable afterwards —
- * "who restored this account, when, and on what grounds" — so those two
- * outcomes are written here as a small, permanent audit row alongside the
- * ReviewRequest the decision is recorded on.
- *
- * The table has AUD_CREATED_AT and no AUD_UPDATED_AT, so Eloquent's default
- * timestamps would try to write a column that does not exist; they are off and
- * the timestamp is set by hand. Fillable is spelled out rather than switching
- * to $guarded = [] because this is an audit trail: what an application may
- * write into it is worth keeping explicit.
+ * Administrator change history. Request auditing records persisted changes;
+ * report_action separately retains moderation steps needed for undo.
+ * Custom timestamps are set explicitly because this table has no updated column.
  */
 class AuditLog extends Model
 {
@@ -43,7 +28,14 @@ class AuditLog extends Model
         'AUD_DETAILS',
         'AUD_CREATED_AT',
         'USR_ID',
+        'AUD_ACTOR_NAME',
+        'AUD_TARGET_TYPE',
+        'AUD_TARGET_ID',
+        'AUD_ROUTE',
+        'AUD_CHANGES',
     ];
+
+    protected $casts = ['AUD_CREATED_AT' => 'datetime', 'AUD_CHANGES' => 'array'];
 
     /**
      * Write one audit row. Best-effort by design.
@@ -54,9 +46,9 @@ class AuditLog extends Model
      * do it again. The caller wraps this in its own try/catch where it matters;
      * the id is still drawn here so every caller writes the same shape.
      */
-    public static function record(string $action, ?string $details, ?string $adminId): void
+    public static function record(string $action, ?string $details, ?string $adminId, array $context = []): void
     {
-        if ($adminId === null) {
+        if ($adminId === null && empty($context)) {
             return;
         }
 
@@ -66,6 +58,11 @@ class AuditLog extends Model
             'AUD_DETAILS' => $details,
             'AUD_CREATED_AT' => now(),
             'USR_ID' => $adminId,
+            'AUD_ACTOR_NAME' => $context['actor_name'] ?? null,
+            'AUD_TARGET_TYPE' => $context['target_type'] ?? null,
+            'AUD_TARGET_ID' => $context['target_id'] ?? null,
+            'AUD_ROUTE' => $context['route'] ?? null,
+            'AUD_CHANGES' => $context['changes'] ?? null,
         ]);
     }
 

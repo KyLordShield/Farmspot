@@ -1168,17 +1168,15 @@ class _FarmDirectionsScreenState extends State<FarmDirectionsScreen>
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  if (kDebugMode)
-                    Switch(
-                      value: _simulateOn,
-                      onChanged: (v) => setState(() => _simulateOn = v),
-                      activeThumbColor: AppColors.primaryGreen,
-                    ),
-                  if (kDebugMode)
-                    Text(
-                      _simulateOn ? 'SIM ON' : 'SIM OFF',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                  Switch(
+                    value: _simulateOn,
+                    onChanged: (v) => setState(() => _simulateOn = v),
+                    activeThumbColor: AppColors.primaryGreen,
+                  ),
+                  Text(
+                    _simulateOn ? 'SIM ON' : 'SIM OFF',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ],
               ),
             ),

@@ -21,8 +21,9 @@ Route::get('/', \App\Http\Controllers\PublicSiteController::class)->name('public
 // and the names of the people accused, or reach /users. Now that
 // reports can be filed from the app, that is a real leak rather than a
 // theoretical one.
-Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
+Route::middleware(['auth', 'admin', 'admin.mfa', \App\Http\Middleware\RecordAdminChanges::class])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/audit-log', [\App\Http\Controllers\AuditLogController::class, 'index'])->name('audit-log');
 
     // The admin's personal planner, written from the dashboard. Notes and
     // events share one table and one controller; every row is owned by the

@@ -25,7 +25,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::post('admin/verify/resend', [AdminMfaController::class, 'resend'])->block(30, 10)->name('admin.mfa.resend');
 });
 
-Route::middleware(['auth', 'admin', 'admin.mfa'])->group(function () {
+Route::middleware(['auth', 'admin', 'admin.mfa', \App\Http\Middleware\RecordAdminChanges::class])->group(function () {
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

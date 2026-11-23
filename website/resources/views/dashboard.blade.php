@@ -525,7 +525,7 @@
                         <i class="bi bi-clock-history"></i>
                         My Recent Activity
                     </h5>
-                    <div class="panel-sub">Your latest recorded decisions</div>
+                    <div class="panel-sub">Your latest recorded changes · <a href="{{ route('audit-log') }}">View audit log</a></div>
                 </div>
             </div>
 

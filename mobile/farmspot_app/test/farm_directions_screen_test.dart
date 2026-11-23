@@ -651,7 +651,13 @@ void main() {
     'simulate glides the route without GPS and advances the turn banner',
     (tester) async {
       final stream = StreamController<LatLng>();
-      await _pump(tester, stream: stream, simulate: true);
+      await _pump(tester, stream: stream);
+
+      expect(find.text('SIM OFF'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(find.text('SIM ON'), findsOneWidget);
 
       expect(find.text('Start Navigation'), findsOneWidget);
       await tester.tap(find.text('Start Navigation'));
@@ -661,6 +667,11 @@ void main() {
         find.textContaining('SIMULATED DEMO'),
         findsOneWidget,
         reason: 'the journey must state it is replaying fake positions',
+      );
+      expect(
+        stream.hasListener,
+        isFalse,
+        reason: 'the simulation must not subscribe to live GPS',
       );
       expect(
         find.text(_fmtDistance(_routeTotal)),

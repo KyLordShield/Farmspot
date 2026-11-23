@@ -71,3 +71,6 @@ apk/
 
 # Local generated documents, recordings, previews, and database preparation files.
 /output/
+
+# Private SSH access keys and local connection notes. Never commit.
+/private-access/
