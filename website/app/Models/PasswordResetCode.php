@@ -36,7 +36,8 @@ class PasswordResetCode extends Model
      */
     public const MAX_ATTEMPTS = 5;
 
-    protected $table = 'PASSWORD_RESET_CODE';
+    // Match the committed schema on case-sensitive Linux/MySQL hosts.
+    protected $table = 'password_reset_code';
 
     protected $primaryKey = 'USR_ID';
 
