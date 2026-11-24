@@ -11,6 +11,7 @@ use App\Models\Listing;
 use App\Models\Message;
 use App\Models\Report;
 use App\Models\User;
+use App\Services\AdminMfa;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -130,6 +131,37 @@ class ConversationMessagingTest extends TestCase
     {
         return $this->actingAs($user, 'sanctum')
             ->postJson("/api/conversations/{$conversationId}/messages", ['content' => $content]);
+    }
+
+    public function test_profile_thread_is_reused_and_separate_from_listing_threads(): void
+    {
+        [$seller, $listing, , $farmer] = $this->makeSeller();
+        [$buyer] = $this->makePlainBuyer();
+        $url = "/api/farmers/{$farmer->FMR_ID}/conversation";
+        $first = $this->actingAs($buyer, 'sanctum')->postJson($url)->assertCreated();
+        $id = $first->json('conversation.id');
+        $first->assertJsonPath('conversation.listing_id', null)
+            ->assertJsonPath('conversation.other_party.id', $seller->USR_ID);
+        $this->postJson($url)->assertOk()->assertJsonPath('conversation.id', $id);
+        $listingThread = $this->startThread($buyer, $listing);
+        $this->assertNotSame($id, $listingThread->CONV_ID);
+        $this->postMessage($buyer, $id, 'Hello farmer')->assertSuccessful();
+        $this->actingAs($seller, 'sanctum')->getJson("/api/conversations/{$id}/messages")
+            ->assertOk()->assertJsonPath('conversation.other_party.id', $buyer->USR_ID);
+        [$stranger] = $this->makePlainBuyer('Other', 'other@test.local');
+        $this->actingAs($stranger, 'sanctum')->getJson("/api/conversations/{$id}/messages")->assertForbidden();
+        $this->postMessage($stranger, $id, 'Intrusion')->assertForbidden();
+    }
+
+    public function test_profile_thread_rejects_self_missing_and_inactive_farmer(): void
+    {
+        [$seller, , , $farmer] = $this->makeSeller();
+        $url = "/api/farmers/{$farmer->FMR_ID}/conversation";
+        $this->actingAs($seller, 'sanctum')->postJson($url)->assertUnprocessable();
+        [$buyer] = $this->makePlainBuyer();
+        $this->actingAs($buyer, 'sanctum')->postJson('/api/farmers/ZZZZZZ/conversation')->assertNotFound();
+        $seller->update(['USR_STATUS' => 'DEACTIVATED']);
+        $this->postJson($url)->assertForbidden();
     }
 
     public function test_starting_a_thread_is_idempotent_per_listing_and_buyer()
@@ -527,6 +559,11 @@ class ConversationMessagingTest extends TestCase
         ]);
 
         $this->actingAs($admin)
+            ->withSession(['admin_mfa' => [
+                'verified' => app(AdminMfa::class)->fingerprint($admin),
+                'started' => now()->timestamp,
+                'last_seen' => now()->timestamp,
+            ]])
             ->post("/reports/{$report->RPT_ID}/action/MESSAGE_HIDDEN")
             ->assertRedirect(route('reports.show', $report->RPT_ID));
 

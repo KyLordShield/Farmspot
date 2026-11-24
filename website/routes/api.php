@@ -138,6 +138,7 @@ Route::delete('/farms/{farmId}/photos/{photoId}', [FarmController::class, 'destr
     // In-app buyer <-> seller messaging.
     Route::get('/conversations', [ConversationController::class, 'index']);
     Route::post('/conversations', [ConversationController::class, 'store']);
+    Route::post('/farmers/{farmerId}/conversation', [ConversationController::class, 'storeForFarmer'])->middleware('throttle:20,1');
     Route::get('/conversations/{id}/messages', [ConversationController::class, 'messages']);
     Route::post('/conversations/{id}/messages', [ConversationController::class, 'sendMessage']);
 

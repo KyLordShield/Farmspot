@@ -55,6 +55,33 @@ class ConversationController extends Controller
         return response()->json(['conversations' => $rows->map(fn ($c) => $this->formatConversation($c, $c->BUY_ID))->values()]);
     }
 
+    /** One general thread per buyer and farmer, independent of crop threads. */
+    public function storeForFarmer(Request $request, string $farmerId)
+    {
+        [$conversation, $created] = DB::transaction(function () use ($request, $farmerId) {
+            // Serialize starts by this account, including lazy buyer creation.
+            $viewer = User::whereKey($request->user()->USR_ID)->lockForUpdate()->firstOrFail();
+            $farmer = Farmer::with('buyer.user')->findOrFail($farmerId);
+            $seller = $farmer->buyer?->user;
+            abort_unless($seller && $seller->USR_STATUS === 'ACTIVE', 403, 'This farmer is not available for messaging.');
+            abort_if($seller->USR_ID === $viewer->USR_ID, 422, 'You cannot message yourself.');
+            $buyerId = $this->ensureBuyerId($viewer);
+            $existing = Conversation::where('BUY_ID', $buyerId)->where('FMR_ID', $farmerId)
+                ->whereNull('LST_ID')->whereNull('BRQ_ID')->first();
+            if ($existing) return [$existing, false];
+            do { $id = strtoupper(Str::random(6)); } while (Conversation::whereKey($id)->exists());
+            return [Conversation::create([
+                'CONV_ID' => $id, 'BUY_ID' => $buyerId, 'FMR_ID' => $farmerId,
+                'LST_ID' => null, 'BRQ_ID' => null, 'FRM_ID' => null,
+                'CONV_CREATED_AT' => now(),
+            ]), true];
+        });
+        return response()->json(['conversation' => $this->formatConversation(
+            $conversation->load(['farmer.buyer.user', 'farm']),
+            $this->myBuyerId($request->user()->USR_ID)
+        )], $created ? 201 : 200);
+    }
+
     /**
      * Start — or return the existing — conversation between the signed-in
      * buyer and the seller of a listing. Idempotent on purpose: the "Message
