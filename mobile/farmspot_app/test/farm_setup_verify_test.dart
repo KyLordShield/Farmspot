@@ -248,6 +248,97 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Next shows specific error message when ID text is unreadable',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
+      });
+      final data = FarmSetupData()
+        ..verificationDocument = XFile.fromData(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'id.jpg',
+        )
+        // Bad ID text — does not look like a government ID
+        ..verificationDocumentText = 'Some random blurry text'
+        ..farmCertificate = XFile.fromData(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'permit.jpg',
+        )
+        ..farmCertificateText =
+            'BUSINESS PERMIT NAME Juan Dela Cruz FARM Manila';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FarmSetupVerifyScreen(
+            farmSetupData: data,
+            confirmDocumentPrivacy: () async => true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.scrollUntilVisible(
+        find.text('Next: Pin Farm Location'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Next: Pin Farm Location'));
+      await tester.pump();
+      expect(
+        find.textContaining('government ID could not be verified'),
+        findsOneWidget,
+        reason: 'must name the specific failing document',
+      );
+      expect(find.byType(FarmSetupLocationScreen), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Next shows specific error message when permit name mismatches',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
+      });
+      final data = FarmSetupData()
+        ..verificationDocument = XFile.fromData(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'id.jpg',
+        )
+        ..verificationDocumentText =
+            'PHILIPPINE IDENTIFICATION NAME Juan Dela Cruz ADDRESS Manila'
+        ..farmCertificate = XFile.fromData(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'permit.jpg',
+        )
+        // Permit belongs to a different person
+        ..farmCertificateText =
+            'BUSINESS PERMIT NAME Pedro Santos FARM Manila';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FarmSetupVerifyScreen(
+            farmSetupData: data,
+            confirmDocumentPrivacy: () async => true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.scrollUntilVisible(
+        find.text('Next: Pin Farm Location'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Next: Pin Farm Location'));
+      await tester.pump();
+      expect(
+        find.textContaining("name on the Seller's Permit does not match"),
+        findsOneWidget,
+        reason: 'must name the Seller\'s Permit specifically',
+      );
+      expect(find.byType(FarmSetupLocationScreen), findsNothing);
+    },
+  );
+
   testWidgets('capture checks reject random images and name mismatches', (
     tester,
   ) async {
@@ -290,6 +381,70 @@ void main() {
     expect(data.verificationDocumentText, text);
     expect(find.text('Photo Library'), findsNothing);
   });
+
+  testWidgets(
+    'permit capture rejects unreadable docs, name mismatches, and accepts matching names',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'user_data': '{"USR_NAME":"Juan Dela Cruz"}',
+      });
+      final data = FarmSetupData()
+        ..verificationDocument = XFile.fromData(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'id.jpg',
+        )
+        ..verificationDocumentText =
+            'PHILIPPINE IDENTIFICATION NAME Juan Dela Cruz ADDRESS Manila';
+      var text = 'Blurry unrecognisable image';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FarmSetupVerifyScreen(
+            farmSetupData: data,
+            confirmDocumentPrivacy: () async => true,
+            captureDocument: () async =>
+                XFile.fromData(Uint8List.fromList([4, 5, 6]), name: 'permit.jpg'),
+            readDocument: (_) async => text,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Unreadable / non-permit text is rejected.
+      await tester.scrollUntilVisible(
+        find.text('Take photo'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+      expect(data.farmCertificate, isNull);
+      expect(
+        find.textContaining('Could not read a permit or certificate'),
+        findsOneWidget,
+      );
+
+      // Permit with a different person's name is rejected.
+      text = 'BUSINESS PERMIT OWNER Pedro Santos FARM Manila';
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+      expect(data.farmCertificate, isNull);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          "The name on the Seller's Permit does not match your verified identity",
+        ),
+        findsOneWidget,
+      );
+
+      // Permit with matching name (different order/casing/punctuation) is accepted.
+      text = 'BUSINESS PERMIT OWNER: CRUZ, JUAN DELA FARM Manila';
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+      expect(data.farmCertificate, isNotNull);
+      expect(data.farmCertificateText, text);
+    },
+  );
 
   testWidgets('cancel and recognition failure leave documents unset', (
     tester,

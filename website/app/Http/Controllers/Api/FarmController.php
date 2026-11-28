@@ -11,6 +11,7 @@ use App\Models\FarmVisitLog;
 use App\Models\Listing;
 use App\Models\ListingReview;
 use App\Support\CloudinaryImage;
+use App\Support\DocumentNameMatcher;
 use App\Support\InputLimits;
 use App\Support\PhotoLimits;
 use Illuminate\Http\Request;
@@ -101,7 +102,27 @@ class FarmController extends Controller
                 'mimes:jpg,jpeg,png,pdf',
                 'max:5120',
             ],
+            // OCR name texts are required for the first farm so the backend can verify
+            // names server-side and cannot be bypassed by omitting the field.
+            // Subsequent farms inherit their documents, so the texts are not sent.
+            'verification_document_text' => [$isFirstFarm ? 'required' : 'nullable', 'string', 'max:20000'],
+            'farm_certificate_text' => [$isFirstFarm ? 'required' : 'nullable', 'string', 'max:20000'],
         ], InputLimits::messages());
+
+        $sellerName = (string) ($request->user()->USR_NAME ?? '');
+        $ocrErrors = [];
+        if (! empty($validated['verification_document_text']) && ! DocumentNameMatcher::matches($sellerName, $validated['verification_document_text'])) {
+            $ocrErrors['verification_document'] = ['The ID name must match your seller full name.'];
+        }
+        if (! empty($validated['farm_certificate_text']) && ! DocumentNameMatcher::matches($sellerName, $validated['farm_certificate_text'])) {
+            $ocrErrors['farm_certificate'] = ["The name on the Seller's Permit does not match your verified identity."];
+        }
+        if ($ocrErrors !== []) {
+            return response()->json([
+                'message' => collect($ocrErrors)->flatten()->first(),
+                'errors' => $ocrErrors,
+            ], 422);
+        }
 
         $farmId = $this->uniqueId('farm', 'FRM_ID');
 

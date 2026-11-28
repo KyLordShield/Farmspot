@@ -141,9 +141,11 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
         );
         return;
       }
-      if (isId && !DocumentTextCheck.matchesName(_fullNameCtrl.text, text)) {
+      if (!DocumentTextCheck.matchesName(_fullNameCtrl.text, text)) {
         _showError(
-          'The ID name must match your seller full name. Check your account name and retake a clear photo.',
+          isId
+              ? 'The ID name must match your seller full name. Check your account name and retake a clear photo.'
+              : "The name on the Seller's Permit does not match your verified identity. Please retake or upload a clearer photo.",
         );
         return;
       }
@@ -194,20 +196,41 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
       }
     }
     final data = widget.farmSetupData;
+
+    // Check ID first, then Seller's Permit, with specific messages for each.
     if (!DocumentTextCheck.looksLikeDocument(
-          data.verificationDocumentText,
-          isId: true,
-        ) ||
-        !DocumentTextCheck.looksLikeDocument(
-          data.farmCertificateText,
-          isId: false,
-        ) ||
-        !DocumentTextCheck.matchesName(
-          _fullNameCtrl.text,
-          data.verificationDocumentText,
-        )) {
+      data.verificationDocumentText,
+      isId: true,
+    )) {
       _showError(
-        'Please retake your documents and make sure the ID matches your seller full name.',
+        'Your government ID could not be verified. Please retake the photo with all text clearly visible.',
+      );
+      return;
+    }
+    if (!DocumentTextCheck.matchesName(
+      _fullNameCtrl.text,
+      data.verificationDocumentText,
+    )) {
+      _showError(
+        'The name on your government ID does not match your seller name. Please retake the ID photo.',
+      );
+      return;
+    }
+    if (!DocumentTextCheck.looksLikeDocument(
+      data.farmCertificateText,
+      isId: false,
+    )) {
+      _showError(
+        "Your Seller's Permit could not be verified. Please retake the photo with the title and details visible.",
+      );
+      return;
+    }
+    if (!DocumentTextCheck.matchesName(
+      _fullNameCtrl.text,
+      data.farmCertificateText,
+    )) {
+      _showError(
+        "The name on the Seller's Permit does not match your verified identity. Please retake the permit photo.",
       );
       return;
     }
@@ -322,7 +345,7 @@ class _FarmSetupVerifyScreenState extends State<FarmSetupVerifyScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Your seller full name must match your ID. An admin will review and approve your documents.',
+                    "Your seller full name must match both your ID and Seller's Permit. An admin will review and approve your documents.",
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   if (_checking) const LinearProgressIndicator(),

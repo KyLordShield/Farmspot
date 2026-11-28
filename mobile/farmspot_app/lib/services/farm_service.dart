@@ -84,6 +84,13 @@ class FarmService {
         );
       }
 
+      if (data.verificationDocumentText.trim().isNotEmpty) {
+        request.fields['verification_document_text'] =
+            data.verificationDocumentText;
+      }
+      if (data.farmCertificateText.trim().isNotEmpty) {
+        request.fields['farm_certificate_text'] = data.farmCertificateText;
+      }
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
       final json = jsonDecode(response.body);
