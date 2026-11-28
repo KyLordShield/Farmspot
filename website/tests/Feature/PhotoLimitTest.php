@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -184,6 +185,8 @@ class PhotoLimitTest extends TestCase
         $this->post("/api/listings/{$id}/photos", ['photos' => [$this->pngUpload(), $this->pngUpload()]], ['Accept' => 'application/json'])
             ->assertUnprocessable()->assertJsonValidationErrors('photos');
         $this->assertCount(0, Storage::disk('cloudinary')->allFiles());
+        config(['services.image_detect.url' => 'https://scanner.test', 'services.image_detect.token' => 'test-token']);
+        Http::fake(['scanner.test/*' => Http::response(['detections' => [['name' => 'carrot']]])]);
         $this->post("/api/listings/{$id}/photos", ['photos' => [$this->pngUpload()]], ['Accept' => 'application/json'])->assertCreated();
         $this->post("/api/listings/{$id}/photos", ['photos' => [$this->pngUpload()]], ['Accept' => 'application/json'])
             ->assertUnprocessable()->assertJsonValidationErrors('photos');
@@ -193,6 +196,8 @@ class PhotoLimitTest extends TestCase
     public function test_renewal_replaces_gallery_but_refuses_six_fresh_photos(): void
     {
         Storage::fake('cloudinary');
+        config(['services.image_detect.url' => 'https://scanner.test', 'services.image_detect.token' => 'test-token']);
+        Http::fake(['scanner.test/*' => Http::response(['detections' => [['name' => 'carrot']]])]);
         $seller = $this->makeSeller();
         $listing = $this->makeListing($seller, 'NOT_AVAILABLE', now()->subDay());
         $this->listingPhotos($listing, 5);

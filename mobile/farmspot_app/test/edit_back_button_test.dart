@@ -47,7 +47,15 @@ void main() {
       (tester) async {
     await _pushScreen(tester, const AddCropScreen(isFirstCrop: true));
 
-    await tester.enterText(find.byType(TextField).first, 'Tomatoes');
+    final description = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.maxLines == 4,
+    );
+    await tester.scrollUntilVisible(
+      description,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(description, 'Tomatoes');
     await tester.pump();
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
@@ -66,7 +74,15 @@ void main() {
       (tester) async {
     await _pushScreen(tester, const AddCropScreen(isFirstCrop: true));
 
-    await tester.enterText(find.byType(TextField).first, 'Tomatoes');
+    final description = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.maxLines == 4,
+    );
+    await tester.scrollUntilVisible(
+      description,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(description, 'Tomatoes');
     await tester.pump();
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
@@ -75,7 +91,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Discard changes?'), findsNothing);
-    expect(find.byType(TextField), findsNWidgets(2),
+    expect(description, findsOneWidget,
         reason: 'cancelling keeps the form where it was');
   });
 

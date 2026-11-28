@@ -189,7 +189,7 @@ class ListingOwnerState {
   /// LST_EXPIRY_DATE in the past, which is what `listings:expire` acts on.
   ///
   /// Only a listing whose on-sale window has actually started can expire. A
-  /// SOON_TO_HARVEST crop is never expired: its three-day window begins when
+  /// SOON_TO_HARVEST crop is never expired: its shelf-life window begins when
   /// `listings:harvest` flips it to AVAILABLE_NOW, so the expiry stamped at
   /// creation is not a deadline that can run out while it is still upcoming.
   /// A seller who set the crop to NOT_AVAILABLE manually, or a row the expiry
@@ -203,13 +203,7 @@ class ListingOwnerState {
     return expiry != null && expiry.isBefore(DateTime.now());
   }
 
-  /// True while the listing is on sale and still inside its 3-day window.
-  bool get hasExpiryCountdown =>
-      listing.status == 'AVAILABLE_NOW' &&
-      !isExpired &&
-      listing.expiryDate != null;
-
-  /// True when the listing's three-day window has ended and the seller can
+  /// True when the listing's shelf-life window has ended and the seller can
   /// renew it with fresh photos.
   ///
   /// Driven by [isExpired] rather than LST_STATUS: `listings:expire` moves an
@@ -219,25 +213,5 @@ class ListingOwnerState {
   bool get canRenew {
     if (listing.isTakenDown || hiddenByAdmin) return false;
     return isExpired;
-  }
-
-  /// "Expires in 2 days", "Expires today", or null when the date is missing or
-  /// already past — an expired listing shows the red Expired chip instead, and a
-  /// countdown on top of that would say "in -1 days".
-  String? get expiryLabel {
-    if (!hasExpiryCountdown) return null;
-    final expiry = DateTime.tryParse(listing.expiryDate!);
-    if (expiry == null) return null;
-
-    // DateTime, not Duration: "Expires in 2 days" has to stay true at 11pm on
-    // the day before, and a 47-hour remainder rounds to 1 day, not 2.
-    final today = DateTime.now();
-    final startOfToday = DateTime(today.year, today.month, today.day);
-    final startOfExpiry = DateTime(expiry.year, expiry.month, expiry.day);
-    final days = startOfExpiry.difference(startOfToday).inDays;
-
-    if (days <= 0) return 'Expires today';
-    if (days == 1) return 'Expires in 1 day';
-    return 'Expires in $days days';
   }
 }

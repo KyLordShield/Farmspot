@@ -8,9 +8,10 @@ import 'package:farmspot_app/widgets/home_widgets.dart';
 // BETWEEN rows: every row after the first one sits one step lower and one step
 // right of the row above it — like stairs going down, but two-wide.
 
-CropListing _sample(String name, {String farm = 'Farm'}) {
+CropListing _sample(String name, {String farm = 'Farm', String? description}) {
   return CropListing(
     cropName: name,
+    description: description,
     farmName: farm,
     cropType: 'Vegetables',
     status: 'AVAILABLE_NOW',
@@ -23,12 +24,12 @@ CropListing _sample(String name, {String farm = 'Farm'}) {
 }
 
 List<CropListing> _fiveItems() => [
-      _sample('Tomato'),
-      _sample('Cabbage'),
-      _sample('Carrot'),
-      _sample('Kangkong'),
-      _sample('Ampalaya'),
-    ];
+  _sample('Tomato'),
+  _sample('Cabbage'),
+  _sample('Carrot'),
+  _sample('Kangkong'),
+  _sample('Ampalaya'),
+];
 
 Future<void> _pumpLadder(
   WidgetTester tester,
@@ -42,10 +43,7 @@ Future<void> _pumpLadder(
       home: Scaffold(
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: CropLadderGrid(
-            listings: items ?? _fiveItems(),
-            onTap: (_) {},
-          ),
+          child: CropLadderGrid(listings: items ?? _fiveItems(), onTap: (_) {}),
         ),
       ),
     ),
@@ -54,8 +52,46 @@ Future<void> _pumpLadder(
 }
 
 void main() {
-  testWidgets('ladder grid: no overflow and renders every card',
-      (tester) async {
+  testWidgets('the Home feed fills the gap beneath a shorter card', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CustomScrollView(
+            slivers: [
+              CropLadderSliver(
+                listings: [
+                  _sample('Tomato', description: 'A short description.'),
+                  _sample(
+                    'Cucumber',
+                    description:
+                        'This longer description '
+                        'takes up multiple lines in the card next to the tomato.',
+                  ),
+                  _sample('Cabbage'),
+                ],
+                onTap: (_) {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final tomato = tester.getRect(find.byType(CropCard).at(0));
+    final cucumber = tester.getRect(find.byType(CropCard).at(1));
+    final cabbage = tester.getRect(find.byType(CropCard).at(2));
+    expect(cabbage.left, tomato.left);
+    expect(cabbage.top, closeTo(tomato.bottom + 8, 0.1));
+    expect(cabbage.top, lessThan(cucumber.bottom));
+  });
+
+  testWidgets('ladder grid: no overflow and renders every card', (
+    tester,
+  ) async {
     await _pumpLadder(tester, 360);
 
     expect(tester.takeException(), isNull, reason: 'no layout error');
@@ -63,8 +99,9 @@ void main() {
     expect(find.byType(CropLadderGrid), findsOneWidget);
   });
 
-  testWidgets('first row: the two cards are perfectly aligned (tops level)',
-      (tester) async {
+  testWidgets('first row: the two cards are perfectly aligned (tops level)', (
+    tester,
+  ) async {
     await _pumpLadder(tester, 360);
 
     final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
@@ -76,8 +113,9 @@ void main() {
     expect(card1.dx, greaterThan(card0.dx));
   });
 
-  testWidgets('next rows shift right and drop lower (the ladder descent)',
-      (tester) async {
+  testWidgets('next rows shift right and drop lower (the ladder descent)', (
+    tester,
+  ) async {
     await _pumpLadder(tester, 360);
 
     final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
@@ -98,8 +136,9 @@ void main() {
     expect(right3, lessThanOrEqualTo(360 - 16));
   });
 
-  testWidgets('odd total: cards still descend row by row top to bottom',
-      (tester) async {
+  testWidgets('odd total: cards still descend row by row top to bottom', (
+    tester,
+  ) async {
     await _pumpLadder(tester, 360);
 
     final card0 = tester.getTopLeft(find.byType(CropCard).at(0));
@@ -124,8 +163,9 @@ void main() {
     expect(find.byType(CropCard), findsNothing);
   });
 
-  testWidgets('many cards stay on screen in descending rungs (20 cards)',
-      (tester) async {
+  testWidgets('many cards stay on screen in descending rungs (20 cards)', (
+    tester,
+  ) async {
     await _pumpLadder(
       tester,
       360,

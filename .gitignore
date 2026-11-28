@@ -23,6 +23,18 @@ ml_service/yolo_fruits_and_vegetables_v1.pt
 ml_service/fruit_veg_yolo11m_35class.pt
 ml_service/pretrained/
 
+# Local shelf-life training assets. Track the training recipe and the
+# checkpoint required by the scanner's Docker build.
+/ml_service/ripeness_check_model/*.pt
+!/ml_service/ripeness_check_model/farmspot_quality_4crop_best.pt
+/ml_service/ripeness_check_model/*.zip
+/ml_service/ripeness_check_model/*.zip.tmp
+/ml_service/ripeness_check_model/*_test_report.json
+/ml_service/ripeness_check_model/*_confusion.json
+/ml_service/ripeness_check_model/offline_wheels/
+/ml_service/ripeness_check_model/ph_test_photos/
+/ml_service/ripeness_check_model/train_farmspot_quality.ipynb
+
 # Service runtime artifacts -- uvicorn output and the per-request detection log
 ml_service/detect_log.txt
 ml_service/uvicorn_*.log
@@ -52,6 +64,7 @@ website/public/testing-crops/
 /website/public/presentation-avatars/
 /website/public/presentation-crops/
 /website/public/presentation-farms/
+/website/scripts/prepare-libando-presentation.php
 
 # Pre-migration mysqldump snapshots of capstone_db. Local safety copies only,
 # never committed: they contain every row of the live capstone database.
@@ -71,6 +84,9 @@ apk/
 
 # Local generated documents, recordings, previews, and database preparation files.
 /output/
+
+# Local explainer video project, narration models, and render assets.
+/farmspot-video/
 
 # Private SSH access keys and local connection notes. Never commit.
 /private-access/

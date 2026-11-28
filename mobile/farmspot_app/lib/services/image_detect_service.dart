@@ -29,7 +29,13 @@ class ImageDetectService {
   /// failed": failure is reported by throwing [ImageDetectException], so the
   /// caller can tell the two apart instead of telling the user to retake a
   /// photo that was perfectly fine.
-  static Future<List<DetectedCrop>> detectCrops(XFile photo) async {
+  static Future<List<DetectedCrop>> detectListingCrops(XFile photo) =>
+      detectCrops(photo, includeCondition: true);
+
+  static Future<List<DetectedCrop>> detectCrops(
+    XFile photo, {
+    bool includeCondition = false,
+  }) async {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_baseUrl/detect'),
@@ -40,8 +46,13 @@ class ImageDetectService {
       throw ImageDetectException('Please log in to use image search.');
     }
     request.headers['Authorization'] = 'Bearer $token';
+    if (includeCondition) request.fields['include_condition'] = '1';
     request.files.add(
-      await http.MultipartFile.fromPath('file', photo.path, filename: 'crop.jpg'),
+      await http.MultipartFile.fromPath(
+        'file',
+        photo.path,
+        filename: 'crop.jpg',
+      ),
     );
 
     final http.Response response;
@@ -78,7 +89,17 @@ class ImageDetectService {
         final confidence = (d['confidence'] as num).toDouble();
         final existing = bestByName[name];
         if (existing == null || confidence > existing.confidence) {
-          bestByName[name] = DetectedCrop(name: name, confidence: confidence);
+          final assessment = d['assessment'];
+          final days = assessment is Map ? assessment['days'] : null;
+          final token = d['estimate_token'];
+          final condition = d['condition'];
+          bestByName[name] = DetectedCrop(
+            name: name,
+            confidence: confidence,
+            condition: condition is String ? condition : null,
+            shelfLifeDays: days is int ? days : null,
+            estimateToken: token is String ? token : null,
+          );
         }
       }
 
@@ -118,8 +139,21 @@ class ImageDetectException implements Exception {
 
 /// One confident crop guess from the model.
 class DetectedCrop {
-  DetectedCrop({required this.name, required this.confidence});
+  DetectedCrop({
+    required this.name,
+    required this.confidence,
+    this.condition,
+    this.shelfLifeDays,
+    this.estimateToken,
+  });
 
   final String name;
   final double confidence;
+  final String? condition;
+  final int? shelfLifeDays;
+  final String? estimateToken;
+
+  bool get looksRipe =>
+      (name == 'kamatis' && condition == 'tomato_ripe') ||
+      (name == 'chili' && condition == 'chili_ripe');
 }

@@ -51,6 +51,17 @@ class MessageService implements MessagesGateway {
   /// pass their own implementation.
   static final MessageService instance = MessageService();
 
+  /// Starts or reuses a general farmer conversation without choosing a crop.
+  Future<Conversation> startFarmerConversation(String farmerId) async {
+    final response = await _post(
+      '/farmers/${Uri.encodeComponent(farmerId)}/conversation',
+      {},
+    );
+    return Conversation.fromJson(
+      _data(response)['conversation'] as Map<String, dynamic>,
+    );
+  }
+
   @override
   Future<Conversation> startConversation(String listingId) async {
     final response = await _post('/conversations', {'LST_ID': listingId});

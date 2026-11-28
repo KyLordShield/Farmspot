@@ -148,7 +148,9 @@ class ListingDuplicateNameTest extends TestCase
         $payload['category_id'] = 'OTHERS';
         $result = $this->postJson('/api/listings', $payload)->assertCreated()->assertJsonPath('listing.category.id', 'OTHERS');
         $id = $result->json('listing.id');
-        $this->patchJson("/api/listings/{$id}", ['crop_icon' => 'Banana'])->assertOk()->assertJsonPath('listing.category.id', 'FRUITS');
+        $this->patchJson("/api/listings/{$id}", ['crop_icon' => 'Banana'])
+            ->assertUnprocessable()->assertJsonValidationErrors('crop_icon');
+        $this->patchJson("/api/listings/{$id}", ['category_id' => 'FRUITS'])->assertOk()->assertJsonPath('listing.category.id', 'FRUITS');
     }
 
     public function test_category_catalog_exposes_simple_names_examples_and_local_crop_aliases(): void

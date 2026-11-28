@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../models/crop_shelf_life.dart';
 import '../models/listing.dart';
+import 'crop_photo_preview.dart';
 import '../models/my_farm_listing_page.dart';
 import '../theme.dart';
 
@@ -57,7 +59,7 @@ class MyFarmStatusChip extends StatelessWidget {
   }
 }
 
-/// The farmer's own state on a listing row: availability, expiry countdown,
+/// The farmer's own state on a listing row: availability, listing window,
 /// moderation and open reports.
 ///
 /// Kept separate from the row so the mapping is testable on its own — this is
@@ -91,23 +93,13 @@ class ListingOwnerChips extends StatelessWidget {
         if (!state.isExpired)
           MyFarmStatusChip(label: statusLabel, color: statusColor),
 
-        // Expiry is only worth a countdown while there is time left. Past the
-        // date the row says Expired, which is the fact the farmer can act on.
         if (state.isExpired)
           const MyFarmStatusChip(
-            label: 'Expired',
+            label: 'Listing ended',
             color: AppColors.errorTerracotta,
             background: AppColors.errorSoft,
             icon: Icons.event_busy_outlined,
-          )
-        else if (state.expiryLabel != null)
-          MyFarmStatusChip(
-            label: state.expiryLabel!,
-            color: AppColors.infoSage,
-            background: AppColors.infoSoft,
-            icon: Icons.schedule,
           ),
-
         if (state.isTakenDown)
           MyFarmStatusChip(
             label: 'Taken down',
@@ -306,7 +298,7 @@ class ListingThumbnail extends StatelessWidget {
 /// farmer's rating, and the actions that were already here.
 ///
 /// The existing CropListTile is left untouched for its other callers; this is a
-/// new widget because the chips, the "No reviews yet" state and the read-only
+/// new widget because the chips and the read-only
 /// reviews entry point are owner-only concerns that would otherwise make the
 /// shared tile grow a dozen nullable flags.
 class MyFarmListingRow extends StatelessWidget {
@@ -349,6 +341,10 @@ class MyFarmListingRow extends StatelessWidget {
     // the only thing left to do is read why and ask for it back — so every other
     // action, and the more menu, is dropped rather than shown dead.
     final takenDown = state.isTakenDown;
+    final shelfLife = shelfLifeRemaining(
+      listing.status,
+      DateTime.tryParse(listing.expiryDate ?? ''),
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -365,49 +361,74 @@ class MyFarmListingRow extends StatelessWidget {
               : Colors.grey.shade200,
         ),
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListingThumbnail(url: listing.image),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  // The rating is not tappable on a taken-down row: its entry
-                  // point is the Reviews action, and that action is gone.
-                  OwnerRatingLabel(
-                    listing: listing,
-                    onTap: takenDown ? null : onReviewsTap,
-                  ),
-                  const SizedBox(height: 8),
-                  if (takenDown)
-                    _buildTakedownWarning()
-                  else ...[
-                    ListingOwnerChips(state: state),
-                    const SizedBox(height: 8),
-                    _buildActions(),
-                  ],
-                ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: listing.image == null || listing.image!.isEmpty
+                    ? onTap
+                    : () => showCropPhotoPreview(
+                        context,
+                        NetworkImage(listing.image!),
+                      ),
+                child: ListingThumbnail(url: listing.image, size: 72),
               ),
-            ),
-            if (!takenDown) ...[const SizedBox(width: 4), _buildMenu()],
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: onTap,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      if (listing.ratings.hasRatings) ...[
+                        const SizedBox(height: 4),
+                        OwnerRatingLabel(
+                          listing: listing,
+                          onTap: takenDown ? null : onReviewsTap,
+                        ),
+                      ],
+                      if (!takenDown) ...[
+                        const SizedBox(height: 6),
+                        ListingOwnerChips(state: state),
+                        if (shelfLife != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            shelfLife,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (!takenDown) _buildMenu(),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (takenDown)
+            _buildTakedownWarning()
+          else ...[
+            Divider(height: 1, color: Colors.grey.shade200),
+            const SizedBox(height: 8),
+            _buildActions(),
           ],
-        ),
+        ],
       ),
     );
   }

@@ -170,6 +170,7 @@ class FarmSetupCompleteScreen extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (_) => AddCropScreen(
                               isFirstCrop: true,
+                              openCameraOnStart: true,
                               farmId: farmId,
                             ),
                           ),

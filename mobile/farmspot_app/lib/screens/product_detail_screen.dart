@@ -236,8 +236,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Widget _buildExpiryWarning() {
     final message = listing.daysPastExpiry >= 3
-        ? 'This listing is a few days past its freshness window. The crop may not be as fresh now. Message the seller to confirm before buying.'
-        : 'This listing is just past its freshness window. Ask the seller if the harvest is still fresh before buying.';
+        ? 'This listing is a few days past its estimated shelf-life window. The crop may not be as fresh now. Message the seller to confirm before buying.'
+        : 'This listing is just past its estimated shelf-life window. Ask the seller if the harvest is still fresh before buying.';
 
     return Container(
       key: const Key('product-detail-expiry-warning'),
@@ -437,61 +437,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text(
-                            '•',
-                            style: TextStyle(color: Colors.black45),
-                          ),
-                        ),
-                        if (expired) ...[
-                          const Text(
-                            'expired ',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                          Flexible(
-                            child: Text(
-                              listing.expiryText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.warningAmber,
-                              ),
-                            ),
-                          ),
-                        ] else if (listing.status == 'SOON_TO_HARVEST')
-                          Flexible(
-                            child: Text(
-                              listing.harvestAt == null
-                                  ? 'available soon'
-                                  : 'available on ${listing.harvestText}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryGreen,
-                              ),
-                            ),
-                          )
-                        else ...[
-                          const Text(
-                            'expires in ',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                          Flexible(
-                            child: Text(
-                              listing.expiryText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
+                    if (listing.status == 'SOON_TO_HARVEST') ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        listing.harvestAt == null
+                            ? 'Available soon'
+                            : 'Available on ${listing.harvestText}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ],
+                    if (listing.shelfLifeLabel case final String shelfLife) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        shelfLife,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                     if (expired) ...[
                       const SizedBox(height: 16),
                       _buildExpiryWarning(),

@@ -1,18 +1,24 @@
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 
-import '../../../services/live_camera.dart';
-import '../../../services/camera_permission_service.dart';
+import '../../services/live_camera.dart';
+import '../../services/camera_permission_service.dart';
 
 /// Keeps capture in Farmspot instead of backgrounding it behind another app.
 /// Releases camera resources before the caller starts OCR.
 class DocumentCaptureScreen extends StatefulWidget {
   final Future<LiveCamera?> Function() openCamera;
   final CameraPermissionGateway permissions;
+  final bool cropPhoto;
+  final String? cropScanFeedback;
+  final Future<XFile?> Function()? pickFromLibrary;
   const DocumentCaptureScreen({
     super.key,
     this.openCamera = createLiveCamera,
     this.permissions = const DeviceCameraPermissions(),
+    this.cropPhoto = false,
+    this.cropScanFeedback,
+    this.pickFromLibrary,
   });
 
   @override
@@ -32,13 +38,13 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
 
   bool get _needsSettings =>
       _access == CameraAccess.blocked || _access == CameraAccess.restricted;
+  String get _subject => widget.cropPhoto ? 'your crop' : 'your ID or permit';
   String _permissionMessage(CameraAccess access) => switch (access) {
     CameraAccess.blocked =>
-      'Camera access is blocked. Enable Camera in your phone’s app settings to photograph your ID or permit.',
-    CameraAccess.restricted =>
-      'Camera access is restricted on this device. Enable camera access before photographing your ID or permit.',
+      'Camera access is blocked. Enable Camera in your phone’s app settings to photograph $_subject.',
+    CameraAccess.restricted => 'Camera access is restricted on this device.',
     _ =>
-      'Camera permission is required to photograph your ID or permit. Tap Allow camera to continue.',
+      'Camera permission is required to photograph $_subject. Tap Allow camera to continue.',
   };
 
   Future<void> _openSettings() async {
@@ -191,18 +197,33 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
     canPop: !_capturing,
     child: Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Photograph document')),
+      appBar: AppBar(
+        title: Text(
+          widget.cropPhoto ? 'Take a crop photo' : 'Photograph document',
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
-                'Fill the view with the document. Keep all text sharp and avoid glare.',
-                style: TextStyle(color: Colors.white),
+                widget.cropPhoto
+                    ? 'Place the crop in the center and use good lighting.'
+                    : 'Fill the view with the document. Keep all text sharp and avoid glare.',
+                style: const TextStyle(color: Colors.white),
                 textAlign: TextAlign.center,
               ),
             ),
+            if (widget.cropScanFeedback case final feedback?)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  feedback,
+                  style: const TextStyle(color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             Expanded(
               child: Center(
                 child: _camera != null
@@ -247,9 +268,36 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen>
                       label: const Text('Take photo'),
                     ),
             ),
+            if (widget.pickFromLibrary != null)
+              TextButton.icon(
+                onPressed: _capturing ? null : _chooseFromLibrary,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: const Text('Choose from library'),
+              ),
           ],
         ),
       ),
     ),
   );
+
+  Future<void> _chooseFromLibrary() async {
+    setState(() => _capturing = true);
+    XFile? photo;
+    try {
+      photo = await widget.pickFromLibrary!();
+    } catch (_) {
+      if (mounted)
+        setState(() => _error = 'Could not open your photo library.');
+    }
+    if (!mounted) return;
+    if (photo != null) {
+      final camera = _camera;
+      setState(() => _camera = null);
+      await camera?.dispose();
+      if (mounted) Navigator.of(context).pop(photo);
+    } else {
+      setState(() => _capturing = false);
+      if (_active && _camera == null) _open();
+    }
+  }
 }

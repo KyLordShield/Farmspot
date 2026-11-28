@@ -59,6 +59,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        expect(find.textContaining('Estimated shelf life'), findsNothing);
         expect(find.text('Check freshness'), findsOneWidget);
         expect(find.text('Available Now'), findsOneWidget);
         expect(find.text('Soon to Harvest'), findsOneWidget);

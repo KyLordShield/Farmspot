@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\CropShelfLife;
 use App\Models\CropCategory;
 use App\Models\Farm;
 use App\Models\Listing;
@@ -169,7 +170,7 @@ class ListingController extends Controller
                         'FRM_ID' => $farm->FRM_ID,
                         'LST_AVAILABILITY' => 'ACTIVE',
                         'LST_CREATED_AT' => now(),
-                        'LST_EXPIRY_DATE' => now()->addDays(3),
+                        'LST_EXPIRY_DATE' => now()->addDays(CropShelfLife::days($name)),
                     ]);
                 }
 

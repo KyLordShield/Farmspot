@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import '../models/crop_shelf_life.dart';
 import '../models/listing_review.dart';
 import '../theme.dart';
 import 'rating_stars.dart';
@@ -91,6 +92,8 @@ class CropListing {
   bool get wasRenewed => renewedAt != null;
 
   /// Expiry takes precedence over the seller's saved availability label.
+  String? get shelfLifeLabel => shelfLifeRemaining(status, expiresAt);
+
   String get displayStatus => isExpired ? 'EXPIRED' : status;
 
   bool get isExpired {
@@ -397,6 +400,7 @@ class CropCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final description = listing.description?.trim() ?? '';
     final status = cropStatusData(listing.displayStatus);
     return GestureDetector(
       onTap: onTap,
@@ -514,13 +518,18 @@ class CropCard extends StatelessWidget {
                       height: 1.25,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    listing.farmName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
                   // Only rendered once something has been rated. Height is
                   // reserved as a SizedBox.shrink (zero) when not, so a card
                   // in a masonry column does not jump as reviews arrive.
@@ -657,23 +666,10 @@ const double _kLadderGap = 8.0;
 const double _kLadderRowShift = 4.0;
 const double _kLadderRowGap = 10.0;
 
-/// The ladder as a sliver, so a long feed builds only what is on screen.
-///
-/// [CropLadderGrid] is a Column of rungs inside a scroll view, which means the
-/// whole feed is laid out the moment it arrives: every card's image, text and
-/// shadow, for every listing, before the first frame with real content. On a
-/// feed of a few dozen rows that is a visible stall, and it grows with the
-/// feed instead of staying flat.
-///
-/// A sliver per rung is the coarse unit — two cards at a time — but it is the
-/// unit that has to move. Flattening to one card per sliver would need a
-/// different descent to keep the stepped look, and the rungs are what make the
-/// layout recognisable.
+/// A lazy listing grid that lets each column follow its own card heights.
 class CropLadderSliver extends StatelessWidget {
   final List<CropListing> listings;
   final ValueChanged<CropListing> onTap;
-
-  /// Horizontal inset. Vertical spacing is the ladder's own job.
   final double horizontalPadding;
 
   const CropLadderSliver({
@@ -689,58 +685,19 @@ class CropLadderSliver extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.crossAxisExtent - horizontalPadding * 2;
         final columns = listingGridColumns(width);
-        if (columns > 2) {
-          return SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            sliver: SliverList.builder(
-              itemCount: (listings.length / columns).ceil(),
-              itemBuilder: (context, row) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var column = 0; column < columns; column++) ...[
-                      if (column > 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: row * columns + column < listings.length
-                            ? CropCard(
-                                listing: listings[row * columns + column],
-                                onTap: () =>
-                                    onTap(listings[row * columns + column]),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+        final inset = columns == 2 && width > 430
+            ? horizontalPadding + (width - 430) / 2
+            : horizontalPadding;
         return SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          sliver: SliverList.builder(
-            itemCount: (listings.length / 2).ceil(),
+          padding: EdgeInsets.symmetric(horizontal: inset),
+          sliver: SliverMasonryGrid.count(
+            crossAxisCount: columns,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childCount: listings.length,
             itemBuilder: (context, index) {
-              final first = index * 2;
-              final second = first + 1;
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
-                  // Per-rung rather than once for the list: a rung's card width
-                  // depends on the width it was actually given, which is only known
-                  // here.
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => buildLadderRung(
-                      left: listings[first],
-                      right: second < listings.length ? listings[second] : null,
-                      width: constraints.maxWidth,
-                      isFirstRung: index == 0,
-                      onTap: onTap,
-                    ),
-                  ),
-                ),
-              );
+              final listing = listings[index];
+              return CropCard(listing: listing, onTap: () => onTap(listing));
             },
           ),
         );

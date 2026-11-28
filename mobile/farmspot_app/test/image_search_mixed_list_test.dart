@@ -13,6 +13,10 @@ import 'package:farmspot_app/widgets/search_widgets.dart';
 /// Buyer position used by the fixtures: Cebu City.
 const _userPos = LatLng(10.3178, 123.8742);
 
+String _descriptionFor(String farm) => 'Seasonal produce from $farm.';
+
+Finder _description(String farm) => find.text(_descriptionFor(farm));
+
 Listing _listing(
   String id,
   String crop,
@@ -24,6 +28,7 @@ Listing _listing(
     id: id,
     cropIcon: crop,
     farmName: farm,
+    description: _descriptionFor(farm),
     farmId: farmId,
     status: status,
     categoryName: 'Vegetables',
@@ -143,9 +148,10 @@ void main() {
       );
 
       // All three crops present in the one list.
-      expect(find.text('A Farm'), findsOneWidget);
-      expect(find.text('B Farm'), findsOneWidget);
-      expect(find.text('C Farm'), findsOneWidget);
+      expect(_description('A Farm'), findsOneWidget);
+      expect(_description('B Farm'), findsOneWidget);
+      expect(_description('C Farm'), findsOneWidget);
+      expect(find.text('A Farm'), findsNothing);
 
       // A single "3 crops found" summary, not one header per crop.
       expect(find.text('3 crops found in your photo'), findsOneWidget);
@@ -160,7 +166,7 @@ void main() {
     // row share a dy and are ordered left-to-right by dx. Comparing only dy
     // makes "which card is first" meaningless, so compare (row, column).
     int orderingOf(WidgetTester tester, String text) {
-      final at = tester.getTopLeft(find.text(text));
+      final at = tester.getTopLeft(_description(text));
       // Cards are laid out in rows of two, so fold dy into a row band.
       return at.dy.round() * 10000 + at.dx.round();
     }
@@ -209,7 +215,7 @@ void main() {
         farms: [_pinKmNorth('F1', 1.0)],
       );
 
-      expect(find.text('Shared Farm'), findsOneWidget);
+      expect(_description('Shared Farm'), findsOneWidget);
       expect(find.byType(SearchResultCard), findsOneWidget);
       // The winning crop's confidence is used for ranking but never shown.
       expect(find.textContaining('%'), findsNothing);
@@ -269,7 +275,7 @@ void main() {
         // Sits above the crop/farm text rather than in the footer.
         expect(
           badgeTopLeft.dy,
-          lessThan(tester.getTopLeft(find.text(farm)).dy),
+          lessThan(tester.getTopLeft(_description(farm)).dy),
         );
       }
       expect(find.textContaining('%'), findsNothing);
@@ -323,8 +329,8 @@ void main() {
       final dividerY = tester
           .getTopLeft(find.textContaining('Farms beyond this point'))
           .dy;
-      expect(tester.getTopLeft(find.text('Near Farm')).dy, lessThan(dividerY));
-      expect(dividerY, lessThan(tester.getTopLeft(find.text('Far Farm')).dy));
+      expect(tester.getTopLeft(_description('Near Farm')).dy, lessThan(dividerY));
+      expect(dividerY, lessThan(tester.getTopLeft(_description('Far Farm')).dy));
       expect(tester.takeException(), isNull);
     });
 
@@ -347,14 +353,14 @@ void main() {
       final dividerY = tester
           .getTopLeft(find.textContaining('Farms beyond this point'))
           .dy;
-      expect(dividerY, lessThan(tester.getTopLeft(find.text('Far One')).dy));
+      expect(dividerY, lessThan(tester.getTopLeft(_description('Far One')).dy));
       // Still sorted nearest-first, and still shown.
       expect(
         orderingOf(tester, 'Far One'),
         lessThan(orderingOf(tester, 'Far Two')),
       );
-      expect(find.text('Far One'), findsOneWidget);
-      expect(find.text('Far Two'), findsOneWidget);
+      expect(_description('Far One'), findsOneWidget);
+      expect(_description('Far Two'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -452,7 +458,7 @@ void main() {
 
       // Rendered, not spinning.
       expect(find.byType(SearchResultCard), findsOneWidget);
-      expect(find.text('A Farm'), findsOneWidget);
+      expect(_description('A Farm'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(
         find.text('Turn on location to see the closest farms first.'),

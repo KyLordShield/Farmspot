@@ -11,6 +11,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
@@ -112,6 +113,55 @@ class BackendChecklistTest extends SecurityAuditObservationTest
         $this->assertSame(1, DB::table('listing')->count());
     }
 
+    public function test_scan_bound_to_photo_sets_the_new_listing_window(): void
+    {
+        $this->freezeTime();
+        $user = $this->account('CHK001', true);
+        $this->listing();
+        DB::table('listing')->where('LST_ID', 'LIST01')->delete();
+        $this->actingAs($user);
+        config([
+            'app.key' => 'base64:'.base64_encode(str_repeat('k', 32)),
+            'services.image_detect.url' => 'https://scanner.test',
+            'services.image_detect.token' => 'test-token',
+        ]);
+        Http::fake(['scanner.test/*' => Http::sequence()
+            ->push(['detections' => [['name' => 'kamatis', 'condition' => 'tomato_unripe']]])
+            ->push(['detections' => [['name' => 'kamatis', 'condition' => 'tomato_ripe']]])]);
+        Storage::fake('cloudinary');
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jM1sAAAAASUVORK5CYII=');
+        $photo = fn ($content = null) => UploadedFile::fake()->createWithContent('tomato.png', $content ?? $png);
+        $listing = ['farm_id' => 'FARM01', 'category_id' => 'CAT001', 'crop_icon' => 'Tomato', 'status' => 'AVAILABLE_NOW'];
+        $headers = ['Accept' => 'application/json'];
+
+        foreach ([7, 4] as $days) {
+            $scan = $this->post('/api/image-search/detect', [
+                'file' => $photo(), 'include_condition' => '1',
+            ], $headers)->assertOk()->assertJsonPath('detections.0.assessment.days', $days);
+            $token = $scan->json('detections.0.estimate_token');
+            $this->post('/api/listings', $listing + [
+                'photo' => $photo($png.'different-photo'), 'estimate_token' => $token,
+            ], $headers)->assertUnprocessable()->assertJsonValidationErrors('photo');
+            $this->post('/api/listings', $listing + [
+                'photo' => $photo(), 'estimate_token' => $token,
+            ], $headers)->assertCreated();
+
+            $deadline = DB::table('listing')->value('LST_EXPIRY_DATE');
+            $this->assertSame(now()->addDays($days)->toDateTimeString(), $deadline);
+            DB::table('listing')->delete();
+        }
+        Http::assertSentCount(2);
+    }
+
+    public function test_listing_owner_cannot_change_the_scanned_crop(): void
+    {
+        $user = $this->account('CHK001', true);
+        $this->listing();
+        $this->actingAs($user)->patchJson('/api/listings/LIST01', ['crop_icon' => 'Cucumber'])
+            ->assertUnprocessable()->assertJsonValidationErrors('crop_icon');
+        $this->assertSame('Tomato', DB::table('listing')->value('LST_CROP_ICON'));
+    }
+
     public function test_05_protected_profile_fields_cannot_be_mass_assigned(): void
     {
         $user = $this->account();
@@ -202,6 +252,16 @@ class BackendChecklistTest extends SecurityAuditObservationTest
         $this->postJson('/api/listings/LIST01/photos', ['photos' => [UploadedFile::fake()->create('bad.txt', 1, 'text/plain')]])->assertUnprocessable();
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jM1sAAAAASUVORK5CYII=');
         $this->postJson('/api/listings/LIST01/photos', ['photos' => [UploadedFile::fake()->createWithContent('big.png', $png)->size(5121)]])->assertUnprocessable();
+        $this->assertSame(0, DB::table('listing_photo')->count());
+        config(['services.image_detect.url' => 'https://scanner.test', 'services.image_detect.token' => 'test-token']);
+        Http::fake(['scanner.test/*' => Http::sequence()
+            ->push(['detections' => [['name' => 'cucumber']]])
+            ->push(['detections' => [['name' => 'cucumber']]])
+            ->push(['detections' => [['name' => 'kamatis']]])]);
+        $this->postJson('/api/listings/LIST01/photos', ['photos' => [UploadedFile::fake()->createWithContent('wrong.png', $png)]])
+            ->assertUnprocessable()->assertJsonValidationErrors('photos.0');
+        $this->postJson('/api/listings/LIST01/photo', ['photo' => UploadedFile::fake()->createWithContent('wrong.png', $png)])
+            ->assertUnprocessable()->assertJsonValidationErrors('photo');
         $this->assertSame(0, DB::table('listing_photo')->count());
         $disk = \Mockery::mock();
         $disk->shouldReceive('put')->once()->andReturn(true);

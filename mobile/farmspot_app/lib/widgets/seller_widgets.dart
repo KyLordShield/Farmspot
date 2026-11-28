@@ -652,6 +652,7 @@ class SelectableOptionTile extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String subtitle;
+  final TextStyle? subtitleStyle;
   final bool selected;
   final VoidCallback onTap;
 
@@ -662,6 +663,7 @@ class SelectableOptionTile extends StatelessWidget {
     required this.subtitle,
     required this.selected,
     required this.onTap,
+    this.subtitleStyle,
     this.iconColor = AppColors.primaryGreen,
   });
 
@@ -696,7 +698,9 @@ class SelectableOptionTile extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                    style:
+                        subtitleStyle ??
+                        const TextStyle(fontSize: 11, color: Colors.black45),
                   ),
                 ],
               ),

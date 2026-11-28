@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/message_farmer_button.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/farm_profile.dart';
@@ -229,6 +230,14 @@ class _FarmProfileScreenState extends State<FarmProfileScreen> {
                   _buildHeader(profile),
                   _buildPhotoStrip(profile),
                   _buildStats(profile),
+                  if ((profile.ownerFarmerId ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: MessageFarmerButton(
+                        farmerId: profile.ownerFarmerId!,
+                        userId: profile.ownerUserId,
+                      ),
+                    ),
                   _buildReportRow(profile),
                 ],
             ),

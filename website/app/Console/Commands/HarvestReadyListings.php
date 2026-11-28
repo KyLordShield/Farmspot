@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\CropShelfLife;
 use App\Models\CropCategory;
 use App\Models\Listing;
 use App\Services\NotificationService;
@@ -41,7 +42,7 @@ class HarvestReadyListings extends Command
             // stuck on SOON_TO_HARVEST forever, which is exactly the state a
             // farmer lands in after moving a crop back to Soon to Harvest.
             $listing->LST_STATUS = 'AVAILABLE_NOW';
-            $listing->LST_EXPIRY_DATE = now()->addDays(3);
+            $listing->LST_EXPIRY_DATE = now()->addDays(CropShelfLife::days($listing->LST_CROP_ICON));
             $listing->LST_UPDATED_AT = now();
             $listing->save();
 

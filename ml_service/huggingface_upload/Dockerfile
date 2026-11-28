@@ -8,6 +8,7 @@ RUN chown appuser:appuser /home/appuser/app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY --chown=appuser:appuser app.py farmspot_9class_best.pt ./
+COPY --chown=appuser:appuser ripeness_check_model/farmspot_quality_4crop_best.pt ./ripeness_check_model/
 USER appuser
 EXPOSE 7860
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]

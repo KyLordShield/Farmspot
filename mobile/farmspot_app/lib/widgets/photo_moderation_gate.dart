@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/photo_moderation.dart';
 
-/// Modal screening prevents saving/navigating while selected photos are checked.
+/// Screens selected photos and can show progress when the caller has no loader.
 Future<List<XFile>> screenPhotos(
   BuildContext context,
   List<XFile> photos, {
@@ -13,6 +13,7 @@ Future<List<XFile>> screenPhotos(
   Future<PhotoModerationResult> Function(XFile) inspect =
       PhotoModeration.inspect,
   bool showDebugResults = true,
+  bool showProgress = true,
 }) async {
   if (photos.isEmpty || !context.mounted) return [];
   final accepted = <XFile>[];
@@ -46,7 +47,7 @@ Future<List<XFile>> screenPhotos(
     ),
   );
   final navigator = Navigator.of(context, rootNavigator: true);
-  navigator.push(route);
+  if (showProgress) navigator.push(route);
   try {
     // Sequential checks cap peak memory and keep inference off the UI isolate.
     for (final photo in photos) {

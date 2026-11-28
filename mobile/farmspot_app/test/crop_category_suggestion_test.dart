@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:farmspot_app/models/crop_category.dart';
+import 'package:farmspot_app/models/listing.dart';
 import 'package:farmspot_app/screens/seller/add_crop_screen.dart';
 import 'package:farmspot_app/widgets/seller_widgets.dart';
+import 'package:farmspot_app/services/image_detect_service.dart';
+import 'photo_limits_test.dart' show photo;
 
 List<CropCategory> categories() => [
   CropCategory(
@@ -42,70 +45,75 @@ CropPickerTile tile(WidgetTester tester, String name) =>
     );
 
 void main() {
-  testWidgets('crop first suggests categories and allows manual corrections', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AddCropScreen(
-          isFirstCrop: true,
-          farmId: 'FARM01',
-          loadCategories: () async => categories(),
+  testWidgets(
+    'editing keeps the scanned crop name and allows category corrections',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AddCropScreen(
+            existingListing: Listing(
+              id: 'listing-1',
+              cropIcon: 'Kamatis',
+              status: 'AVAILABLE_NOW',
+            ),
+            loadCategories: () async => categories(),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.text('CROP NAME')).dy,
-      lessThan(tester.getTopLeft(find.text('CROP CATEGORY')).dy),
-    );
-    await tester.enterText(cropField(), ' KAMATIS! ');
-    await tester.pump();
-    expect(tile(tester, 'Vegetables').selected, isTrue);
-    final other = find.byWidgetPredicate(
-      (w) => w is CropPickerTile && w.label == 'Other Crops',
-    );
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(other);
-    await tester.pumpAndSettle();
-    await tester.tap(other);
-    await tester.pump();
-    expect(tile(tester, 'Other Crops').selected, isTrue);
-    await tester.scrollUntilVisible(
-      cropField(),
-      -250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.enterText(cropField(), 'Mangga');
-    await tester.pump();
-    expect(tile(tester, 'Fruits').selected, isTrue);
-    await tester.enterText(cropField(), 'Unrecognized crop variety');
-    await tester.pump();
-    expect(tile(tester, 'Other Crops').selected, isTrue);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('CROP NAME')).dy,
+        lessThan(tester.getTopLeft(find.text('CROP CATEGORY')).dy),
+      );
+      expect(tester.widget<TextField>(cropField()).readOnly, isTrue);
+      expect(tile(tester, 'Vegetables').selected, isTrue);
+      final other = find.byWidgetPredicate(
+        (w) => w is CropPickerTile && w.label == 'Others',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(other);
+      await tester.pumpAndSettle();
+      await tester.tap(other);
+      await tester.pump();
+      expect(tile(tester, 'Others').selected, isTrue);
+      await tester.scrollUntilVisible(
+        cropField(),
+        -250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(tester.widget<TextField>(cropField()).controller!.text, 'Kamatis');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('a name typed while categories load is suggested after loading', (
-    tester,
-  ) async {
-    final pending = Completer<List<CropCategory>>();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AddCropScreen(
-          isFirstCrop: true,
-          farmId: 'FARM01',
-          loadCategories: () => pending.future,
+  testWidgets(
+    'a crop detected while categories load is suggested after loading',
+    (tester) async {
+      final pending = Completer<List<CropCategory>>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AddCropScreen(
+            isFirstCrop: true,
+            farmId: 'FARM01',
+            loadCategories: () => pending.future,
+            selectPhotos: (_) async => [photo(1)],
+            moderatePhotos: (_, photos) async => photos,
+            detectCrops: (_) async => [
+              DetectedCrop(name: 'kamatis', confidence: 0.95),
+            ],
+          ),
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.enterText(cropField(), 'tomatoes');
-    pending.complete(categories());
-    await tester.pumpAndSettle();
-    expect(tile(tester, 'Vegetables').selected, isTrue);
-  });
+      );
+      await tester.pump();
+      await tester.tap(find.byType(PhotoPlaceholder));
+      await tester.pump();
+      expect(find.text('Tomato'), findsOneWidget);
+      pending.complete(categories());
+      await tester.pumpAndSettle();
+      expect(tile(tester, 'Vegetables').selected, isTrue);
+    },
+  );
 
   test(
     'older category payloads still work and unknown crops are not guessed',
@@ -135,6 +143,9 @@ void main() {
             isFirstCrop: true,
             farmId: 'FARM01',
             loadCategories: () async => categories(),
+            selectPhotos: (_) async => [photo(1)],
+            moderatePhotos: (_, photos) async => photos,
+            detectCrops: (_) async => throw ImageDetectException('Unavailable'),
           ),
         ),
       ),
@@ -160,23 +171,15 @@ void main() {
     },
   );
 
-  testWidgets('crop name and description stop oversized pasted text', (
-    tester,
-  ) async {
+  testWidgets('description stops oversized pasted text', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: AddCropScreen(
-          isFirstCrop: true,
-          farmId: 'FARM01',
+          existingListing: Listing(id: 'listing-1', status: 'AVAILABLE_NOW'),
           loadCategories: () async => categories(),
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.enterText(cropField(), 'x' * 200);
-    await tester.pump();
-    expect(tester.widget<TextField>(cropField()).controller!.text.length, 40);
-    FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     final description = find.byWidgetPredicate(
       (w) => w is TextField && w.maxLength == 1000,

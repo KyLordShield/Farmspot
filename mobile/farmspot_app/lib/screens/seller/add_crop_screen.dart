@@ -1,20 +1,32 @@
 import 'package:farmspot_app/widgets/photo_moderation_gate.dart';
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:farmspot_app/utils/input_limits.dart';
 import 'package:farmspot_app/utils/photo_limits.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:lottie/lottie.dart';
 
 import '../../models/crop_category.dart';
+import '../../models/crop_shelf_life.dart';
 import '../../models/listing.dart';
 import '../../services/farm_service.dart';
+import '../../services/image_detect_service.dart';
 import '../../services/listing_service.dart';
 import '../../theme.dart';
+import '../../widgets/crop_photo_preview.dart';
 import '../../widgets/seller_widgets.dart';
 import '../../widgets/farmspot_loader.dart';
 import '../../widgets/lottie_loader.dart';
+import '../image_search_screen.dart';
 import 'farm_live_screen.dart';
+
+Future<List<XFile>> _screenCropPhotos(
+  BuildContext context,
+  List<XFile> photos,
+) =>
+    screenPhotos(context, photos, showDebugResults: false, showProgress: false);
 
 enum AvailabilityStatus {
   availableNow,
@@ -50,15 +62,19 @@ class AddCropScreen extends StatefulWidget {
   final Listing? existingListing;
   final Future<List<XFile>> Function(int remaining)? selectPhotos;
   final Future<List<CropCategory>> Function() loadCategories;
+  final Future<List<DetectedCrop>> Function(XFile) detectCrops;
+  final bool openCameraOnStart;
 
   const AddCropScreen({
     super.key,
-    this.moderatePhotos = screenPhotos,
+    this.moderatePhotos = _screenCropPhotos,
     this.isFirstCrop = false,
     this.farmId,
     this.existingListing,
     this.selectPhotos,
     this.loadCategories = ListingService.fetchCropCategories,
+    this.detectCrops = ImageDetectService.detectListingCrops,
+    this.openCameraOnStart = false,
   });
 
   @override
@@ -66,9 +82,59 @@ class AddCropScreen extends StatefulWidget {
 }
 
 class _AddCropScreenState extends State<AddCropScreen> {
-  final _picker = ImagePicker();
   final _cropLabelCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+
+  static const _cropDetails = {
+    'kamatis': (
+      'Tomato',
+      'Tomatoes for fresh salads, homemade sauces, and everyday cooking.',
+    ),
+    'lettuce': (
+      'Lettuce',
+      'Lettuce for crisp salads, sandwich layers, and wraps.',
+    ),
+    'cucumber': (
+      'Cucumber',
+      'Cucumbers for crisp salads, quick snacks, and pickling.',
+    ),
+    'chili': (
+      'Chili',
+      'Chili peppers for adding heat to sauces, marinades, and stir-fries.',
+    ),
+    'green_bean': (
+      'Green Beans',
+      'Green beans for stir-fries, soups, and vegetable sides.',
+    ),
+    'cabbage': ('Cabbage', 'Cabbage for crunchy slaws, soups, and stir-fries.'),
+    'chayote': (
+      'Chayote',
+      'Mild-flavored chayote for tinola and sautéed dishes.',
+    ),
+    'bok_choy': (
+      'Bok Choy',
+      'Bok choy for stir-fries, noodle dishes, and soups.',
+    ),
+    'carrot': (
+      'Carrot',
+      'Carrots for crunchy snacks, salads, soups, and stews.',
+    ),
+  };
+
+  bool _scanningCrop = false;
+  bool _openingCamera = false;
+  bool _checkingPhoto = false;
+  bool _matchingPhotos = false;
+  bool _choosingCrop = false;
+  XFile? _detectedPhoto;
+  DetectedCrop? _selectedDetection;
+  DetectedCrop? _confirmedUpcomingDetection;
+  String? _scanMessage;
+  String? _suggestedDescription;
+  bool _categoryChosenManually = false;
+
+  bool get _canScanCrop =>
+      !_isEditing && !_scanningCrop && _detectedPhoto == null;
 
   bool _farmsLoading = true;
   List<Map<String, dynamic>> _farms = [];
@@ -78,7 +144,6 @@ class _AddCropScreenState extends State<AddCropScreen> {
   List<CropCategory> _categories = [];
   String? _categoriesError;
   int _selectedCategoryIndex = -1;
-  bool _categorySuggested = false;
 
   /// Category-grid index the form started on (first category for a new crop,
   /// the listing's current category when editing). The back button compares
@@ -87,15 +152,123 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   AvailabilityStatus _status = AvailabilityStatus.availableNow;
   DateTime? _harvestDate;
+  bool _harvestDateSuggested = false;
+  static const _maxHarvestLeadDays = 60;
 
-  /// Photos picked for the listing, in pick order, plus which one is marked as
-  /// the primary (thumbnail) photo. The marked index is:
-  ///  * create mode — 0 by default (the first photo), and tapping any picked
-  ///    thumb re-marks it;
-  ///  * edit mode — null until the farmer taps a *newly picked* photo, because
-  ///    the listing's existing primary stays primary unless explicitly moved.
-  /// Net: a new-upload always auto-promotes one to primary on the backend, so
-  /// create-with-photos needs no explicit setPrimaryPhoto call for index 0.
+  static const _harvestLeadDays = {
+    'kamatis': 14,
+    'lettuce': 7,
+    'cucumber': 7,
+    'chili': 14,
+    'green_bean': 7,
+    'cabbage': 14,
+    'chayote': 14,
+    'bok_choy': 7,
+    'carrot': 14,
+  };
+
+  int get _harvestLead {
+    final name = _cropLabelCtrl.text.trim().toLowerCase();
+    if (_harvestLeadDays.containsKey(name)) return _harvestLeadDays[name]!;
+    for (final entry in _cropDetails.entries) {
+      final label = entry.value.$1.toLowerCase();
+      if (name == label || name == '${label}s') {
+        return _harvestLeadDays[entry.key]!;
+      }
+    }
+    return 7;
+  }
+
+  String get _availableNowSubtitle {
+    const ready = 'Ready for buyers to contact you';
+    if (_status != AvailabilityStatus.availableNow) return ready;
+    if (_isEditing) {
+      return shelfLifeRemaining(
+            _status.backendValue,
+            DateTime.tryParse(widget.existingListing?.expiryDate ?? ''),
+          ) ??
+          ready;
+    }
+
+    final days = _selectedDetection?.shelfLifeDays;
+    if (days != null) return 'Estimated shelf life · About $days days';
+
+    final estimate = cropShelfLife(_cropLabelCtrl.text);
+    return estimate == null ? ready : 'Standard listing window · $estimate';
+  }
+
+  DateTime get _today => DateUtils.dateOnly(DateTime.now());
+  DateTime get _lastHarvestDate =>
+      DateUtils.addDaysToDate(_today, _maxHarvestLeadDays);
+
+  void _suggestHarvestDate() {
+    _harvestDate = DateUtils.addDaysToDate(_today, _harvestLead);
+    _harvestDateSuggested = true;
+  }
+
+  void _setAvailableNow() {
+    setState(() {
+      _status = AvailabilityStatus.availableNow;
+      _harvestDate = null;
+      _confirmedUpcomingDetection = null;
+    });
+  }
+
+  Future<bool> _confirmUpcomingCrop() async {
+    final detection = _selectedDetection;
+    if (detection == null ||
+        !detection.looksRipe ||
+        identical(detection, _confirmedUpcomingDetection)) {
+      return true;
+    }
+
+    final status = await showDialog<AvailabilityStatus>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('This photo looks ripe'),
+        content: const Text('Is the batch ready for buyers?'),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, AvailabilityStatus.availableNow),
+            child: const Text('Available now'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, AvailabilityStatus.soonToHarvest),
+            child: const Text('Keep harvest date'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || !identical(detection, _selectedDetection)) return false;
+    if (status == AvailabilityStatus.availableNow) _setAvailableNow();
+    if (status != AvailabilityStatus.soonToHarvest) return false;
+    _confirmedUpcomingDetection = detection;
+    return true;
+  }
+
+  Future<void> _selectSoonToHarvest() async {
+    if (!await _confirmUpcomingCrop() || !mounted) return;
+    setState(() {
+      _status = AvailabilityStatus.soonToHarvest;
+      if (_harvestDate == null) _suggestHarvestDate();
+    });
+  }
+
+  String? get _harvestDateError {
+    if (_status != AvailabilityStatus.soonToHarvest) return null;
+    final date = _harvestDate;
+    if (date == null) return 'Please pick an expected harvest date.';
+    if (DateUtils.dateOnly(date).isBefore(_today) ||
+        DateUtils.dateOnly(date).isAfter(_lastHarvestDate)) {
+      return 'Choose a harvest date within the next $_maxHarvestLeadDays days.';
+    }
+    return null;
+  }
+
+  /// Newly picked photos. A new listing uses its scanned photo as primary.
+  /// An existing listing keeps its primary unless the farmer changes it.
   final List<XFile> _newPhotos = [];
   final Set<String> _removedPhotoIds = {};
   int get _photoCount =>
@@ -104,23 +277,200 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _newPhotos.length;
 
   Future<void> _addPickedPhotos(List<XFile> picked, int remaining) async {
-    if (!mounted || picked.isEmpty) return;
-    picked = await widget.moderatePhotos(
-      context,
-      picked.take(remaining).toList(),
-    );
-    if (!mounted || picked.isEmpty) return;
-    remaining = (PhotoLimits.listing - _photoCount).clamp(
-      0,
-      PhotoLimits.listing,
-    );
+    if (!mounted || picked.isEmpty || remaining <= 0) return;
     setState(() {
-      _newPhotos.addAll(picked.take(remaining));
-      _markedNewIndex ??= 0;
-      _submitError = picked.length > remaining
-          ? 'Only the first $remaining photos were added. Maximum 5 photos per listing.'
-          : null;
+      _checkingPhoto = true;
+      _scanMessage = null;
     });
+    const uploadLimit = 5 * 1024 * 1024;
+    final sizedPhotos = <XFile>[];
+    for (final photo in picked.take(remaining)) {
+      try {
+        if (await photo.length() <= uploadLimit) sizedPhotos.add(photo);
+      } catch (_) {
+        // Unreadable images cannot be uploaded.
+      }
+    }
+    if (!mounted) return;
+    if (sizedPhotos.isEmpty) {
+      setState(() {
+        _checkingPhoto = false;
+        _scanMessage = 'Choose a readable photo under 5 MB.';
+      });
+      return;
+    }
+    List<XFile> accepted;
+    try {
+      accepted = await widget.moderatePhotos(context, sizedPhotos);
+    } catch (_) {
+      accepted = [];
+    }
+    if (!mounted) return;
+    setState(() => _checkingPhoto = false);
+
+    if (accepted.isEmpty) {
+      setState(
+        () => _scanMessage = 'That photo could not be used. Try another photo.',
+      );
+      return;
+    }
+
+    if (_canScanCrop) {
+      final primary = accepted.first;
+      setState(() {
+        _newPhotos.add(primary);
+        _markedNewIndex = 0;
+      });
+      await _scanCrop(primary);
+      if (!mounted) return;
+      if (_detectedPhoto != primary) {
+        setState(() {
+          _newPhotos.remove(primary);
+          _markedNewIndex = null;
+        });
+        return;
+      }
+      accepted = accepted.skip(1).toList();
+    }
+    if (accepted.isEmpty) return;
+
+    final crop =
+        _selectedDetection?.name ??
+        _cropKeyForName(widget.existingListing?.cropIcon);
+    if (crop == null) {
+      setState(
+        () => _scanMessage = 'The scanner cannot verify photos for this crop.',
+      );
+      return;
+    }
+
+    setState(() => _matchingPhotos = true);
+    final matching = <XFile>[];
+    String? message;
+    for (final photo in accepted) {
+      try {
+        final names = (await widget.detectCrops(
+          photo,
+        )).map((item) => item.name).toSet();
+        if (!mounted) return;
+        if (names.length == 1 && names.contains(crop)) {
+          matching.add(photo);
+        } else {
+          message =
+              'Use a photo that clearly shows only ${_cropDetails[crop]!.$1}.';
+        }
+      } catch (_) {
+        if (!mounted) return;
+        message = 'Could not verify a photo. Try again.';
+      }
+    }
+    setState(() {
+      _matchingPhotos = false;
+      _newPhotos.addAll(matching);
+      _scanMessage = message;
+    });
+  }
+
+  String? _cropKeyForName(String? name) {
+    final normalized = name?.trim().toLowerCase();
+    for (final entry in _cropDetails.entries) {
+      final label = entry.value.$1.toLowerCase();
+      if (normalized == entry.key ||
+          normalized == label ||
+          normalized == '${label}s') {
+        return entry.key;
+      }
+    }
+    return switch (normalized) {
+      'tomatoes' => 'kamatis',
+      'chillies' || 'chilies' || 'sili' || 'chilli' => 'chili',
+      'pechay' => 'bok_choy',
+      'sayote' => 'chayote',
+      'repolyo' => 'cabbage',
+      'pipino' => 'cucumber',
+      'green bean' || 'baguio beans' => 'green_bean',
+      _ => null,
+    };
+  }
+
+  Future<void> _scanCrop(XFile photo) async {
+    if (!_canScanCrop || !_newPhotos.contains(photo)) return;
+    final originalDescription = _descCtrl.text;
+    setState(() {
+      _scanningCrop = true;
+      _scanMessage = null;
+      _submitError = null;
+    });
+
+    String? message;
+    try {
+      final detections = await widget.detectCrops(photo);
+      if (!mounted || !_newPhotos.contains(photo)) return;
+      final options = {
+        for (final detection in detections)
+          if (_cropDetails.containsKey(detection.name)) detection.name,
+      }.toList();
+      if (options.isEmpty) {
+        message = 'No supported crop detected.';
+        return;
+      }
+      if (options.length > 1) setState(() => _choosingCrop = true);
+      final crop = options.length == 1
+          ? options.single
+          : await _chooseCrop(options);
+      if (!mounted || !_newPhotos.contains(photo)) return;
+      if (crop == null) {
+        message = 'No crop selected.';
+        return;
+      }
+      final (name, description) = _cropDetails[crop]!;
+      _detectedPhoto = photo;
+      _selectedDetection = detections.firstWhere((item) => item.name == crop);
+      _markedNewIndex = _newPhotos.indexOf(photo);
+      _cropLabelCtrl.text = name;
+      if (_status == AvailabilityStatus.soonToHarvest &&
+          _harvestDateSuggested) {
+        _suggestHarvestDate();
+      }
+      if (!_categoryChosenManually) _suggestCategory(name);
+      if (originalDescription.trim().isEmpty &&
+          _descCtrl.text == originalDescription) {
+        _descCtrl.text = description;
+        _suggestedDescription = description;
+      }
+    } on ImageDetectException catch (error) {
+      message = error.message;
+    } catch (_) {
+      message = 'Could not scan this photo.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _scanningCrop = false;
+          _choosingCrop = false;
+          _scanMessage = message;
+        });
+      }
+    }
+  }
+
+  Future<String?> _chooseCrop(List<String> options) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Which crop are you listing?'),
+        children: [
+          for (final crop in options)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, crop),
+              child: Text(_cropDetails[crop]!.$1),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('None of these'),
+          ),
+        ],
+      ),
+    );
   }
 
   int? _markedNewIndex;
@@ -155,19 +505,6 @@ class _AddCropScreenState extends State<AddCropScreen> {
       if (photo.url == image) return photo.id;
     }
     return null;
-  }
-
-  /// Helper caption under the photo row describing how primary marking works
-  /// for the current mode/picking state.
-  String get _photoCaption {
-    if (_newPhotos.isNotEmpty) {
-      return 'Starred photo is the thumbnail buyers see. '
-          '${_isEditing ? 'New photos upload on save.' : ''}';
-    }
-    if (_isEditing) {
-      return 'Tap a photo to change the primary thumbnail. Tap + to add more.';
-    }
-    return 'Add one or more photos of your crop.';
   }
 
   AvailabilityStatus _statusFromBackend(String value) {
@@ -205,6 +542,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
       _farmsLoading = false;
     }
     _loadCategories();
+    if (!_isEditing && widget.openCameraOnStart) {
+      _openingCamera = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _captureCropPhoto(PhotoLimits.listing);
+      });
+    }
   }
 
   @override
@@ -261,7 +604,6 @@ class _AddCropScreenState extends State<AddCropScreen> {
     final match = CropCategory.suggestIndex(_categories, crop);
     final other = _categories.indexWhere((c) => c.id == 'OTHERS');
     setState(() {
-      _categorySuggested = match >= 0;
       _selectedCategoryIndex = match >= 0 ? match : other;
     });
   }
@@ -287,6 +629,38 @@ class _AddCropScreenState extends State<AddCropScreen> {
         : categories.indexWhere((c) => c.id == 'OTHERS');
   }
 
+  Future<void> _captureCropPhoto(int remaining) async {
+    try {
+      do {
+        setState(() => _openingCamera = true);
+        final selectPhotos = widget.selectPhotos;
+        final photo = selectPhotos != null
+            ? (await selectPhotos(1)).firstOrNull
+            : await Navigator.of(context).push<XFile>(
+                MaterialPageRoute(
+                  builder: (_) => ImageSearchScreen(
+                    selectPhoto: true,
+                    captureFeedback: _scanMessage,
+                  ),
+                ),
+              );
+        if (!mounted) return;
+        if (photo == null) {
+          if (widget.openCameraOnStart && _canScanCrop) await _maybePop();
+          return;
+        }
+        setState(() => _openingCamera = false);
+        await _addPickedPhotos([photo], remaining);
+        if (mounted && widget.openCameraOnStart && _canScanCrop) {
+          final index = _newPhotos.indexOf(photo);
+          if (index >= 0) _removeNewPhoto(index);
+        }
+      } while (mounted && widget.openCameraOnStart && _canScanCrop);
+    } finally {
+      if (mounted && _openingCamera) setState(() => _openingCamera = false);
+    }
+  }
+
   Future<void> _pickPhotos() async {
     final remaining = PhotoLimits.listing - _photoCount;
     if (remaining <= 0) {
@@ -296,50 +670,15 @@ class _AddCropScreenState extends State<AddCropScreen> {
       );
       return;
     }
+    if (widget.openCameraOnStart && _canScanCrop) {
+      await _captureCropPhoto(remaining);
+      return;
+    }
     if (widget.selectPhotos != null) {
       await _addPickedPhotos(await widget.selectPhotos!(remaining), remaining);
       return;
     }
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Photo Library'),
-              subtitle: const Text('Pick one or more photos'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Camera'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null || !mounted) return;
-
-    if (source == ImageSource.camera) {
-      final picked = await _picker.pickImage(
-        source: source,
-        imageQuality: 80,
-        maxWidth: 1920,
-        maxHeight: 1920,
-      );
-      if (picked != null) await _addPickedPhotos([picked], remaining);
-      return;
-    }
-    final picked = await _picker.pickMultiImage(
-      limit: remaining,
-      imageQuality: 80,
-      maxWidth: 1920,
-      maxHeight: 1920,
-    );
-    await _addPickedPhotos(picked, remaining);
+    await _captureCropPhoto(remaining);
   }
 
   /// Removes a newly picked photo (not yet on the server) and fixes up the
@@ -348,7 +687,20 @@ class _AddCropScreenState extends State<AddCropScreen> {
   /// photo (create) or back to the existing primary (edit).
   void _removeNewPhoto(int index) {
     setState(() {
-      _newPhotos.removeAt(index);
+      final removed = _newPhotos.removeAt(index);
+      if (removed == _detectedPhoto) {
+        // All extra shots were verified against the removed primary.
+        _newPhotos.clear();
+        _detectedPhoto = null;
+        _selectedDetection = null;
+        _confirmedUpcomingDetection = null;
+        _scanMessage = null;
+        _cropLabelCtrl.clear();
+        if (_descCtrl.text == _suggestedDescription) _descCtrl.clear();
+        _suggestedDescription = null;
+        _selectedCategoryIndex = -1;
+        _categoryChosenManually = false;
+      }
       final marked = _markedNewIndex;
       if (marked != null) {
         if (index < marked) {
@@ -396,20 +748,26 @@ class _AddCropScreenState extends State<AddCropScreen> {
   }
 
   Future<void> _pickHarvestDate() async {
-    final now = DateTime.now();
-    // Clamp the seed date: a stored harvest date that is already in the past
-    // would be outside the picker's range and trip its assertion.
-    final initial = (_harvestDate != null && _harvestDate!.isAfter(now))
-        ? _harvestDate!
-        : now;
+    final today = _today;
+    final lastDate = _lastHarvestDate;
+    final saved = DateUtils.dateOnly(_harvestDate ?? today);
+    final initial = saved.isBefore(today)
+        ? today
+        : saved.isAfter(lastDate)
+        ? lastDate
+        : saved;
     final picked = await showDatePicker(
       context: context,
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
       initialDate: initial,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365 * 2)),
+      firstDate: today,
+      lastDate: lastDate,
     );
     if (picked != null && mounted) {
-      setState(() => _harvestDate = picked);
+      setState(() {
+        _harvestDate = picked;
+        _harvestDateSuggested = false;
+      });
     }
   }
 
@@ -430,8 +788,18 @@ class _AddCropScreenState extends State<AddCropScreen> {
       return;
     }
 
-    if (_cropLabelCtrl.text.trim().isEmpty) {
-      setState(() => _submitError = 'Please enter the crop name.');
+    if (_status == AvailabilityStatus.soonToHarvest) {
+      if (!await _confirmUpcomingCrop() || !mounted || _isSubmitting) return;
+    }
+
+    final detectedPhoto = _detectedPhoto;
+    if (detectedPhoto == null ||
+        !_newPhotos.contains(detectedPhoto) ||
+        _cropLabelCtrl.text.trim().isEmpty) {
+      setState(
+        () => _submitError =
+            'Scan a photo with a supported crop before publishing.',
+      );
       return;
     }
     final farmId = _farmIdForSubmit;
@@ -447,11 +815,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
       setState(() => _submitError = 'Please select a crop category.');
       return;
     }
-    if (_status == AvailabilityStatus.soonToHarvest && _harvestDate == null) {
-      setState(
-        () =>
-            _submitError = 'Please pick a harvest date for "Soon to Harvest".',
-      );
+    final harvestError = _harvestDateError;
+    if (harvestError != null) {
+      setState(() => _submitError = harvestError);
       return;
     }
     final category = _categories[_selectedCategoryIndex];
@@ -472,27 +838,20 @@ class _AddCropScreenState extends State<AddCropScreen> {
         cropIcon: label.isEmpty ? null : label,
         harvestDate: _harvestDate,
         description: desc.isEmpty ? null : desc,
-        photo: _newPhotos.isNotEmpty ? _newPhotos.first : null,
+        photo: detectedPhoto,
+        estimateToken: _status == AvailabilityStatus.availableNow
+            ? _selectedDetection?.estimateToken
+            : null,
       );
 
-      // Upload any extra picked photos, then — only when the farmer explicitly
-      // marked a later photo as primary — promote it. The first photo is
-      // already the primary after create/upload, so index 0 needs no call.
-      // NOTE: photos uploaded inside a single batch can tie on the backend's
-      // upload-time ordering (same second, random id tiebreak), so when several
-      // are uploaded together the "marked" match is index-based and best-effort.
-      if (_newPhotos.length > 1) {
-        final updated = await ListingService.uploadListingPhotos(
+      final additionalPhotos = _newPhotos
+          .where((photo) => photo != detectedPhoto)
+          .toList();
+      if (additionalPhotos.isNotEmpty) {
+        await ListingService.uploadListingPhotos(
           listingId: created.id,
-          photos: _newPhotos.sublist(1),
+          photos: additionalPhotos,
         );
-        final marked = _markedNewIndex;
-        if (marked != null && marked > 0 && marked < updated.photos.length) {
-          await ListingService.setPrimaryPhoto(
-            listingId: created.id,
-            photoId: updated.photos[marked].id,
-          );
-        }
       }
 
       if (!mounted) return;
@@ -606,15 +965,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
       return;
     }
     final soon = _status == AvailabilityStatus.soonToHarvest;
-    if (soon && _harvestDate == null) {
-      setState(
-        () =>
-            _submitError = 'Please pick a harvest date for "Soon to Harvest".',
-      );
+    final harvestError = _harvestDateError;
+    if (harvestError != null) {
+      setState(() => _submitError = harvestError);
       return;
     }
     final category = _categories[_selectedCategoryIndex];
-    final label = _cropLabelCtrl.text.trim();
 
     setState(() {
       _isSubmitting = true;
@@ -632,7 +988,6 @@ class _AddCropScreenState extends State<AddCropScreen> {
       await ListingService.updateListing(
         listingId: existing.id,
         categoryId: category.id,
-        cropIcon: label.isEmpty ? null : label,
         // Only a soon-to-harvest crop carries a date; any other status sends
         // an empty value so the server clears whatever date was stored.
         harvestDate: soon ? _dateOnly(_harvestDate!) : '',
@@ -748,6 +1103,60 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_openingCamera || _checkingPhoto || _scanningCrop || _matchingPhotos) {
+      final (title, detail) = _openingCamera
+          ? ('Opening camera', 'Get the crop in the frame.')
+          : _checkingPhoto
+          ? (
+              'Checking your photo',
+              'Making sure it can be used in the listing.',
+            )
+          : _matchingPhotos
+          ? (
+              'Checking the crop match',
+              'Making sure the new photo shows the same crop as your listing.',
+            )
+          : _choosingCrop
+          ? ('Multiple crops found', 'Choose the crop you want to list.')
+          : (
+              'Identifying your crop',
+              'Looking for the crop in your photo. This can take a moment.',
+            );
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Add Crop'),
+          leading: BackButton(onPressed: _maybePop),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!_choosingCrop)
+                    Lottie.asset(
+                      'assets/animations/Image scan.lottie',
+                      width: 200,
+                      height: 200,
+                      errorBuilder: (_, _, _) => const FarmSpotLoader(size: 56),
+                    ),
+                  const SizedBox(height: 24),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(detail, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -796,6 +1205,80 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         ),
                     const SizedBox(height: 8),
                   ],
+                  const SizedBox(height: 10),
+                  FieldLabel(
+                    'CROP PHOTO',
+                    badge: _isEditing ? '(optional)' : '(required)',
+                    badgeColor: Colors.black38,
+                  ),
+                  SizedBox(
+                    height: 96,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        // Edit mode shows the listing's existing gallery first,
+                        // then any newly picked photos — matching how the
+                        // backend orders photos (oldest first) so the "marked"
+                        // index maths on save line up.
+                        if (_isEditing)
+                          for (final photo
+                              in widget.existingListing!.photos.where(
+                                (photo) => !_removedPhotoIds.contains(photo.id),
+                              )) ...[
+                            _ExistingPhotoTile(
+                              key: ValueKey('listing_photo_edit_${photo.id}'),
+                              url: photo.url,
+                              primary: _editPrimaryId == photo.id,
+                              busy: _primaryBusy && _editPrimaryId == photo.id,
+                              onPrimaryTap: () => _setExistingPrimary(photo.id),
+                              onRemove: () => setState(() {
+                                _removedPhotoIds.add(photo.id);
+                                if (_editPrimaryId == photo.id)
+                                  _editPrimaryId = null;
+                              }),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                        for (var i = 0; i < _newPhotos.length; i++) ...[
+                          _NewPhotoTile(
+                            key: ObjectKey(_newPhotos[i]),
+                            file: _newPhotos[i],
+                            primary: _markedNewIndex == i,
+                            onPrimaryTap: _isEditing
+                                ? () => setState(() {
+                                    _markedNewIndex = i;
+                                    _editPrimaryId = null;
+                                  })
+                                : null,
+                            onRemove: () => _removeNewPhoto(i),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        if (_photoCount < PhotoLimits.listing)
+                          PhotoPlaceholder(
+                            isAddButton: true,
+                            onTap: _pickPhotos,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$_photoCount/${PhotoLimits.listing} photos',
+                    style: const TextStyle(color: Colors.black45, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  if (_scanMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _scanMessage!,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                   const FieldLabel(
                     'CROP NAME',
                     badge: '(required)',
@@ -803,26 +1286,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   ),
                   TextField(
                     controller: _cropLabelCtrl,
+                    readOnly: true,
                     maxLength: InputLimits.cropName,
-                    onChanged: _suggestCategory,
                     decoration: _inputDecoration(
                       hint: 'e.g. Cabbage, Kangkong, Tomatoes',
                     ),
                   ),
                   const SizedBox(height: 18),
                   const FieldLabel('CROP CATEGORY'),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(
-                      _categorySuggested
-                          ? 'Suggested from your crop name. Tap another category to change it.'
-                          : 'Common crops are categorized automatically. For other crops, choose the best match below.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ),
                   if (_categoriesLoading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -853,11 +1324,16 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         final category = _categories[i];
                         return CropPickerTile(
                           icon: _iconForCategory(category),
-                          label: category.name,
+                          label: category.id == 'OTHERS'
+                              ? 'Others'
+                              : category.name,
                           selected: _selectedCategoryIndex == i,
                           onTap: () => setState(() {
+                            if (!_isEditing && _detectedPhoto == null) {
+                              return;
+                            }
                             _selectedCategoryIndex = i;
-                            _categorySuggested = false;
+                            _categoryChosenManually = true;
                           }),
                         );
                       }),
@@ -896,14 +1372,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   SelectableOptionTile(
                     icon: Icons.check_circle_outline,
                     title: 'Available Now',
-                    subtitle: 'Ready for buyers to contact you',
+                    subtitle: _availableNowSubtitle,
+                    subtitleStyle: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black87,
+                      height: 1.35,
+                    ),
                     selected: _status == AvailabilityStatus.availableNow,
-                    onTap: () => setState(() {
-                      _status = AvailabilityStatus.availableNow;
-                      // A date only makes sense while soon to harvest, so it
-                      // cannot be left attached to an available-now crop.
-                      _harvestDate = null;
-                    }),
+                    onTap: _setAvailableNow,
                   ),
                   SelectableOptionTile(
                     icon: Icons.schedule,
@@ -914,21 +1390,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         ? 'Ready around ${_formatDate(_harvestDate!)}'
                         : "Let buyers know it's coming",
                     selected: _status == AvailabilityStatus.soonToHarvest,
-                    onTap: () async {
-                      final alreadySelected =
-                          _status == AvailabilityStatus.soonToHarvest;
-                      setState(
-                        () => _status = AvailabilityStatus.soonToHarvest,
-                      );
-                      // Always (re)pick in add mode, where this tile is the only
-                      // date control. In edit mode the section below handles a
-                      // change, so the picker only opens on first selection.
-                      if (!_isEditing ||
-                          !alreadySelected ||
-                          _harvestDate == null) {
-                        await _pickHarvestDate();
-                      }
-                    },
+                    onTap: _selectSoonToHarvest,
                   ),
                   // "Not Available" is only offered while editing: a brand new
                   // crop is added either available or soon to harvest.
@@ -943,12 +1405,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                         _harvestDate = null;
                       }),
                     ),
-                  // The dedicated date control exists only in edit mode, and
-                  // only while soon to harvest — it can never set a date on an
-                  // available-now crop. In add mode the date is set by tapping
-                  // "Soon to Harvest" above.
-                  if (_isEditing &&
-                      _status == AvailabilityStatus.soonToHarvest) ...[
+                  if (_status == AvailabilityStatus.soonToHarvest) ...[
                     const SizedBox(height: 18),
                     const FieldLabel('HARVEST DATE'),
                     SelectableOptionTile(
@@ -957,73 +1414,14 @@ class _AddCropScreenState extends State<AddCropScreen> {
                           ? _formatDate(_harvestDate!)
                           : 'Pick a date',
                       subtitle: _harvestDate != null
-                          ? 'Tap to change the date'
+                          ? (_harvestDateSuggested
+                                ? 'Suggested date. Tap to adjust for your crop.'
+                                : 'Tap to change the date')
                           : 'When will the crop be ready?',
                       selected: _harvestDate != null,
                       onTap: _pickHarvestDate,
                     ),
                   ],
-                  const SizedBox(height: 10),
-                  const FieldLabel(
-                    'CROP PHOTO',
-                    badge: '(optional)',
-                    badgeColor: Colors.black38,
-                  ),
-                  SizedBox(
-                    height: 96,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        // Edit mode shows the listing's existing gallery first,
-                        // then any newly picked photos — matching how the
-                        // backend orders photos (oldest first) so the "marked"
-                        // index maths on save line up.
-                        if (_isEditing)
-                          for (final photo
-                              in widget.existingListing!.photos.where(
-                                (photo) => !_removedPhotoIds.contains(photo.id),
-                              )) ...[
-                            _ExistingPhotoTile(
-                              key: ValueKey('listing_photo_edit_${photo.id}'),
-                              url: photo.url,
-                              primary: _editPrimaryId == photo.id,
-                              busy: _primaryBusy && _editPrimaryId == photo.id,
-                              onPrimaryTap: () => _setExistingPrimary(photo.id),
-                              onRemove: () => setState(() {
-                                _removedPhotoIds.add(photo.id);
-                                if (_editPrimaryId == photo.id)
-                                  _editPrimaryId = null;
-                              }),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                        for (var i = 0; i < _newPhotos.length; i++) ...[
-                          _NewPhotoTile(
-                            key: ObjectKey(_newPhotos[i]),
-                            file: _newPhotos[i],
-                            primary: _markedNewIndex == i,
-                            onPrimaryTap: () => setState(() {
-                              _markedNewIndex = i;
-                              _editPrimaryId = null;
-                            }),
-                            onRemove: () => _removeNewPhoto(i),
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        if (_photoCount < PhotoLimits.listing)
-                          PhotoPlaceholder(
-                            isAddButton: true,
-                            onTap: _pickPhotos,
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '$_photoCount/5 photos. $_photoCaption',
-                    style: const TextStyle(color: Colors.black45, fontSize: 11),
-                  ),
-                  const SizedBox(height: 6),
                   if (_submitError != null) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -1076,10 +1474,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
   }
 }
 
-/// Thumbnail of an already-uploaded gallery photo (edit mode). Tapping it
-/// marks it as the primary photo right away; a starred badge appears at the
-/// top-left and an amber border highlights it. While the PATCH is in flight a
-/// small spinner overlays the tapped tile and further taps are deferred.
+/// Uploaded photo with a full-size preview and a cover-photo action.
 class _ExistingPhotoTile extends StatelessWidget {
   final String url;
   final bool primary;
@@ -1099,7 +1494,7 @@ class _ExistingPhotoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: primary || busy ? null : onPrimaryTap,
+      onTap: () => showCropPhotoPreview(context, NetworkImage(url)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: SizedBox(
@@ -1144,8 +1539,14 @@ class _ExistingPhotoTile extends StatelessWidget {
                   icon: const Icon(Icons.cancel, color: Colors.white, size: 22),
                 ),
               ),
-              if (primary)
-                const Positioned(top: 0, left: 0, child: _PrimaryBadge()),
+              Positioned(
+                top: 0,
+                left: 0,
+                child: _PrimaryBadge(
+                  primary: primary,
+                  onTap: busy ? null : onPrimaryTap,
+                ),
+              ),
               if (busy)
                 Positioned.fill(
                   child: ColoredBox(
@@ -1177,13 +1578,11 @@ class _ExistingPhotoTile extends StatelessWidget {
   }
 }
 
-/// Thumbnail of a freshly picked photo (not yet uploaded). Tapping it marks it
-/// as the primary photo; the X removes it from the pending list. Renders the
-/// picker's XFile as bytes (web-safe).
+/// A local photo with a full-size preview before upload.
 class _NewPhotoTile extends StatefulWidget {
   final XFile file;
   final bool primary;
-  final VoidCallback onPrimaryTap;
+  final VoidCallback? onPrimaryTap;
   final VoidCallback onRemove;
 
   const _NewPhotoTile({
@@ -1204,7 +1603,15 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.primary ? null : widget.onPrimaryTap,
+      onTap: () async {
+        try {
+          final bytes = await _bytes;
+          if (context.mounted)
+            await showCropPhotoPreview(context, MemoryImage(bytes));
+        } catch (_) {
+          // The thumbnail already shows the image load error.
+        }
+      },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: SizedBox(
@@ -1246,8 +1653,15 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
                 },
               ),
               _photoBorder(primary: widget.primary),
-              if (widget.primary)
-                const Positioned(top: 0, left: 0, child: _PrimaryBadge()),
+              if (widget.primary || widget.onPrimaryTap != null)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: _PrimaryBadge(
+                    primary: widget.primary,
+                    onTap: widget.onPrimaryTap,
+                  ),
+                ),
               Positioned(
                 top: 0,
                 right: 0,
@@ -1279,10 +1693,22 @@ class _NewPhotoTileState extends State<_NewPhotoTile> {
 
 /// Amber border + star badge on the photo currently marked as primary.
 class _PrimaryBadge extends StatelessWidget {
-  const _PrimaryBadge();
+  final bool primary;
+  final VoidCallback? onTap;
+
+  const _PrimaryBadge({required this.primary, this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    if (!primary) {
+      return IconButton(
+        tooltip: 'Set as cover photo',
+        visualDensity: VisualDensity.compact,
+        onPressed: onTap,
+        icon: const Icon(Icons.star_outline, color: Colors.white, size: 20),
+        style: IconButton.styleFrom(backgroundColor: Colors.black54),
+      );
+    }
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFFFB300),

@@ -287,8 +287,7 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
                 ],
               ),
               const Text(
-                'Take new photos of the crop today. All old photos are replaced, '
-                'and the listing stays visible for another 3 days.',
+                'Photograph the same crop. We check each photo before replacing your gallery and starting a new shelf-life window.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.35,
@@ -377,16 +376,9 @@ class _RenewListingSheetState extends State<RenewListingSheet> {
                     ),
                   ),
                   child: _submitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                      ? const Text('Verifying renewal photos…')
                       : const Text(
-                          'Renew for 3 days',
+                          'Verify photos and renew',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,

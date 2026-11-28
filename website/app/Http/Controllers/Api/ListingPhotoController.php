@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Listing;
 use App\Models\ListingPhoto;
+use App\Services\RenewalCropVerifier;
 use App\Support\CloudinaryImage;
 use App\Support\PhotoLimits;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class ListingPhotoController extends Controller
      * If the listing has no photos yet, the first uploaded photo is
      * auto-promoted to primary so a gallery always has a thumbnail.
      */
-    public function store(Request $request, $listingId)
+    public function store(Request $request, $listingId, RenewalCropVerifier $verifier)
     {
         [$listing, $error] = $this->resolveOwnedListing($request, $listingId);
 
@@ -42,9 +43,21 @@ class ListingPhotoController extends Controller
             'photos.*' => ['image', 'max:5120'],
         ]);
 
+        PhotoLimits::ensure($listing->photos()->count(), count($validated['photos']), PhotoLimits::LISTING, 'listing');
+        $photosToVerify = [];
+        foreach ($validated['photos'] as $index => $photo) {
+            $photosToVerify["photos.{$index}"] = $photo;
+        }
+        $verifier->verifyListingPhotos($photosToVerify, $listing->LST_CROP_ICON);
+
         try {
             DB::transaction(function () use ($validated, $listing) {
-                Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+                $locked = Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+                if ($locked->LST_CROP_ICON !== $listing->LST_CROP_ICON) {
+                    throw ValidationException::withMessages([
+                        'photos' => ['The listing crop changed. Refresh the listing and try again.'],
+                    ]);
+                }
                 $count = ListingPhoto::where('LST_ID', $listing->LST_ID)->count();
                 PhotoLimits::ensure($count, count($validated['photos']), PhotoLimits::LISTING, 'listing');
                 $isFirstEver = $count === 0;

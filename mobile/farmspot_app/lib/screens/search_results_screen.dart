@@ -48,7 +48,6 @@ const double _imageGridSideMargin = 4;
 
 /// Taller cells than the text-search default (0.78): more of the card is the
 /// photo, less is text.
-const double _imageGridAspectRatio = 0.72;
 
 EdgeInsets get _imageListPadding => const EdgeInsets.fromLTRB(
   _imageGridSideMargin,
@@ -677,7 +676,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
 
     return SearchResultItem(
       crop: crop.cropName,
-      seller: crop.farmName,
+      description: crop.description,
       distance: km.isFinite ? _formatDistanceKm(km) : 'Distance unavailable',
       status: crop.displayStatus,
       icon: cropIconForCrop(crop.cropName, crop.cropType),
@@ -1301,7 +1300,6 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
       items: items,
       onTap: _onCardTap,
       gap: _imageGridGap,
-      cardAspectRatio: _imageGridAspectRatio,
     );
   }
 
@@ -1314,7 +1312,6 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
       items: items,
       onTap: _onCardTap,
       gap: _imageGridGap,
-      cardAspectRatio: _imageGridAspectRatio,
     );
   }
 
@@ -1328,7 +1325,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
       for (final result in results)
         SearchResultItem(
           crop: result.listing.cropName,
-          seller: result.listing.farmName,
+          description: result.listing.description,
           distance: showDistance && _imageKm(result).isFinite
               ? _formatDistanceKm(_imageKm(result))
               : 'Distance unavailable',

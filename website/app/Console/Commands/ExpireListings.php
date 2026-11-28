@@ -24,7 +24,7 @@ class ExpireListings extends Command
      *
      * @var string
      */
-    protected $description = 'Notify sellers whose listing has passed its three-day freshness window';
+    protected $description = 'Notify sellers whose listing has passed its estimated shelf-life window';
 
     /**
      * Execute the console command.
@@ -41,8 +41,8 @@ class ExpireListings extends Command
      * and LST_EXPIRY_DATE is kept as-is to record when the listing expired.
      *
      * SOON_TO_HARVEST is deliberately excluded. It is not on sale yet, so its
-     * three-day window has not started; a crop harvested two weeks from now
-     * must not be reported as expired three days after it was posted.
+     * shelf-life window has not started; a crop harvested two weeks from now
+     * must not be reported as expired before harvest.
      * listings:harvest starts that window when the harvest date arrives.
      *
      * A listing a moderator has already taken down is skipped entirely. It is
@@ -120,8 +120,8 @@ class ExpireListings extends Command
         app(NotificationService::class)->notify(
             $ownerId,
             'LISTING_EXPIRED',
-            'Listing expired',
-            "Your {$crop} listing is past its three-day freshness window. Renew it with a fresh photo to show buyers it is still fresh.",
+            'Shelf-life window ended',
+            "Your {$crop} listing is past its estimated shelf-life window. Renew it with a fresh photo to show buyers it is still fresh.",
             $listing->LST_ID,
         );
     }

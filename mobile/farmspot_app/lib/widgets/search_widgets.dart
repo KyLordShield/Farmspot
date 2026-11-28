@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../models/listing_review.dart';
 import '../theme.dart';
 import 'home_widgets.dart'
@@ -17,8 +18,7 @@ const int searchPreviewCap = 4;
 class SearchResultItem {
   final String crop;
 
-  /// Free-form seller label, e.g. "Little A's Farm".
-  final String seller;
+  final String? description;
 
   /// Pre-formatted distance label, e.g. "0.4 km away".
   final String distance;
@@ -44,7 +44,7 @@ class SearchResultItem {
 
   const SearchResultItem({
     required this.crop,
-    required this.seller,
+    this.description,
     required this.distance,
     this.status,
     this.icon = Icons.eco,
@@ -62,7 +62,7 @@ class SearchResultItem {
   /// rather than spread, same as `CropListing.withRatings`.
   SearchResultItem withRatings(RatingSummary ratings) => SearchResultItem(
     crop: crop,
-    seller: seller,
+    description: description,
     distance: distance,
     status: status,
     icon: icon,
@@ -78,49 +78,25 @@ class SearchResultItem {
 const List<SearchResultItem> mockSearchResults = [
   SearchResultItem(
     crop: 'Carrots',
-    seller: "Little A's Farm",
     distance: '0.4 km away',
     icon: Icons.center_focus_strong,
   ),
+  SearchResultItem(crop: 'Carrots', distance: '0.7 km away', icon: Icons.flare),
+  SearchResultItem(crop: 'Carrots', distance: '1.2 km away', icon: Icons.eco),
+  SearchResultItem(crop: 'Carrots', distance: '1.8 km away', icon: Icons.spa),
   SearchResultItem(
     crop: 'Carrots',
-    seller: 'Big Ben Farm',
-    distance: '0.7 km away',
-    icon: Icons.flare,
-  ),
-  SearchResultItem(
-    crop: 'Carrots',
-    seller: 'Sun Village Farm',
-    distance: '1.2 km away',
-    icon: Icons.eco,
-  ),
-  SearchResultItem(
-    crop: 'Carrots',
-    seller: 'Green Hollow Farm',
-    distance: '1.8 km away',
-    icon: Icons.spa,
-  ),
-  SearchResultItem(
-    crop: 'Carrots',
-    seller: 'Ridge Top Farm',
     distance: '2.4 km away',
     icon: Icons.landscape,
   ),
+  SearchResultItem(crop: 'Carrots', distance: '3.1 km away', icon: Icons.grain),
   SearchResultItem(
     crop: 'Carrots',
-    seller: 'Cedar Spring Farm',
-    distance: '3.1 km away',
-    icon: Icons.grain,
-  ),
-  SearchResultItem(
-    crop: 'Carrots',
-    seller: 'Twin Hills Farm',
     distance: '3.9 km away',
     icon: Icons.terrain,
   ),
   SearchResultItem(
     crop: 'Carrots',
-    seller: 'Meadow Fresh Farm',
     distance: '4.6 km away',
     icon: Icons.water_drop,
   ),
@@ -147,29 +123,21 @@ class SearchResultGrid extends StatelessWidget {
   /// text search keeps the roomier default so its sparser cards breathe.
   final double gap;
 
-  /// Width/height of each cell. Smaller means taller, so a bigger photo for
-  /// the same footer text.
-  final double cardAspectRatio;
-
   const SearchResultGrid({
     super.key,
     required this.items,
     this.onTap,
     this.gap = 12,
-    this.cardAspectRatio = 0.78,
   });
 
   @override
   Widget build(BuildContext context) {
     return SliverLayoutBuilder(
-      builder: (context, constraints) => SliverGrid.builder(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: listingGridColumns(constraints.crossAxisExtent),
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          childAspectRatio: cardAspectRatio,
-        ),
-        itemCount: items.length,
+      builder: (context, constraints) => SliverMasonryGrid.count(
+        crossAxisCount: listingGridColumns(constraints.crossAxisExtent),
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
+        childCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
           return SearchResultCard(
@@ -182,9 +150,7 @@ class SearchResultGrid extends StatelessWidget {
   }
 }
 
-/// A single result card: dominant image placeholder on top — soft gradient,
-/// big icon inside a frosted disc, and a distance pill overlaid on the corner —
-/// with only crop name + farm underneath. No status badge, no stacked info.
+/// A result card whose footer grows with the listing description.
 class SearchResultCard extends StatelessWidget {
   final SearchResultItem item;
   final VoidCallback? onTap;
@@ -193,6 +159,7 @@ class SearchResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final description = item.description?.trim() ?? '';
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -213,7 +180,8 @@ class SearchResultCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            AspectRatio(
+              aspectRatio: 1,
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(16),
@@ -324,28 +292,18 @@ class SearchResultCard extends StatelessWidget {
                       color: Colors.black87,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.storefront,
-                        size: 13,
-                        color: AppColors.mutedGreen,
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 12,
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          item.seller,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                   // Rating, same treatment as the home card: hidden entirely
                   // until something has been rated, so a search result and the
                   // feed listing for the same crop read identically.

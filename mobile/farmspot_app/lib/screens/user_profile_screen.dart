@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/message_farmer_button.dart';
 
 import '../models/report.dart';
 import '../models/user_profile.dart';
@@ -154,6 +155,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               if (profile.isSeller) ...[
                 _buildStatsCard(profile),
                 const SizedBox(height: 20),
+              ],
+              if (profile.isSeller && (profile.farmerId ?? '').isNotEmpty) ...[
+                MessageFarmerButton(
+                  farmerId: profile.farmerId!,
+                  userId: profile.id,
+                ),
+                const SizedBox(height: 16),
               ],
               _buildContactCard(profile),
               if (profile.hasFarms) ...[

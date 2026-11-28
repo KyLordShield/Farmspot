@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' show ImagePicker, ImageSource;
 import 'package:latlong2/latlong.dart';
 import 'package:lottie/lottie.dart';
 import '../models/farm_pin.dart';
@@ -33,6 +34,10 @@ enum _ImageSearchStep { capture, identifying }
 enum _ImageCameraState { starting, ready, unavailable }
 
 class ImageSearchScreen extends StatefulWidget {
+  /// Return an image to Add Crop using the same camera and gallery layout.
+  final bool selectPhoto;
+  final String? captureFeedback;
+
   /// Test seam: replaces the YOLO call. Defaults to ImageDetectService.
   final Future<List<DetectedCrop>> Function(XFile photo)? detect;
 
@@ -56,6 +61,8 @@ class ImageSearchScreen extends StatefulWidget {
 
   const ImageSearchScreen({
     super.key,
+    this.selectPhoto = false,
+    this.captureFeedback,
     this.detect,
     this.createCamera,
     this.loadPhotos,
@@ -77,6 +84,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
   _ImageCameraState _cameraState = _ImageCameraState.starting;
 
   LiveCamera? _camera;
+  bool _returningPhoto = false;
   List<GalleryPhoto> _recents = const <GalleryPhoto>[];
   List<GalleryPhoto> _all = const <GalleryPhoto>[];
 
@@ -105,7 +113,10 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     final recents = await loadPhotos(limit: 3);
     final all = await loadPhotos();
 
-    if (!mounted) return;
+    if (!mounted) {
+      camera?.dispose();
+      return;
+    }
     setState(() {
       _camera = camera;
       _cameraState = camera != null
@@ -120,7 +131,10 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     setState(() => _cameraState = _ImageCameraState.starting);
     final createCamera = widget.createCamera ?? createLiveCamera;
     final camera = await createCamera();
-    if (!mounted) return;
+    if (!mounted) {
+      camera?.dispose();
+      return;
+    }
     setState(() {
       _camera = camera;
       _cameraState = camera != null
@@ -190,12 +204,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         // Pin the title strip to the top. As a bare non-positioned child it
         // would be stretched to fill the whole stack, which both dims the
         // camera and vertically centers the bar in the middle of the screen.
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: _buildAppBar(),
-        ),
+        Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
         _buildShutterArea(),
         if (_hasGalleryPhotos) _buildGalleryPanel(),
       ],
@@ -242,6 +251,11 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                         icon: const Icon(Icons.refresh),
                         label: const Text('Try again'),
                       ),
+                      if (widget.selectPhoto && !_hasGalleryPhotos)
+                        TextButton(
+                          onPressed: _pickFromSystemGallery,
+                          child: const Text('Choose from library'),
+                        ),
                     ],
                   ),
                 ),
@@ -314,7 +328,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
             tooltip: 'Back',
           ),
           Text(
-            'Identify crop',
+            widget.selectPhoto ? 'Crop photo' : 'Identify crop',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -324,8 +338,24 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         ],
       ),
     );
-    if (!overCamera) return bar;
-    return Container(color: Colors.black26, child: bar);
+    final feedback = widget.captureFeedback;
+    final header = feedback == null
+        ? bar
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              bar,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(feedback, style: TextStyle(color: foreground)),
+              ),
+            ],
+          );
+    if (!overCamera) return header;
+    return Container(
+      color: feedback == null ? Colors.black26 : Colors.black54,
+      child: header,
+    );
   }
 
   /// The Image scan animation shown while the YOLO service runs.
@@ -371,10 +401,34 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
     }
     if (!mounted) return;
     if (file == null) {
-      showFarmSpotSnackBar(context, 'Could not open that photo.', isError: true);
+      showFarmSpotSnackBar(
+        context,
+        'Could not open that photo.',
+        isError: true,
+      );
       return;
     }
     await _identifyPhoto(file);
+  }
+
+  Future<void> _pickFromSystemGallery() async {
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+      if (mounted && photo != null) await _identifyPhoto(photo);
+    } catch (_) {
+      if (mounted) {
+        showFarmSpotSnackBar(
+          context,
+          'Could not open the library.',
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _captureFromLiveCamera() async {
@@ -412,6 +466,12 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
   /// is useless for a photo the model simply could not place, and "try a
   /// clearer photo" is misleading when the request never arrived.
   Future<void> _identifyPhoto(XFile photo) async {
+    if (widget.selectPhoto) {
+      if (_returningPhoto) return;
+      _returningPhoto = true;
+      Navigator.of(context).pop(photo);
+      return;
+    }
     setState(() => _step = _ImageSearchStep.identifying);
 
     final detect = widget.detect ?? (p) => ImageDetectService.detectCrops(p);
@@ -516,11 +576,11 @@ class _GalleryPanelState extends State<_GalleryPanel> {
 
   /// Height of the three-thumbnail strip once the panel's header (~68 px) is
   /// reserved, clamped so short screens still fit inside the collapsed panel.
-  double _stripHeight(BuildContext context) => (MediaQuery.sizeOf(context)
-          .height *
-          widget.minFraction -
-      68)
-      .clamp(52.0, 100.0);
+  double _stripHeight(BuildContext context) =>
+      (MediaQuery.sizeOf(context).height * widget.minFraction - 68).clamp(
+        52.0,
+        100.0,
+      );
 
   void _onDragUpdate(DragUpdateDetails details) {
     setState(() {
@@ -552,21 +612,24 @@ class _GalleryPanelState extends State<_GalleryPanel> {
   @override
   Widget build(BuildContext context) {
     final height =
-        _minHeight(context) + (_maxHeight(context) - _minHeight(context)) * _extent;
+        _minHeight(context) +
+        (_maxHeight(context) - _minHeight(context)) * _extent;
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: AnimatedContainer(
-        duration: _dragging
-            ? Duration.zero
-            : const Duration(milliseconds: 160),
+        duration: _dragging ? Duration.zero : const Duration(milliseconds: 160),
         curve: Curves.easeOut,
         height: height,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           boxShadow: [
-            BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, -2)),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 12,
+              offset: Offset(0, -2),
+            ),
           ],
         ),
         child: Column(
@@ -685,7 +748,10 @@ class _GalleryThumb extends StatelessWidget {
               if (bytes == null) {
                 return Container(
                   color: AppColors.fieldBackground,
-                  child: const Icon(Icons.image_outlined, color: Colors.black26),
+                  child: const Icon(
+                    Icons.image_outlined,
+                    color: Colors.black26,
+                  ),
                 );
               }
               return Image.memory(

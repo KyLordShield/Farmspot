@@ -307,10 +307,12 @@ class ListingService {
 
   static Future<List<CropCategory>> _fetchCropCategories() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/crop-categories'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/crop-categories'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -370,6 +372,7 @@ class ListingService {
     DateTime? harvestDate,
     String? description,
     XFile? photo,
+    String? estimateToken,
   }) async {
     final token = await AuthService.getToken();
     if (token == null) throw Exception('Not logged in.');
@@ -387,6 +390,8 @@ class ListingService {
         request.fields['farm_id'] = farmId;
         request.fields['category_id'] = categoryId;
         request.fields['status'] = status;
+        if (estimateToken != null)
+          request.fields['estimate_token'] = estimateToken;
         if (cropIcon != null && cropIcon.trim().isNotEmpty) {
           request.fields['crop_icon'] = cropIcon.trim();
         }

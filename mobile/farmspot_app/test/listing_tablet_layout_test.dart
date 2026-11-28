@@ -4,6 +4,9 @@ import 'package:farmspot_app/widgets/home_widgets.dart';
 import 'package:farmspot_app/widgets/search_widgets.dart';
 
 void main() {
+  const description =
+      'Crisp carrots for soups, salads, and easy snacks. Roast them with herbs, '
+      'grate them into slaw, slice them for dipping, or add them to a stew.';
   for (final entry in {390.0: 2, 768.0: 3, 1024.0: 4}.entries) {
     testWidgets('home and search use ${entry.value} columns at ${entry.key}', (
       tester,
@@ -17,6 +20,7 @@ void main() {
         (i) => CropListing(
           cropName: 'Fresh crop $i',
           farmName: 'Upland farm',
+          description: i == 0 ? description : 'Carrots for soups.',
           status: 'AVAILABLE_NOW',
         ),
       );
@@ -37,6 +41,14 @@ void main() {
       );
       await tester.pump();
       final cards = find.byType(CropCard);
+      expect(find.text('Upland farm'), findsNothing);
+      final homeDescription = tester.widget<Text>(find.text(description).first);
+      expect(homeDescription.maxLines, 4);
+      expect(homeDescription.overflow, TextOverflow.ellipsis);
+      expect(
+        tester.getSize(cards.first).height,
+        greaterThan(tester.getSize(cards.at(1)).height),
+      );
       final y = tester.getTopLeft(cards.first).dy;
       for (var i = 0; i < entry.value; i++) {
         expect(tester.getTopLeft(cards.at(i)).dy, y);
@@ -64,7 +76,7 @@ void main() {
           9,
           (i) => SearchResultItem(
             crop: 'Crop $i',
-            seller: 'Upland farm',
+            description: i == 0 ? description : 'Carrots for soups.',
             distance: '0.4 km',
             status: imageResults ? 'AVAILABLE_NOW' : null,
           ),
@@ -76,7 +88,6 @@ void main() {
                 slivers: [
                   SearchResultGrid(
                     items: items,
-                    cardAspectRatio: 0.72,
                     gap: 4,
                     onTap: (item) => tapped = item,
                   ),
@@ -87,6 +98,15 @@ void main() {
         );
         await tester.pump();
         final results = find.byType(SearchResultCard);
+        final searchDescription = tester.widget<Text>(
+          find.text(description).first,
+        );
+        expect(searchDescription.maxLines, 4);
+        expect(searchDescription.overflow, TextOverflow.ellipsis);
+        expect(
+          tester.getSize(results.first).height,
+          greaterThan(tester.getSize(results.at(1)).height),
+        );
         final top = tester.getTopLeft(results.first).dy;
         expect(tester.getTopLeft(results.at(entry.value - 1)).dy, top);
         expect(tester.getTopLeft(results.at(entry.value)).dy, greaterThan(top));

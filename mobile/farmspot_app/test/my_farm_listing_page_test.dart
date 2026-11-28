@@ -698,16 +698,14 @@ void main() {
     expect(find.text('Based on 12 reviews'), findsOneWidget);
   });
 
-  testWidgets('an unreviewed listing says so instead of showing zero', (
-    tester,
-  ) async {
+  testWidgets('an unreviewed row leaves the rating out', (tester) async {
     gateway.pages[1] = aPage(listings: [aListing('LST001', 'Tomato')]);
     await pumpScreen(tester);
 
     await reveal(tester, find.text('Tomato'));
 
-    // On the row and in the summary card: neither may invent a score nobody gave.
-    expect(find.text('No reviews yet'), findsNWidgets(2));
+    // Only the farm summary displays the empty reviews state.
+    expect(find.text('No reviews yet'), findsOneWidget);
     expect(find.text('0.0'), findsNothing);
   });
 
@@ -805,7 +803,7 @@ void main() {
     );
     await pumpScreen(tester);
 
-    await reveal(tester, inRow('Expired'));
+    await reveal(tester, inRow('Listing ended'));
     expect(inRow('Renew'), findsOneWidget);
   });
 
@@ -833,11 +831,13 @@ void main() {
     expect(inRow('Renew'), findsOneWidget);
     // Expired replaces the underlying status: the row must not read
     // "Not Available" and "Expired" at the same time.
-    expect(inRow('Expired'), findsOneWidget);
+    expect(inRow('Listing ended'), findsOneWidget);
     expect(inRow('Not Available'), findsNothing);
   });
 
-  testWidgets('a live listing counts down the days left', (tester) async {
+  testWidgets('a live listing shows the crop shelf-life estimate', (
+    tester,
+  ) async {
     gateway.pages[1] = aPage(
       listings: [
         aListing(
@@ -853,15 +853,15 @@ void main() {
 
     await reveal(tester, find.text('Tomato'));
 
-    expect(find.text('Expires in 2 days'), findsOneWidget);
+    expect(find.text('Estimated shelf life · 2 days left'), findsOneWidget);
+    expect(find.text('Expires in 2 days'), findsNothing);
     // Renew belongs to an expired listing only.
     expect(find.text('Renew'), findsNothing);
   });
 
-  testWidgets('a listing off sale shows no expiry countdown', (tester) async {
-    // Same live window as the test above, but the seller has moved the crop to
-    // Soon to Harvest / Not Available. The 3-day countdown belongs to a listing
-    // that is actually on sale, so neither row may show it.
+  testWidgets('a listing off sale shows no shelf-life estimate', (
+    tester,
+  ) async {
     final liveExpiry = DateTime.now()
         .add(const Duration(days: 2))
         .toIso8601String();
@@ -886,7 +886,7 @@ void main() {
 
     await reveal(tester, find.text('Tomato'));
 
-    expect(find.text('Expires in 2 days'), findsNothing);
+    expect(find.textContaining('Estimated shelf life'), findsNothing);
   });
 
   testWidgets('a soon-to-harvest crop never shows Expired or Renew', (
@@ -911,7 +911,7 @@ void main() {
     await reveal(tester, find.text('Tomato'));
 
     expect(inRow('Soon to Harvest'), findsOneWidget);
-    expect(inRow('Expired'), findsNothing);
+    expect(inRow('Listing ended'), findsNothing);
     expect(inRow('Renew'), findsNothing);
   });
 

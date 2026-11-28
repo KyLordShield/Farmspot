@@ -1,11 +1,12 @@
 ﻿import io
+import logging
 import os
 import pathlib
 import threading
 import time
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
-from PIL import Image
+from PIL import Image, ImageOps
 from ultralytics import YOLO
 
 app = FastAPI()
@@ -15,6 +16,25 @@ UPLOADS = BASE / 'uploads'
 UPLOADS.mkdir(parents=True, exist_ok=True)
 
 MODEL_PATH = BASE / os.environ.get('MODEL_FILE', 'farmspot_9class_best.pt')
+
+QUALITY_MODEL_PATH = BASE / os.environ.get(
+    'QUALITY_MODEL_FILE', 'ripeness_check_model/farmspot_quality_4crop_best.pt',
+)
+QUALITY_LABELS = {
+    'kamatis': {'tomato_unripe', 'tomato_ripe', 'tomato_rotten'},
+    'chili': {'chili_unripe', 'chili_ripe', 'chili_rotten'},
+    'cabbage': {'cabbage_fresh', 'cabbage_rotten'},
+    'lettuce': {'lettuce_fresh', 'lettuce_visibly_degraded'},
+}
+QUALITY_MIN_CONF = 0.80
+# Earlier phone tests found confident false unripe predictions on red fruit.
+# Require a predominantly green center and a very confident classifier result.
+QUALITY_MIN_BY_LABEL = {
+    'tomato_unripe': 0.98,
+    'lettuce_fresh': 0.95,
+    'lettuce_visibly_degraded': 0.95,
+}
+_quality_model = None
 
 # Per-request detector trace, written by the app itself (see _log_detect).
 DETECT_LOG = BASE / 'detect_log.txt'
@@ -300,6 +320,61 @@ def _reclassify_rejects(model, image, settings, bars, cfg):
     return promoted
 
 
+def _has_green_tomato_center(crop):
+    width, height = crop.size
+    center = crop.crop((width // 6, height // 6, width * 5 // 6, height * 5 // 6))
+    hsv = center.resize((48, 48), Image.Resampling.BILINEAR).convert('HSV')
+    green_pixels = sum(
+        30 <= hue <= 90 and saturation >= 51 and value >= 51
+        for hue, saturation, value in hsv.getdata()
+    )
+    return green_pixels >= 0.55 * 48 * 48
+
+
+def _add_visible_conditions(image, detections):
+    global _quality_model
+    supported = [d for d in detections if d['name'] in QUALITY_LABELS]
+    if not supported or not QUALITY_MODEL_PATH.is_file():
+        return
+
+    crops = []
+    candidates = []
+    for detection in supported:
+        left, top, right, bottom = detection['box']
+        if right - left < 12 or bottom - top < 12:
+            continue
+        x_pad = round((right - left) * 0.10)
+        y_pad = round((bottom - top) * 0.10)
+        crop = image.crop((
+            max(0, left - x_pad), max(0, top - y_pad),
+            min(image.width, right + x_pad), min(image.height, bottom + y_pad),
+        ))
+        crops.append(ImageOps.pad(
+            crop, (224, 224), Image.Resampling.LANCZOS, color=(114, 114, 114),
+        ))
+        candidates.append((detection, crop))
+    if not crops:
+        return
+
+    try:
+        with _infer_lock:
+            if _quality_model is None:
+                _quality_model = YOLO(str(QUALITY_MODEL_PATH), task='classify')
+            predictions = _quality_model.predict(crops, imgsz=224, verbose=False)
+        for (detection, crop), result in zip(candidates, predictions):
+            label = result.names[result.probs.top1]
+            score = float(result.probs.top1conf)
+            if score < QUALITY_MIN_BY_LABEL.get(label, QUALITY_MIN_CONF):
+                continue
+            if label not in QUALITY_LABELS[detection['name']]:
+                continue
+            if label == 'tomato_unripe' and not _has_green_tomato_center(crop):
+                continue
+            detection['condition'] = label
+    except Exception:
+        logging.getLogger(__name__).exception('Crop condition inference failed')
+
+
 @app.get('/health')
 def health():
     # Show what's supported vs gaps for current model
@@ -326,6 +401,7 @@ def detect(
     augment: bool | None = Query(default=None),
     imgsz: int | None = Query(default=None, ge=320, le=2560),
     reclassify: bool | None = Query(default=None),
+    include_condition: bool = Query(default=False),
 ):
     # A plain `def`, not `async def`: FastAPI runs synchronous handlers in a
     # worker thread, so the event loop stays free while inference runs.
@@ -420,6 +496,8 @@ def detect(
 
     # Highest confidence first, so the app can show the strongest crop up top.
     detections.sort(key=lambda d: d['confidence'], reverse=True)
+    if include_condition:
+        _add_visible_conditions(image, detections)
 
     # One line per request recording exactly what was returned. When a photo
     # shows fewer sections in the app than this line lists, the loss is in the

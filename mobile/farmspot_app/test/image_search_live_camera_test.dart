@@ -17,18 +17,75 @@ import 'package:farmspot_app/services/live_camera.dart';
 const _userPos = LatLng(10.3178, 123.8742);
 
 /// A real 1x1 PNG so Image.memory can actually decode in the tiles.
-final Uint8List _kPng =
-    Uint8List.fromList(const <int>[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
-    0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
-    0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-    0x42, 0x60, 0x82,
-  ]);
+final Uint8List _kPng = Uint8List.fromList(const <int>[
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x62,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
+]);
 
 class _FakeLiveCamera implements LiveCamera {
   _FakeLiveCamera({this.shot});
@@ -101,6 +158,43 @@ Future<void> pumpLive(
 }
 
 void main() {
+  testWidgets('crop photo mode returns a gallery photo to Add Crop', (
+    tester,
+  ) async {
+    XFile? picked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              picked = await Navigator.of(context).push<XFile>(
+                MaterialPageRoute(
+                  builder: (_) => ImageSearchScreen(
+                    selectPhoto: true,
+                    createCamera: () async => _FakeLiveCamera(),
+                    loadPhotos: ({int? limit}) async => [_photo('tomato')],
+                    detect: (_) async =>
+                        throw StateError('Add Crop owns the scan'),
+                  ),
+                ),
+              );
+            },
+            child: const Text('Open crop camera'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open crop camera'));
+    await tester.pumpAndSettle();
+    expect(find.text('Crop photo'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open full gallery'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('image-search-gallery-grid')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('gallery-photo-tomato')));
+    await tester.pumpAndSettle();
+    expect(picked?.path, '/tmp/tomato.jpg');
+  });
+
   group('ImageSearchScreen live camera', () {
     testWidgets('auto-starts the camera: live preview, shutter and recent '
         'strip, no Camera/Gallery buttons', (tester) async {
@@ -114,7 +208,10 @@ void main() {
       expect(find.byKey(const Key('image-search-shutter')), findsOneWidget);
       expect(find.text('Recent photos'), findsOneWidget);
       for (final photo in recents) {
-        expect(find.byKey(ValueKey('gallery-photo-${photo.id}')), findsOneWidget);
+        expect(
+          find.byKey(ValueKey('gallery-photo-${photo.id}')),
+          findsOneWidget,
+        );
       }
       expect(find.text('Camera'), findsNothing);
       expect(find.text('Gallery'), findsNothing);
@@ -126,8 +223,11 @@ void main() {
       await pumpLive(tester, camera: _FakeLiveCamera());
 
       final titleY = tester.getTopLeft(find.text('Identify crop')).dy;
-      expect(titleY, lessThan(100),
-          reason: 'title should be in the top strip, got dy=$titleY');
+      expect(
+        titleY,
+        lessThan(100),
+        reason: 'title should be in the top strip, got dy=$titleY',
+      );
 
       // The behind-the-bar scrim only dims the top strip, not the whole camera.
       final scrim = tester.widgetList(
@@ -137,12 +237,17 @@ void main() {
       );
       expect(scrim, isNotEmpty);
       final scrimBottom = tester
-          .getRect(find.byWidgetPredicate(
-            (w) => w is Container && w.color == Colors.black26,
-          ))
+          .getRect(
+            find.byWidgetPredicate(
+              (w) => w is Container && w.color == Colors.black26,
+            ),
+          )
           .bottom;
-      expect(scrimBottom, lessThan(120),
-          reason: 'dim strip should hug the top bar, got bottom=$scrimBottom');
+      expect(
+        scrimBottom,
+        lessThan(120),
+        reason: 'dim strip should hug the top bar, got bottom=$scrimBottom',
+      );
 
       expect(find.byKey(const Key('fake-preview')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -174,7 +279,12 @@ void main() {
       final recents = [_photo('p1'), _photo('p2'), _photo('p3')];
       final all = [...recents, _photo('p4'), _photo('p5')];
 
-      await pumpLive(tester, camera: _FakeLiveCamera(), recents: recents, all: all);
+      await pumpLive(
+        tester,
+        camera: _FakeLiveCamera(),
+        recents: recents,
+        all: all,
+      );
 
       expect(find.byKey(const Key('image-search-gallery-grid')), findsNothing);
 
@@ -184,7 +294,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('image-search-gallery-grid')), findsOneWidget);
+      expect(
+        find.byKey(const Key('image-search-gallery-grid')),
+        findsOneWidget,
+      );
       expect(find.text('All photos'), findsOneWidget);
       expect(find.byKey(const ValueKey('gallery-photo-p4')), findsOneWidget);
       expect(find.byKey(const ValueKey('gallery-photo-p5')), findsOneWidget);
@@ -207,8 +320,7 @@ void main() {
         tester,
         camera: _FakeLiveCamera(),
         recents: recents,
-        detect: (_) async =>
-            [DetectedCrop(name: 'Carrots', confidence: 0.94)],
+        detect: (_) async => [DetectedCrop(name: 'Carrots', confidence: 0.94)],
         loadResults: (term) async {
           searched.add(term);
           return [_listing('L-$term', term, "A's Farm", farmId: 'F1')];
@@ -233,8 +345,7 @@ void main() {
       await pumpLive(
         tester,
         camera: camera,
-        detect: (_) async =>
-            [DetectedCrop(name: 'Carrots', confidence: 0.94)],
+        detect: (_) async => [DetectedCrop(name: 'Carrots', confidence: 0.94)],
         loadResults: (term) async {
           searched.add(term);
           return [_listing('L-$term', term, "A's Farm", farmId: 'F1')];

@@ -120,6 +120,21 @@ class Listing extends Model
      */
     public const AVAILABILITY_REMOVED = 'REMOVED';
 
+    public const MAX_HARVEST_LEAD_DAYS = 60;
+
+    public static function harvestDateRules(): array
+    {
+        $today = now('Asia/Manila')->startOfDay();
+
+        return [
+            'nullable',
+            'date',
+            'required_if:status,SOON_TO_HARVEST',
+            'after_or_equal:'.$today->toDateString(),
+            'before_or_equal:'.$today->copy()->addDays(self::MAX_HARVEST_LEAD_DAYS)->toDateString(),
+        ];
+    }
+
     /**
      * The one piece of copy for every endpoint that refuses to act on a removed
      * listing. Kept here rather than repeated per controller so the farmer sees

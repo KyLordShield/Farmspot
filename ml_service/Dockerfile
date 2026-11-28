@@ -28,6 +28,7 @@ RUN pip install -r requirements.txt
 # MODEL_FILE can still override the filename in the container.
 COPY app.py .
 COPY farmspot_9class_best.pt .
+COPY ripeness_check_model/farmspot_quality_4crop_best.pt ./ripeness_check_model/
 
 EXPOSE 8001
 

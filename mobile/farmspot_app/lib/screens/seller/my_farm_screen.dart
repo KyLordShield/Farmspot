@@ -519,7 +519,11 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
         // Listings are created against a specific farm, so a seller with
         // several must list on the one currently on screen.
         builder: (_) =>
-            AddCropScreen(isFirstCrop: false, farmId: _selectedFarmId),
+            AddCropScreen(
+              isFirstCrop: false,
+              farmId: _selectedFarmId,
+              openCameraOnStart: true,
+            ),
       ),
     );
     // AddCropScreen pops true after creating the listing — refresh so the new
@@ -694,7 +698,7 @@ class _MyFarmScreenState extends State<MyFarmScreen> {
     if (renewed == null || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Listing renewed for another 3 days.')),
+      const SnackBar(content: Text('Listing renewed. Shelf-life estimate updated.')),
     );
     await _loadListings(reset: true);
   }

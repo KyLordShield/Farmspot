@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\RenewalCropVerifier;
+use App\Support\CropShelfLife;
 use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Farm;
@@ -10,7 +12,6 @@ use App\Models\ListingPhoto;
 use App\Models\ListingReview;
 use App\Models\Report;
 use App\Models\ReviewRequest;
-use App\Services\CropCategorySuggestion;
 use App\Support\CloudinaryImage;
 use App\Support\InputLimits;
 use App\Support\ListingName;
@@ -281,7 +282,7 @@ class FarmerListingController extends Controller
             'active' => $query
                 ->where(function (Builder $q) {
                     // Soon to harvest is active regardless of the creation-time
-                    // expiry: its three-day window starts at harvest, not when
+                    // expiry: its shelf-life window starts at harvest, not when
                     // the crop was posted.
                     $q->where('listing.LST_STATUS', 'SOON_TO_HARVEST')
                         ->orWhere('listing.LST_EXPIRY_DATE', '>=', now());
@@ -350,7 +351,7 @@ class FarmerListingController extends Controller
      * button.
      */
     private const RENEW_REQUIRED_MESSAGE =
-        'This listing has expired. Renew it with a fresh photo to show it again.';
+        'The estimated shelf-life window has ended. Renew with a fresh photo.';
 
     /**
      * Update just the LST_STATUS of one of the farmer's own listings.
@@ -430,10 +431,10 @@ class FarmerListingController extends Controller
      * Full edit of one of the farmer's own listings — the general-purpose
      * counterpart to updateStatus() (which stays as the quick status toggle).
      *
-     * JSON-only: any combination of category_id, crop_icon, harvest_date,
+     * JSON-only: any combination of category_id, description, harvest_date,
      * status. LST_EXPIRY_DATE is NEVER reset here. An edit — including a
      * corrected description or a new photo — must not silently buy another
-     * three days; that is what renew() is for.
+     * shelf life; that is what renew() is for.
      *
      * NOTE: photo uploads CANNOT ride this PATCH — PHP only populates
      * $_FILES (and $_POST) for POST requests, so a multipart PATCH arrives
@@ -467,26 +468,23 @@ class FarmerListingController extends Controller
             'category_id' => ['nullable', 'string', 'exists:crop_category,CAT_ID'],
             'crop_icon' => ['nullable', 'string', 'max:'.InputLimits::CROP_NAME],
             'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
-            'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
+            'harvest_date' => Listing::harvestDateRules(),
             'status' => ['nullable', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
         ], InputLimits::messages());
 
-        if (! isset($validated['category_id']) && ! empty($validated['crop_icon'])) {
-            $validated['category_id'] = app(CropCategorySuggestion::class)->assign($validated['crop_icon']);
+        if (array_key_exists('crop_icon', $validated)
+            && ListingName::key($validated['crop_icon']) !== ListingName::key($listing->LST_CROP_ICON)
+        ) {
+            throw ValidationException::withMessages([
+                'crop_icon' => ['The crop name is fixed after scanning. Create a new listing for a different crop.'],
+            ]);
         }
 
         return DB::transaction(function () use ($listing, $validated) {
             Farm::where('FRM_ID', $listing->FRM_ID)->lockForUpdate()->firstOrFail();
-            if (array_key_exists('crop_icon', $validated)) {
-                ListingName::ensureUnique($listing->FRM_ID, $validated['crop_icon'], $listing->LST_ID);
-            }
 
             if (array_key_exists('category_id', $validated)) {
                 $listing->CAT_ID = $validated['category_id'];
-            }
-
-            if (array_key_exists('crop_icon', $validated)) {
-                $listing->LST_CROP_ICON = $validated['crop_icon'];
             }
 
             if (array_key_exists('description', $validated)) {
@@ -545,7 +543,7 @@ class FarmerListingController extends Controller
      * ever waiting for the old window to end. SOON_TO_HARVEST is not expired:
      * its window starts when listings:harvest makes it available.
      */
-    public function renew(Request $request, $listingId)
+    public function renew(Request $request, $listingId, RenewalCropVerifier $verifier)
     {
         $farmer = $request->user()->buyer?->farmer;
 
@@ -572,7 +570,7 @@ class FarmerListingController extends Controller
 
         if (! $this->listingHasExpired($listing)) {
             return response()->json([
-                'message' => 'This listing is still active. Renew it after it expires.',
+                'message' => 'Renew this listing once its estimated shelf-life window ends.',
             ], 422);
         }
 
@@ -603,6 +601,24 @@ class FarmerListingController extends Controller
             0,
             min((int) ($validated['primary_index'] ?? 0), count($uploads) - 1)
         );
+
+        $expectedCrop = CropShelfLife::detectorName($listing->LST_CROP_ICON);
+        if ($expectedCrop === null) {
+            throw ValidationException::withMessages([
+                'photos' => ['This crop is not supported by photo verification.'],
+            ]);
+        }
+
+        $photosToVerify = [];
+        foreach ($uploads as $index => $photo) {
+            $field = isset($validated['photos']) ? "photos.{$index}" : 'photo';
+            $photosToVerify[$field] = $photo;
+        }
+        $verifiedDays = $verifier->verify($photosToVerify, $expectedCrop);
+        $primaryField = isset($validated['photos']) ? "photos.{$primaryIndex}" : 'photo';
+        $shelfLifeDays = $validated['status'] === 'AVAILABLE_NOW'
+            ? ($verifiedDays[$primaryField] ?? CropShelfLife::days($listing->LST_CROP_ICON))
+            : CropShelfLife::days($listing->LST_CROP_ICON);
 
         $newUrls = [];
 
@@ -640,8 +656,17 @@ class FarmerListingController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($listing, $validated, $newUrls, $primaryIndex) {
-                Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+            DB::transaction(function () use ($listing, $validated, $newUrls, $primaryIndex, $expectedCrop, $shelfLifeDays) {
+                $listing = Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+                if ($removed = $this->removedListingGuard($listing)) {
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException($removed);
+                }
+                if (!$this->listingHasExpired($listing) ||
+                    CropShelfLife::detectorName($listing->LST_CROP_ICON) !== $expectedCrop) {
+                    throw ValidationException::withMessages([
+                        'photos' => ['The listing changed. Refresh it before renewing.'],
+                    ]);
+                }
                 ListingPhoto::where('LST_ID', $listing->LST_ID)->delete();
 
                 foreach ($newUrls as $index => $url) {
@@ -659,7 +684,7 @@ class FarmerListingController extends Controller
                 $listing->LST_HARVEST_DATE = $validated['status'] === 'SOON_TO_HARVEST'
                     ? $validated['harvest_date']
                     : null;
-                $listing->LST_EXPIRY_DATE = now()->addDays(3);
+                $listing->LST_EXPIRY_DATE = now()->addDays($shelfLifeDays);
                 $listing->LST_LAST_RENEWED_AT = now();
                 $listing->LST_RENEWAL_COUNT = ((int) $listing->LST_RENEWAL_COUNT) + 1;
                 $listing->LST_UPDATED_AT = now();
@@ -672,6 +697,10 @@ class FarmerListingController extends Controller
             // forever.
             foreach ($newUrls as $url) {
                 CloudinaryImage::deleteByUrl($url);
+            }
+
+            if ($e instanceof ValidationException || $e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                throw $e;
             }
 
             return response()->json([
@@ -691,7 +720,7 @@ class FarmerListingController extends Controller
         $fresh = Listing::with(['farm', 'category', 'photos'])->find($listing->LST_ID);
 
         return response()->json([
-            'message' => 'Listing renewed for another 3 days.',
+            'message' => 'Listing renewed with a new shelf-life estimate.',
             'listing' => $this->formatListing($fresh),
         ]);
     }
@@ -704,7 +733,7 @@ class FarmerListingController extends Controller
      * removed. Non-primary gallery photos are left untouched. New clients
      * should use POST /api/listings/{id}/photos instead.
      */
-    public function uploadPhoto(Request $request, $listingId)
+    public function uploadPhoto(Request $request, $listingId, RenewalCropVerifier $verifier)
     {
         $listing = Listing::with(['farm', 'category', 'photos'])->find($listingId);
 
@@ -730,8 +759,16 @@ class FarmerListingController extends Controller
             'photo' => ['required', 'image', 'max:5120'],
         ]);
 
+        $verifier->verifyListingPhotos(['photo' => $request->file('photo')], $listing->LST_CROP_ICON);
+
         [$newUrl, $oldImage] = DB::transaction(function () use ($request, $listing) {
-            $listing = Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+            $locked = Listing::whereKey($listing->LST_ID)->lockForUpdate()->firstOrFail();
+            if ($locked->LST_CROP_ICON !== $listing->LST_CROP_ICON) {
+                throw ValidationException::withMessages([
+                    'photo' => ['The listing crop changed. Refresh the listing and try again.'],
+                ]);
+            }
+            $listing = $locked;
             $previousPrimary = ListingPhoto::where('LST_ID', $listing->LST_ID)->where('LPHOTO_IS_PRIMARY', 1)->first();
             $count = ListingPhoto::where('LST_ID', $listing->LST_ID)->count();
             PhotoLimits::ensure($count - ($previousPrimary ? 1 : 0), 1, PhotoLimits::LISTING, 'listing');
@@ -838,7 +875,7 @@ class FarmerListingController extends Controller
     }
 
     /**
-     * Whether the listing's three-day on-sale window has ended.
+     * Whether the listing's estimated shelf-life window has ended.
      *
      * A null expiry is treated as expired: legacy rows that never had one
      * cannot be "still active", and allowing them through renew() is safer than

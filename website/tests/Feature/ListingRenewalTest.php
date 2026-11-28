@@ -12,14 +12,15 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * Renewal is the only path allowed to extend a listing's three-day window.
+ * Renewal is the only path allowed to extend a listing's shelf-life window.
  *
- * A normal status update or edit must never buy another three days, or a seller
+ * A normal status update or edit must never extend the window, or a seller
  * can keep a stale listing alive by re-tapping the status it already has. The
  * renewal itself is a separate multipart endpoint because it is a claim that
  * the crop is still available and therefore needs a fresh photo.
@@ -27,6 +28,32 @@ use Tests\TestCase;
 class ListingRenewalTest extends TestCase
 {
     use RefreshDatabase;
+
+    private string $scannedCrop = 'carrot';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['services.image_detect.url' => 'https://scanner.test', 'services.image_detect.token' => 'test-token']);
+        Http::fake(['scanner.test/*' => fn () => Http::response(['detections' => [['name' => $this->scannedCrop]]])]);
+    }
+
+    public function test_wrong_crop_leaves_the_listing_and_gallery_unchanged(): void
+    {
+        Storage::fake('cloudinary');
+        $this->scannedCrop = 'cucumber';
+        $seller = $this->makeSeller();
+        $listing = $this->makeListing($seller, 'NOT_AVAILABLE', now()->subDay());
+
+        $this->renew($listing, [
+            'status' => 'AVAILABLE_NOW',
+            'photo' => $this->pngUpload(),
+        ])->assertUnprocessable()->assertJsonValidationErrors('photo');
+
+        $this->assertSame('NOT_AVAILABLE', $listing->fresh()->LST_STATUS);
+        $this->assertEquals($listing->LST_EXPIRY_DATE, $listing->fresh()->LST_EXPIRY_DATE);
+        $this->assertSame([], Storage::disk('cloudinary')->allFiles());
+    }
 
     private function id(string $prefix): string
     {
@@ -259,8 +286,8 @@ class ListingRenewalTest extends TestCase
         $this->assertNotNull($fresh->LST_LAST_RENEWED_AT);
         $this->assertNotNull($fresh->LST_IMAGE);
         $this->assertTrue(
-            now()->addDays(2)->lessThan($fresh->LST_EXPIRY_DATE),
-            'Renewal must give the listing a new three-day window.'
+            now()->addDays(10)->diffInSeconds($fresh->LST_EXPIRY_DATE, true) < 5,
+            'A carrot renewal should start a ten-day shelf-life window.'
         );
 
         $this->assertDatabaseHas('listing_photo', [

@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 /**
  * Warn sellers about listings that are about to expire, and tell them once.
  *
- * The three-day freshness window ends automatically, and until this existed the
+ * The estimated shelf-life window ends automatically, and until this existed the
  * farmer only found out after buyers started seeing the listing marked expired.
  * A listing that has not sold and simply aged out is the most common and least
  * explicable thing that happens to a seller, so it gets a warning a day ahead.
@@ -83,7 +83,7 @@ class NotifyExpiringListings extends Command
                 $ownerId,
                 'LISTING_EXPIRING_SOON',
                 'Listing expiring soon',
-                "Your {$crop} listing expires in less than a day. Renew it with a fresh photo to keep it looking fresh to buyers.",
+                "Your {$crop} listing has less than a day of estimated shelf life left. Take a fresh photo when the window ends to renew.",
                 $listing->LST_ID,
             );
 
@@ -109,7 +109,7 @@ class NotifyExpiringListings extends Command
             $service->pushOnly(
                 $ownerId,
                 'Listings expiring soon',
-                "{$count} of your listings expire in less than a day. Renew them with a fresh photo to keep them looking fresh to buyers.",
+                "{$count} listings have less than a day of estimated shelf life left. Take fresh photos when their windows end to renew.",
             );
         }
 

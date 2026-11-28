@@ -383,7 +383,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('expires in expired'), findsNothing);
-    expect(find.text('expired '), findsOneWidget);
+    expect(find.text('expired '), findsNothing);
     expect(find.text('Check freshness'), findsOneWidget);
     expect(find.text('Available Now'), findsNothing);
     expect(find.text('AVAILABLE_NOW'), findsNothing);
@@ -393,7 +393,7 @@ void main() {
     );
     expect(find.text('Freshness heads-up'), findsOneWidget);
     expect(
-      find.textContaining('few days past its freshness window'),
+      find.textContaining('few days past its estimated shelf-life window'),
       findsOneWidget,
     );
   });
@@ -419,6 +419,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Renewed '), findsOneWidget);
+    expect(find.text('Estimated shelf life · 3 days left'), findsOneWidget);
     expect(find.text('Posted '), findsNothing);
     expect(
       find.byKey(const Key('product-detail-expiry-warning')),
@@ -444,7 +445,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('available on Dec 15'), findsOneWidget);
+    expect(find.text('Available on Dec 15'), findsOneWidget);
     expect(
       find.byKey(const Key('product-detail-expiry-warning')),
       findsNothing,

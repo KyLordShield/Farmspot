@@ -354,7 +354,11 @@ class _InsightsScreenState extends State<InsightsScreen>
     if (seller) {
       await Navigator.of(
         context,
-      ).push(MaterialPageRoute(builder: (_) => const AddCropScreen()));
+      ).push(
+        MaterialPageRoute(
+          builder: (_) => const AddCropScreen(openCameraOnStart: true),
+        ),
+      );
     } else {
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => SearchResultsScreen(query: crop)),

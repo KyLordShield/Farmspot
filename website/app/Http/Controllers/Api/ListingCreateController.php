@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\CropShelfLife;
+use App\Support\CropScanEstimate;
 use App\Http\Controllers\Api\Concerns\FormatsListings;
 use App\Http\Controllers\Controller;
 use App\Models\Farm;
@@ -44,16 +46,28 @@ class ListingCreateController extends Controller
             'crop_icon' => ['nullable', 'string', 'max:'.InputLimits::CROP_NAME],
             'description' => ['nullable', 'string', 'max:'.InputLimits::DESCRIPTION],
             'status' => ['required', 'in:AVAILABLE_NOW,SOON_TO_HARVEST,NOT_AVAILABLE'],
-            'harvest_date' => ['nullable', 'date', 'required_if:status,SOON_TO_HARVEST'],
+            'harvest_date' => Listing::harvestDateRules(),
             'photo' => ['nullable', 'image', 'max:5120'],
+            'estimate_token' => ['nullable', 'string', 'max:4096'],
         ], InputLimits::messages());
 
         $validated['category_id'] ??= app(CropCategorySuggestion::class)->assign($validated['crop_icon'] ?? null);
 
+        $cropName = $validated['crop_icon'] ?? null;
+        $shelfLifeDays = CropShelfLife::days($cropName);
+        if ($validated['status'] === 'AVAILABLE_NOW' && isset($validated['estimate_token'])) {
+            $shelfLifeDays = CropScanEstimate::days(
+                $validated['estimate_token'],
+                (string) $user->getAuthIdentifier(),
+                $validated['photo'] ?? null,
+                $cropName,
+            );
+        }
+
         $listingId = $this->uniqueId('listing', 'LST_ID');
 
         try {
-            $result = DB::transaction(function () use ($validated, $farmer, $listingId) {
+            $result = DB::transaction(function () use ($validated, $farmer, $listingId, $shelfLifeDays) {
                 $farm = Farm::where('FRM_ID', $validated['farm_id'])
                     ->where('FMR_ID', $farmer->FMR_ID)
                     ->lockForUpdate()
@@ -81,7 +95,7 @@ class ListingCreateController extends Controller
                     $imageUrl = Storage::disk('cloudinary')->url($path);
                 }
 
-                $expiryDate = now()->addDays(3);
+                $expiryDate = now()->addDays($shelfLifeDays);
 
                 Listing::create([
                     'LST_ID' => $listingId,

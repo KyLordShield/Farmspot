@@ -3,8 +3,8 @@ import 'report.dart';
 /// A buyer <-> seller thread, as returned by GET /api/conversations and
 /// POST /api/conversations.
 ///
-/// A thread is always about one listing, so the crop/farm context needed by the
-/// inbox row and the chat header travels with it.
+/// Threads may refer to a listing, a buy request, or a general farmer inquiry.
+/// Available crop/farm context travels with the inbox row and chat header.
 class Conversation {
   final String id;
   final String listingId;
