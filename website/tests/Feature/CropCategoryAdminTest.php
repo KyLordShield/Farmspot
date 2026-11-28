@@ -161,52 +161,16 @@ class CropCategoryAdminTest extends TestCase
         $response->assertDontSee('name="CAT_ID"', false);
     }
 
-    public function test_the_delete_control_is_a_real_form_with_a_method_override(): void
+    public function test_the_category_panel_does_not_render_a_delete_button(): void
     {
-        // Not a JS-built request. The panel has to delete with the script blocked,
-        // and the request still has to carry CSRF and the DELETE override like
-        // every other destructive action in the panel.
         $category = $this->makeCategory('Spare Category');
 
         $response = $this->actingAs($this->makeUser('ADMIN'))->get('/listings');
 
-        $response->assertSee('action="'.route('categories.destroy', $category->CAT_ID).'"', false);
-        $response->assertSee('name="_method"', false);
-        $response->assertSee('value="DELETE"', false);
-    }
-
-    public function test_the_delete_form_carries_the_current_listings_filters(): void
-    {
-        // Same reason the controller carries them back on redirect: a category edit
-        // that also threw away the moderator's search box would be its own bug.
-        $this->makeCategory('Spare Category');
-
-        $response = $this->actingAs($this->makeUser('ADMIN'))
-            ->get('/listings?search=tomato&status=ACTIVE');
-
-        $response->assertSee('name="search"', false);
-        $response->assertSee('value="tomato"', false);
-        $response->assertSee('name="status"', false);
-        $response->assertSee('value="ACTIVE"', false);
-    }
-
-    public function test_a_category_in_use_renders_a_disabled_delete_button(): void
-    {
-        // The server refuses this delete anyway. Greying it out is what stops the
-        // moderator spending a click to be told no.
-        $category = $this->makeCategory('Root Crops');
-        $this->makeListingIn($category->CAT_ID);
-
-        $response = $this->actingAs($this->makeUser('ADMIN'))->get('/listings');
-
-        // Asserted in two halves rather than as one sentence: the em dash is the
-        // character itself in the rendered title, not an &mdash; entity, because
-        // Blade escapes the string but does not entity-encode Unicode. Matching the
-        // whole sentence with either form would have encoded that detail into the
-        // assertion and made it read as if the HTML contained an entity.
-        $response->assertSee('Used by 1 row(s)', false);
-        $response->assertSee('move or remove them first', false);
-        $response->assertSee('disabled', false);
+        $response->assertOk();
+        $response->assertSee('data-category-edit', false);
+        $response->assertDontSee('action="'.route('categories.destroy', $category->CAT_ID).'"', false);
+        $response->assertDontSee('Delete category', false);
     }
 
     public function test_a_general_user_cannot_reach_the_panel(): void

@@ -266,8 +266,8 @@
 
                 <div class="panel-title mb-1">Existing categories</div>
                 <div class="panel-sub mb-3">
-                    A category in use cannot be deleted — its ID is a foreign key into listings
-                    and analytics rows.
+                    Categories can be edited here, but cannot be deleted because their IDs are
+                    referenced by listings and analytics rows.
                 </div>
 
                 <div class="table-responsive">
@@ -322,44 +322,6 @@
                                                 data-description="{{ $category->CAT_DESCRIPTION }}">
                                             <i class="bi bi-pencil"></i>
                                         </button>
-
-                                        {{-- A real form rather than a JS-built one: it carries
-                                             CSRF and the method override like every other
-                                             destructive action in the panel, the filter
-                                             fields below are rendered server-side, and it
-                                             still deletes if the script never runs.
-                                             Disabled, not hidden: "why can't I delete
-                                             this" is answered by the button being
-                                             visibly there and saying so, rather than by
-                                             a delete action that quietly does not
-                                             appear. --}}
-                                        <form method="POST"
-                                              action="{{ route('categories.destroy', $category->CAT_ID) }}"
-                                              data-confirm-title="Delete category?"
-                                              data-confirm-text="Delete the category &quot;{{ $category->CAT_NAME }}&quot;?"
-                                              data-confirm-tone="danger">
-                                            @csrf
-                                            @method('DELETE')
-                                            {{-- The Listings page filters ride along so saving or
-                                                 deleting a category does not throw away the
-                                                 moderator's search box and status filter. --}}
-                                            @foreach(['search', 'category', 'status', 'page'] as $carry)
-                                                @if(request($carry))
-                                                    <input type="hidden"
-                                                           name="{{ $carry }}"
-                                                           value="{{ request($carry) }}">
-                                                @endif
-                                            @endforeach
-
-                                            <button type="submit"
-                                                    class="btn-icon danger {{ $usage > 0 ? 'disabled' : '' }}"
-                                                    title="{{ $usage > 0
-                                                        ? 'Used by '.$usage.' row(s) — move or remove them first'
-                                                        : 'Delete category' }}"
-                                                    @if($usage > 0) disabled @endif>
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
                                     </div>
                                 </td>
                             </tr>
